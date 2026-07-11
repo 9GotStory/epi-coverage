@@ -50,20 +50,19 @@ export function OpenDataDashboard({ targetTable = 's_epi1' }: OpenDataDashboardP
   const yearOptions = Array.from({ length: 5 }, (_, i) => (currentFYNum - 3 + i).toString());
 
   const vaccineOptions = isEpi1 ? [
-    { value: 'bcg', label: 'BCG (แรกเกิด)' },
-    { value: 'hbv4', label: 'HBV 6 เดือน (ครบ 3 เข็ม)' },
-    { value: 'dtp_hb3', label: 'DTP 6 เดือน (ครบ 3 เข็ม)' },
-    { value: 'opv3', label: 'OPV 6 เดือน' },
-    { value: 'ipv', label: 'IPV 4 เดือน (ครบ 2 เข็ม)' },
-    { value: 'rota', label: 'Rota (ครบถ้วน)' },
-    { value: 'mmr', label: 'MMR 9 เดือน' }
+    { value: 'bcg', label: 'BCG (1 เข็ม)' },
+    { value: 'hbv4', label: 'HBV (3 เข็ม)' },
+    { value: 'dtp_hb3', label: 'DTP (3 เข็ม)' },
+    { value: 'opv3', label: 'OPV (1 เข็ม ตอน 6 ด.)' },
+    { value: 'ipv', label: 'IPV (2 เข็ม)' },
+    { value: 'rota', label: 'Rota (ครบตามเกณฑ์)' },
+    { value: 'mmr', label: 'MMR (1 เข็ม)' }
   ] : [
-    { value: 'pcv4', label: 'PCV 1 ปี' },
-    { value: 'je2', label: 'LAJE/JE 1 ปี' },
-    { value: 'dtp4', label: 'DTP 1 ปี 6 เดือน' },
-    { value: 'opv4', label: 'OPV 1 ปี 6 เดือน' },
-    { value: 'mmr1', label: 'MMR1 (เก็บตก)' },
-    { value: 'mmr2', label: 'MMR 1 ปี 6 เดือน' }
+    { value: 'je2', label: 'LAJE/JE (1 เข็ม หรือ ครบ 2 เข็ม)' },
+    { value: 'dtp4', label: 'DTP (เข็ม 4)' },
+    { value: 'opv4', label: 'OPV (เข็ม 4)' },
+    { value: 'mmr1', label: 'MMR (เก็บตกเข็ม 1)' },
+    { value: 'mmr2', label: 'MMR (เข็ม 2)' }
   ];
 
   const { data: completeData, isLoading, isError, error, refetch } = useOpenData({

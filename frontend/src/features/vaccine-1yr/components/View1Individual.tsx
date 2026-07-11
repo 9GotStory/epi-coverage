@@ -333,35 +333,54 @@ export function View1Individual({ fiscalYear, quarter, data, isLoading, error, a
           <div className="bg-blue-50/50 p-4 rounded-lg border border-blue-100">
             <p className="font-semibold text-blue-900 mb-1">Q: เราสามารถใช้ประโยชน์จากหน้านี้ได้ยังไงบ้างครับ?</p>
             <p className="text-blue-800">
-              <strong className="text-zinc-800">A:</strong> แม้ว่าเกณฑ์ Fully Immunized (มุมมองที่ 2) จะไม่บังคับใช้ HBV เข็มที่ 3 (อายุ 4 เดือน) ในการประเมิน แต่ในหน้านี้ซึ่งเป็นการตรวจสอบความสมบูรณ์ของการบันทึกข้อมูล 20 รายการ จะมีการแจ้งเตือนเสมอหากไม่มีข้อมูล <strong>เพื่อเตือนให้เจ้าหน้าที่ทราบว่าอาจลืมบันทึกรหัสวัคซีนรวมในระบบ HIS</strong>
+              <strong className="text-zinc-800">A:</strong> แม้ว่าเกณฑ์ Fully Immunized (มุมมองที่ 2) จะไม่บังคับใช้ <strong>HBV เข็มที่ 3</strong> (รหัส 43 แฟ้ม: <code className="bg-blue-100 px-1 py-0.5 rounded font-mono text-blue-800">043</code>) ในการประเมิน แต่ในหน้านี้ซึ่งเป็นการตรวจสอบความสมบูรณ์ของการบันทึกข้อมูล 20 รายการ จะมีการแจ้งเตือนเสมอหากไม่มีข้อมูล <strong>เพื่อเตือนให้เจ้าหน้าที่ทราบว่าอาจลืมบันทึกรหัสวัคซีนรวมในระบบ HIS</strong>
             </p>
           </div>
 
           <div className="bg-zinc-50 p-4 rounded-lg border border-zinc-100">
             <p className="font-semibold text-zinc-800 mb-1">Q: วัคซีนโรต้า (Rota) ลงข้อมูลอย่างไรให้ผ่านเกณฑ์?</p>
             <p className="text-zinc-600">
-              <strong className="text-zinc-800">A:</strong> วัคซีนโรต้าใน HDC มีการแยกชนิด 2 เข็มและ 3 เข็ม ขึ้นอยู่กับบริบทของสถานบริการ เจ้าหน้าที่จะต้องบันทึกรหัสให้ถูกต้องตามยี่ห้อ (เช่น RV21, RV22) ระบบจะถือว่าข้อมูลสมบูรณ์ทันทีหากพบว่าได้รับครบ 2 เข็มแรก หรือครบ 3 เข็ม อย่างใดอย่างหนึ่ง
+              <strong className="text-zinc-800">A:</strong> วัคซีนโรต้าใน HDC มีการแยกชนิด 2 เข็มและ 3 เข็ม ขึ้นอยู่กับบริบทของสถานบริการ เจ้าหน้าที่จะต้องบันทึกรหัสให้ถูกต้องตามชนิดวัคซีนที่ให้ครับ เช่น แบบ 2 เข็ม (รหัส 43 แฟ้ม: <code className="bg-zinc-100 px-1 py-0.5 rounded font-mono text-zinc-700">R11, R12</code> หรือ <code>R21, R22</code>) หรือแบบ 3 เข็ม (รหัส 43 แฟ้ม: <code className="bg-zinc-100 px-1 py-0.5 rounded font-mono text-zinc-700">R31, R32, R33</code>) ระบบจะถือว่าข้อมูลสมบูรณ์ทันทีหากพบว่าได้รับครบ 2 เข็มแรก หรือครบ 3 เข็ม อย่างใดอย่างหนึ่งครับ
             </p>
           </div>
 
           <div className="bg-zinc-50 p-4 rounded-lg border border-zinc-100">
             <p className="font-semibold text-zinc-800 mb-1">Q: วัคซีนโปลิโอหยอด (OPV) ลงข้อมูลอย่างไรให้ถูกต้อง?</p>
             <p className="text-zinc-600">
-              <strong className="text-zinc-800">A:</strong> สำหรับวัคซีน OPV ที่อายุ 6 เดือน รูปแบบการส่งออกของ HDC จะดึงข้อมูลมาไว้ที่ช่อง <strong>opv1_date</strong> (ไม่ใช่ opv3) ดังนั้นหากเด็กได้รับ OPV ครบแล้วแต่ระบบยังแจ้งว่าขาด ให้ตรวจสอบว่าการคีย์ข้อมูลในระบบ HIS ถูกผูกรหัสตรงตามมาตรฐานส่งออกของ HDC หรือไม่
+              <strong className="text-zinc-800">A:</strong> สำหรับวัคซีน OPV ที่อายุ 6 เดือน รูปแบบการส่งออกของ HDC จะประเมินจาก <strong>OPV เข็มที่ 3 (อายุ 6 เดือน)</strong> ซึ่งตรงกับรหัส 43 แฟ้ม: <code className="bg-zinc-100 px-1 py-0.5 rounded font-mono text-zinc-700">083</code> ดังนั้นหากเด็กได้รับ OPV ครบแล้วแต่ระบบยังแจ้งว่าขาด ให้ตรวจสอบว่าการคีย์ข้อมูลรหัส 083 ในระบบ HIS ถูกผูกรหัสตรงตามมาตรฐานส่งออกของ HDC หรือไม่ครับ
             </p>
           </div>
 
           <div className="bg-zinc-50 p-4 rounded-lg border border-zinc-100">
             <p className="font-semibold text-zinc-800 mb-1">Q: วัคซีนโปลิโอฉีด (IPV) ระบบตรวจสอบอย่างไร?</p>
             <p className="text-zinc-600">
-              <strong className="text-zinc-800">A:</strong> ระบบจะตรวจสอบการได้รับ IPV จำนวน 2 เข็ม คือ IPV 2 เดือน (ipv1_date) และ IPV 4 เดือน (ipv2_date) หากเจ้าหน้าที่ลืมลงบันทึกเข็มใดเข็มหนึ่ง ระบบจะฟ้องว่าตกหล่น เพื่อให้กลับไปบันทึกย้อนหลังให้ครบถ้วน
+              <strong className="text-zinc-800">A:</strong> ระบบจะตรวจสอบการได้รับ IPV จำนวน 2 เข็ม คือ <strong>IPV 2 เดือน</strong> (รหัส 43 แฟ้ม: <code className="bg-zinc-100 px-1 py-0.5 rounded font-mono text-zinc-700">091</code>) และ <strong>IPV 4 เดือน</strong> (รหัส 43 แฟ้ม: <code className="bg-zinc-100 px-1 py-0.5 rounded font-mono text-zinc-700">092</code>) หากเจ้าหน้าที่ลืมลงบันทึกรหัสใดรหัสหนึ่ง ระบบจะฟ้องว่าตกหล่น เพื่อให้กลับไปบันทึกข้อมูลย้อนหลังให้ครบถ้วนครับ
             </p>
           </div>
 
           <div className="bg-zinc-50 p-4 rounded-lg border border-zinc-100">
-            <p className="font-semibold text-zinc-800 mb-1">Q: กรณีวัคซีนพื้นฐาน (เช่น BCG, DTP) ฟ้องว่าขาด ต้องทำอย่างไร?</p>
+            <p className="font-semibold text-zinc-800 mb-1">Q: กรณีวัคซีนพื้นฐาน (เช่น BCG, DTP) ฟ้องว่าขาด ทั้งที่มั่นใจว่าฉีดแล้ว ต้องทำอย่างไร?</p>
             <p className="text-zinc-600">
-              <strong className="text-zinc-800">A:</strong> วัคซีนพื้นฐานส่วนใหญ่มีเงื่อนไขตรงไปตรงมา คือ "ฉีด 1 เข็ม = ลงบันทึก 1 รหัส" หากระบบแจ้งว่าขาด มักเกิดจาก <strong>ลืมบันทึกรหัสวัคซีนในวันรับบริการ</strong> หรือ <strong>รหัสวัคซีนใน HIS ไม่ได้ผูกกับรหัสมาตรฐานส่งออก HDC</strong> เจ้าหน้าที่สามารถนำรายชื่อไปตรวจสอบและคีย์ข้อมูลเพิ่มเติมใน HIS ได้ทันที
+              <strong className="text-zinc-800">A:</strong> วัคซีนพื้นฐานส่วนใหญ่มีเงื่อนไขตรงไปตรงมา คือ "ฉีด 1 เข็ม = ลงบันทึก 1 รหัส" (เช่น BCG รหัส 43 แฟ้ม: <code className="bg-zinc-100 px-1 py-0.5 rounded font-mono text-zinc-700">011</code>) หากระบบแจ้งว่าขาด มักเกิดจาก <strong>ลืมบันทึกรหัสวัคซีนในวันรับบริการ</strong> หรือ <strong>รหัสวัคซีนใน HIS ไม่ได้ผูกกับรหัสมาตรฐาน 43 แฟ้มของ HDC</strong> เจ้าหน้าที่สามารถนำรายชื่อเด็กไปตรวจสอบและคีย์ข้อมูลรหัสที่ถูกต้องเพิ่มเติมใน HIS ได้ทันทีครับ
+            </p>
+          </div>
+
+          <div className="bg-zinc-50 p-4 rounded-lg border border-zinc-100">
+            <p className="font-semibold text-zinc-800 mb-1">Q: ทำไมมุมมองที่ 1 ถึงมีรายการวัคซีน PCV (นิวโมค็อกคัส) แจ้งเตือนด้วย ทั้งๆ ที่เป็นวัคซีนนอกแผน?</p>
+            <p className="text-zinc-600">
+              <strong className="text-zinc-800">A:</strong> สาเหตุที่ต้องมีรายการ PCV รวมอยู่ด้วย เป็นเพราะระบบอิงตาม <strong>มาตรฐานรายงาน HDC ของกระทรวงสาธารณสุขโดยตรง</strong> ครับ (ในคู่มือ HDC ระบุ PCV เป็นรายการที่ 18-20) ซึ่งกระทรวงฯ ต้องการเก็บข้อมูลเชิงสถิติของวัคซีนทางเลือกในภาพรวมของประเทศ 
+              หากหน่วยบริการของเราไม่มีวัคซีนตัวนี้ หรือผู้ปกครองไม่ได้พาน้องไปฉีดที่อื่น <strong>สามารถปล่อยผ่านได้เลยครับ</strong> จะไม่มีผลกระทบต่อผลการประเมิน Fully Immunized (มุมมองที่ 2) แต่อย่างใด
+            </p>
+          </div>
+
+          <div className="bg-zinc-50 p-4 rounded-lg border border-zinc-100">
+            <p className="font-semibold text-zinc-800 mb-1">Q: ทำไมเด็กบางคน "ไม่ผ่าน" ในมุมมองที่ 1 (ขาดวัคซีนบางตัว) แต่กลับ "ผ่าน" ในมุมมองที่ 2 (Fully Immunized)?</p>
+            <p className="text-zinc-600">
+              <strong className="text-zinc-800">A:</strong> เพราะ 2 มุมมองนี้ใช้ <strong>เกณฑ์การประเมินที่ต่างกันครับ</strong>:
+              <ul className="list-disc pl-5 mt-2 space-y-1">
+                <li><strong>มุมมองที่ 1:</strong> เป็นการตรวจสอบ "ความสมบูรณ์ของการบันทึกข้อมูลแบบรายเข็ม" (เข้มงวด 20 รายการ) เช็คแม้กระทั่ง HBV เข็ม 3 หรือ PCV</li>
+                <li><strong>มุมมองที่ 2 (Fully Immunized):</strong> ประเมินเฉพาะ "วัคซีนพื้นฐาน 8 หมวด" ตามเกณฑ์ชี้วัดหลักระดับประเทศ หากได้วัคซีนหลักครบ ก็ถือว่าเด็กมีภูมิคุ้มกันที่เพียงพอและผ่านเกณฑ์ครับ</li>
+              </ul>
             </p>
           </div>
 

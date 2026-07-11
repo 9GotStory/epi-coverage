@@ -98,20 +98,19 @@ export function formatEpiAllVaccines(data: any[], targetTable: string = 's_epi1'
   const filteredData = data.filter(row => row.areacode && String(row.areacode).startsWith('5406'));
   
   const vaccines = targetTable === 's_epi2' ? [
-    { key: 'pcv4', label: 'PCV 1 ปี' },
-    { key: 'je2', label: 'LAJE/JE 1 ปี' },
-    { key: 'dtp4', label: 'DTP 1 ปี 6 เดือน' },
-    { key: 'opv4', label: 'OPV 1 ปี 6 เดือน' },
-    { key: 'mmr1', label: 'MMR1 (เก็บตก)' },
-    { key: 'mmr2', label: 'MMR 1 ปี 6 เดือน' }
+    { key: 'je2', label: 'LAJE/JE (1 เข็ม หรือ ครบ 2 เข็ม)' },
+    { key: 'dtp4', label: 'DTP (เข็ม 4)' },
+    { key: 'opv4', label: 'OPV (เข็ม 4)' },
+    { key: 'mmr1', label: 'MMR (เก็บตกเข็ม 1)' },
+    { key: 'mmr2', label: 'MMR (เข็ม 2)' }
   ] : [
-    { key: 'bcg', label: 'BCG แรกเกิด' },
-    { key: 'hbv4', label: 'HBV 6 เดือน (ครบ 3 เข็ม)' },
-    { key: 'dtp_hb3', label: 'DTP 6 เดือน (ครบ 3 เข็ม)' },
-    { key: 'opv3', label: 'OPV 6 เดือน' },
-    { key: 'ipv', label: 'IPV 4 เดือน (ครบ 2 เข็ม)' },
-    { key: 'rota', label: 'Rota (ครบถ้วน)' },
-    { key: 'mmr', label: 'MMR 9 เดือน' }
+    { key: 'bcg', label: 'BCG (1 เข็ม)' },
+    { key: 'hbv4', label: 'HBV (3 เข็ม)' },
+    { key: 'dtp_hb3', label: 'DTP (3 เข็ม)' },
+    { key: 'opv3', label: 'OPV (1 เข็ม ตอน 6 ด.)' },
+    { key: 'ipv', label: 'IPV (2 เข็ม)' },
+    { key: 'rota', label: 'Rota (ครบตามเกณฑ์)' },
+    { key: 'mmr', label: 'MMR (1 เข็ม)' }
   ];
   
   const totals: Record<string, { target: number; result: number; label: string }> = {};

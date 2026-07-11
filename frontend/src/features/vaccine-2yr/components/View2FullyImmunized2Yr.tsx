@@ -179,7 +179,7 @@ export function View2FullyImmunized2Yr({ fiscalYear, quarter, data, isLoading, e
         'ผลการประเมิน (Fully Immunized)': row.evaluation.isFullyImmunized ? 'ผ่านเกณฑ์' : `ตกหล่น: ${missingStr}`
       };
     });
-    exportToExcel(exportData, `EPI_View2_FullyImmunized3Yr_${new Date().getTime()}`);
+    exportToExcel(exportData, `EPI_View2_FullyImmunized2Yr_${new Date().getTime()}`);
   };
 
   const handleExportPdf = () => {
@@ -197,8 +197,8 @@ export function View2FullyImmunized2Yr({ fiscalYear, quarter, data, isLoading, e
         'ผลการประเมิน': row.evaluation.isFullyImmunized ? 'ผ่านเกณฑ์' : `ตกหล่น: ${missingStr}`
       };
     });
-    const title = `ทะเบียนเด็กความครบถ้วนของวัคซีน (Fully Immunized 3 ปี) - ไตรมาส ${quarter}/${fiscalYear}`;
-    exportToPdf(exportData, `EPI_View2_FullyImmunized3Yr_${new Date().getTime()}`, title);
+    const title = `ทะเบียนเด็กความครบถ้วนของวัคซีน (Fully Immunized 2 ปี) - ไตรมาส ${quarter}/${fiscalYear}`;
+    exportToPdf(exportData, `EPI_View2_FullyImmunized2Yr_${new Date().getTime()}`, title);
   };
 
   const asOfDateText = asOfDate
@@ -212,7 +212,7 @@ export function View2FullyImmunized2Yr({ fiscalYear, quarter, data, isLoading, e
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
           <h2 className="text-lg font-semibold text-zinc-900">
-            ทะเบียนเด็กความครบถ้วนของวัคซีน (Fully Immunized เด็กอายุ 3 ปี)
+            ทะเบียนเด็กความครบถ้วนของวัคซีน (Fully Immunized เด็กอายุ 2 ปี)
           </h2>
           <p className="text-sm text-zinc-500 mt-1">
             ข้อมูลอัปเดตล่าสุด: <span className="font-medium text-blue-600">{asOfDateText}</span>
@@ -269,7 +269,7 @@ export function View2FullyImmunized2Yr({ fiscalYear, quarter, data, isLoading, e
       <div className="bg-indigo-50/50 border border-indigo-100 rounded-xl p-4 flex gap-3 text-sm text-indigo-900">
         <InfoIcon className="w-5 h-5 text-indigo-500 shrink-0 mt-0.5" />
         <div>
-          <p className="font-semibold mb-1">เกี่ยวกับมุมมองที่ 2 (Fully Immunized เด็กอายุ 3 ปี)</p>
+          <p className="font-semibold mb-1">เกี่ยวกับมุมมองที่ 2 (Fully Immunized เด็กอายุ 2 ปี)</p>
           <p className="mb-2 text-indigo-800 leading-relaxed">
             มุมมองนี้แสดงผลการประเมิน <strong>ภาพรวมการได้รับวัคซีนของเด็กรายบุคคล</strong> ตามเกณฑ์ตัวชี้วัดความครอบคลุม (Fully Immunized) 
             การประเมินผลจะใช้เงื่อนไขแบบองค์รวม (Strict AND Condition) หากขาดวัคซีนในหมวดใดหมวดหนึ่ง จะถือว่า <strong>"ไม่ผ่านเกณฑ์"</strong> ทันที
@@ -281,7 +281,7 @@ export function View2FullyImmunized2Yr({ fiscalYear, quarter, data, isLoading, e
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-3 text-indigo-800">
               <div className="flex flex-col gap-0.5">
                 <span className="font-medium text-indigo-900">BCG (ป้องกันวัณโรค) - 1 เข็ม</span>
-                <span className="text-[11px] text-indigo-700">วิธีบันทึกใน HIS: เลือกลงเป็น <strong>BCG</strong> (รหัส 43 แฟ้ม: <code className="bg-indigo-100 px-1 py-0.5 rounded font-mono text-[10px]">011</code>)</span>
+                <span className="text-[11px] text-indigo-700">วิธีบันทึกใน HIS: เลือกลงเป็น <strong>BCG</strong> (รหัส 43 แฟ้ม: <code className="bg-indigo-100 px-1 py-0.5 rounded font-mono text-[10px]">010</code>)</span>
               </div>
               <div className="flex flex-col gap-0.5">
                 <span className="font-medium text-indigo-900">HBV (ไวรัสตับอักเสบบี) - ครบ 3 เข็ม</span>
@@ -305,7 +305,7 @@ export function View2FullyImmunized2Yr({ fiscalYear, quarter, data, isLoading, e
               </div>
               <div className="flex flex-col gap-0.5">
                 <span className="font-medium text-indigo-900">MMR (หัด หัดเยอรมัน คางทูม) - ครบ 2 เข็ม</span>
-                <span className="text-[11px] text-indigo-700">วิธีบันทึกใน HIS: เลือกลงเป็น <strong>MMR เข็ม 1-2</strong> (รหัส 43 แฟ้ม: <code className="bg-indigo-100 px-1 py-0.5 rounded font-mono text-[10px]">061, 062</code>)</span>
+                <span className="text-[11px] text-indigo-700">วิธีบันทึกใน HIS: เลือกลงเป็น <strong>MMR เข็ม 1-2</strong> (รหัส 43 แฟ้ม: <code className="bg-indigo-100 px-1 py-0.5 rounded font-mono text-[10px]">061, 073</code>)</span>
               </div>
               <div className="flex flex-col gap-0.5">
                 <span className="font-medium text-indigo-900">Rota (ไวรัสโรต้า) - ครบ 2 หรือ 3 เข็ม</span>
@@ -368,11 +368,21 @@ export function View2FullyImmunized2Yr({ fiscalYear, quarter, data, isLoading, e
           </div>
 
           <div className="bg-zinc-50 p-4 rounded-lg border border-zinc-100">
-            <p className="font-semibold text-zinc-800 mb-1">Q: ถ้าพบว่าตกหล่นเข็มกระตุ้นช่วงอายุ 1 ปีครึ่ง (เช่น ขาด DTP4 หรือ OPV4) เจ้าหน้าที่ต้องทำยังไงครับ?</p>
+            <p className="font-semibold text-zinc-800 mb-1">Q: ทำไมระบบแจ้งว่าขาดวัคซีนโรต้า (Rota) ทั้งๆ ที่เด็กเคยหยอดมาแล้ว?</p>
+            <p className="text-zinc-600">
+              <strong className="text-zinc-800">A:</strong> วัคซีนโรต้ามีการประเมิน 2 รูปแบบตามชนิดที่ได้รับครับ คือ <strong>ชนิด 2 เข็ม</strong> (รหัส 43 แฟ้ม: <code className="bg-zinc-200/60 px-1.5 py-0.5 rounded-md font-mono text-[11px] text-zinc-700 border border-zinc-300/50">R11, R12</code>) และ <strong>ชนิด 3 เข็ม</strong> (รหัส 43 แฟ้ม: <code className="bg-zinc-200/60 px-1.5 py-0.5 rounded-md font-mono text-[11px] text-zinc-700 border border-zinc-300/50">R21, R22, R23</code>)
+              ปัญหาที่พบบ่อยคือ <strong>เจ้าหน้าที่ลงรหัสสลับชนิดกัน</strong> (เช่น หยอดแบบ 2 เข็ม แต่ดันไปคีย์ R21, R22 ซึ่งระบบจะรอเข็ม 3 ทันที) หรือคีย์ไม่ครบโดสครับ 
+              แนะนำให้ตรวจสอบว่าใน HIS ผูกรหัสยา (Drug code) ถูกต้องตรงกับวัคซีนที่ใช้จริงหรือไม่ครับ
+            </p>
+          </div>
+
+          <div className="bg-zinc-50 p-4 rounded-lg border border-zinc-100">
+            <p className="font-semibold text-zinc-800 mb-1">Q: ถ้าพบว่าตกหล่นเข็มกระตุ้นช่วงอายุ 1 ปีครึ่ง (เช่น ขาด 034 DTP4 หรือ 084 OPV4) ต้องทำยังไงครับ?</p>
             <p className="text-zinc-600">
               <strong className="text-zinc-800">A:</strong> 
               กรณีเด็กยังอยู่ในพื้นที่ ให้เจ้าหน้าที่ติดตามให้มารับวัคซีนเก็บตก (Catch-up) ได้เลยครับ 
-              หากเด็กย้ายไปอยู่ที่อื่น หรือรับวัคซีนจาก รพ. เอกชนแล้วแต่ข้อมูลไม่เข้า HDC สามารถขอดูสมุดสีชมพู (หรือขอภาพถ่ายทางไลน์) และคีย์ประวัติย้อนหลัง (Historical Data) เข้าสู่ระบบ HIS ของ รพ.สต. เพื่อให้ผ่านเกณฑ์ความครอบคลุมได้ครับ
+              หากเด็กย้ายไปอยู่ที่อื่น หรือรับวัคซีนจาก รพ.เอกชนมาแล้ว สามารถขอดูสมุดสีชมพู แล้วนำ <strong>รหัส 43 แฟ้มที่โชว์ในวงเล็บของหน้านี้</strong> (เช่น ขาด 084 ก็นำรหัส 084 ไปคีย์) 
+              บันทึกประวัติวัคซีนย้อนหลัง (Historical Data) เข้า HIS ได้เลย ข้อมูลจะเข้า HDC และทำให้เด็กผ่านเกณฑ์ความครอบคลุมทันทีครับ
             </p>
           </div>
           

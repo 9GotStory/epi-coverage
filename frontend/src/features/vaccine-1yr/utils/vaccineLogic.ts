@@ -74,55 +74,55 @@ export function evaluateView2(record: EpiRecord): VaccineStatus {
   };
 
   // 1. BCG
-  if (!has(record.bcg_date)) missing.push('ขาด bcg (แรกเกิด)'); else passed.push('BCG');
+  if (!has(record.bcg_date)) missing.push('ขาด 010 (BCG)'); else passed.push('BCG');
 
-  // 2. HBV 3 times (hbv1_date, hbv2_date, hbv4_date)
+  // 2. HBV 3 times
   let hbvPass = true;
-  if (!has(record.hbv1_date)) { missing.push('ขาด hbv1 (แรกเกิด)'); hbvPass = false; }
-  if (!has(record.hbv2_date)) { missing.push('ขาด hbv2 (2 เดือน)'); hbvPass = false; }
-  if (!has(record.hbv4_date)) { missing.push('ขาด hbv4 (6 เดือน)'); hbvPass = false; }
+  if (!has(record.hbv1_date)) { missing.push('ขาด 041 (HBV แรกเกิด)'); hbvPass = false; }
+  if (!has(record.hbv2_date)) { missing.push('ขาด 042 (HBV 2 เดือน)'); hbvPass = false; }
+  if (!has(record.hbv4_date)) { missing.push('ขาด 043 (HBV 6 เดือน)'); hbvPass = false; }
   if (hbvPass) passed.push('HBV');
 
   // 3. DTP 3 times
   let dtpPass = true;
-  if (!has(record.dtp1_date)) { missing.push('ขาด dtp1 (2 เดือน)'); dtpPass = false; }
-  if (!has(record.dtp2_date)) { missing.push('ขาด dtp2 (4 เดือน)'); dtpPass = false; }
-  if (!has(record.dtp3_date)) { missing.push('ขาด dtp3 (6 เดือน)'); dtpPass = false; }
+  if (!has(record.dtp1_date)) { missing.push('ขาด 031 (DTP 2 เดือน)'); dtpPass = false; }
+  if (!has(record.dtp2_date)) { missing.push('ขาด 032 (DTP 4 เดือน)'); dtpPass = false; }
+  if (!has(record.dtp3_date)) { missing.push('ขาด 033 (DTP 6 เดือน)'); dtpPass = false; }
   if (dtpPass) passed.push('DTP');
 
   // 4. Hib 3 times
   let hibPass = true;
-  if (!has(record.hib1_date)) { missing.push('ขาด hib1 (2 เดือน)'); hibPass = false; }
-  if (!has(record.hib2_date)) { missing.push('ขาด hib2 (4 เดือน)'); hibPass = false; }
-  if (!has(record.hib3_date)) { missing.push('ขาด hib3 (6 เดือน)'); hibPass = false; }
+  if (!has(record.hib1_date)) { missing.push('ขาด H11 (Hib 2 เดือน)'); hibPass = false; }
+  if (!has(record.hib2_date)) { missing.push('ขาด H12 (Hib 4 เดือน)'); hibPass = false; }
+  if (!has(record.hib3_date)) { missing.push('ขาด H13 (Hib 6 เดือน)'); hibPass = false; }
   if (hibPass) passed.push('Hib');
 
   // 5. IPV 2 times
   let ipvPass = true;
-  if (!has(record.ipv1_date)) { missing.push('ขาด ipv1 (2 เดือน)'); ipvPass = false; }
-  if (!has(record.ipv2_date)) { missing.push('ขาด ipv2 (4 เดือน)'); ipvPass = false; }
+  if (!has(record.ipv1_date)) { missing.push('ขาด 091 (IPV 2 เดือน)'); ipvPass = false; }
+  if (!has(record.ipv2_date)) { missing.push('ขาด 092 (IPV 4 เดือน)'); ipvPass = false; }
   if (ipvPass) passed.push('IPV');
 
   // 6. OPV 1 time (ที่อายุ 6 เดือน ซึ่งใน sheet คือ opv1_date)
-  if (!has(record.opv1_date)) missing.push('ขาด opv1 (6 เดือน)'); else passed.push('OPV');
+  if (!has(record.opv1_date)) missing.push('ขาด 083 (OPV 6 เดือน)'); else passed.push('OPV');
 
   // 7. MMR 1 time
-  if (!has(record.mmr1_date)) missing.push('ขาด mmr1 (9 เดือน)'); else passed.push('MMR');
+  if (!has(record.mmr1_date)) missing.push('ขาด 061 (MMR 9 เดือน)'); else passed.push('MMR');
 
   // 8. Rota 2 or 3 times
   let rotaPass = true;
   if (has(record.rv31_date) || has(record.rv32_date) || has(record.rv33_date)) {
     // ใช้แบบ 3 เข็ม
-    if (!has(record.rv31_date)) { missing.push('ขาด rv31 (2 เดือน)'); rotaPass = false; }
-    if (!has(record.rv32_date)) { missing.push('ขาด rv32 (4 เดือน)'); rotaPass = false; }
-    if (!has(record.rv33_date)) { missing.push('ขาด rv33 (6 เดือน)'); rotaPass = false; }
+    if (!has(record.rv31_date)) { missing.push('ขาด R21 (Rota 2 เดือน)'); rotaPass = false; }
+    if (!has(record.rv32_date)) { missing.push('ขาด R22 (Rota 4 เดือน)'); rotaPass = false; }
+    if (!has(record.rv33_date)) { missing.push('ขาด R23 (Rota 6 เดือน)'); rotaPass = false; }
   } else if (has(record.rv21_date) || has(record.rv22_date)) {
     // ใช้แบบ 2 เข็ม
-    if (!has(record.rv21_date)) { missing.push('ขาด rv21 (2 เดือน)'); rotaPass = false; }
-    if (!has(record.rv22_date)) { missing.push('ขาด rv22 (4 เดือน)'); rotaPass = false; }
+    if (!has(record.rv21_date)) { missing.push('ขาด R11 (Rota 2 เดือน)'); rotaPass = false; }
+    if (!has(record.rv22_date)) { missing.push('ขาด R12 (Rota 4 เดือน)'); rotaPass = false; }
   } else {
     // ไม่มีข้อมูลเลย
-    missing.push('ขาด Rota (เข็มแรก)');
+    missing.push('ขาด R11/R21 (Rota เข็มแรก)');
     rotaPass = false;
   }
   if (rotaPass) passed.push('Rota');
