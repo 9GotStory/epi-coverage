@@ -1,0 +1,93 @@
+@import "tailwindcss";
+
+:root {
+  /* Shadcn UI required variables mapped to Apple DESIGN.md */
+  --background: #ffffff;
+  --foreground: #1d1d1f;
+  
+  --card: #ffffff;
+  --card-foreground: #1d1d1f;
+  
+  --popover: #ffffff;
+  --popover-foreground: #1d1d1f;
+  
+  --primary: #0066cc; /* Action Blue */
+  --primary-foreground: #ffffff;
+  
+  --secondary: #f5f5f7; /* Canvas Parchment */
+  --secondary-foreground: #1d1d1f;
+  
+  --muted: #f5f5f7;
+  --muted-foreground: #7a7a7a; /* Ink muted 48 */
+  
+  --accent: #f5f5f7;
+  --accent-foreground: #1d1d1f;
+  
+  --destructive: #ff3b30;
+  --destructive-foreground: #ffffff;
+
+  --border: #e0e0e0; /* Hairline */
+  --input: #e0e0e0;
+  --ring: #0071e3; /* Primary focus */
+  
+  --radius: 11px; /* rounded-md as base */
+}
+
+@theme {
+  /* Shadcn standard theme variables */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  /* Apple DESIGN.md specific Colors */
+  --color-primary-focus: #0071e3;
+  --color-primary-on-dark: #2997ff;
+  --color-ink: #1d1d1f;
+  --color-ink-muted-80: #333333;
+  --color-ink-muted-48: #7a7a7a;
+  --color-canvas: #ffffff;
+  --color-canvas-parchment: #f5f5f7;
+  --color-surface-pearl: #fafafc;
+  --color-surface-tile-1: #272729;
+  --color-surface-tile-2: #2a2a2c;
+  --color-surface-tile-3: #252527;
+  --color-surface-black: #000000;
+
+  /* Apple DESIGN.md Radii */
+  --radius-xs: 5px;
+  --radius-sm: 8px;
+  --radius-md: 11px;
+  --radius-lg: 18px;
+  --radius-pill: 9999px;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: "SF Pro Text", system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    font-family: "SF Pro Display", system-ui, -apple-system, sans-serif;
+  }
+}

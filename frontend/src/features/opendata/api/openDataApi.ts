@@ -1,0 +1,16 @@
+import { fetchApi } from '../../../shared/lib/api';
+
+export interface OpenDataPayload {
+  tableName: 's_epi1' | 's_epi2' | 's_epi3' | 's_epi5' | 's_epi_complete';
+  year: string; // e.g., '2569'
+  province: string; // '54'
+  amp?: string; // '06'
+}
+
+export async function fetchOpenData(payload: OpenDataPayload) {
+  const response = await fetchApi('getOpenData', { payload });
+  if (response.data && response.data.error) {
+    throw new Error(response.data.error);
+  }
+  return response.data;
+}
