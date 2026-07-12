@@ -4,6 +4,8 @@ import { isValidVaccineDate } from '@/shared/utils/dateUtils';
 export interface View1Status {
   isPassedAll: boolean;
   missingVaccines: string[];
+  passedCount: number;
+  results: Record<string, boolean>;
 }
 
 export interface View2Status {
@@ -32,9 +34,16 @@ export const evaluateView1_5Yr = (r: EpiRecord): View1Status => {
     isPassedAll = false;
   }
 
+  const results: Record<string, boolean> = {
+    'DTP เข็ม 5 (035)': has(r.dtp5_date),
+    'OPV เข็ม 5 (085)': has(r.opv5_date)
+  };
+
   return {
     isPassedAll,
-    missingVaccines
+    missingVaccines,
+    passedCount: 2 - missingVaccines.length,
+    results
   };
 };
 

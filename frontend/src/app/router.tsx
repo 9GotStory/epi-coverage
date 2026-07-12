@@ -8,6 +8,7 @@ import { EpiDashboard } from '../features/vaccine-1yr/components/EpiDashboard';
 import { EpiDashboard2Yr } from '../features/vaccine-2yr/components/EpiDashboard2Yr';
 import { EpiDashboard3Yr } from '../features/vaccine-3yr/components/EpiDashboard3Yr';
 import { EpiDashboard5Yr } from '../features/vaccine-5yr/components/EpiDashboard5Yr';
+import { Dashboard } from '../pages/Dashboard';
 
 // Lazy loading components
 const AppRoot = lazy(() => import('../App'));
@@ -50,7 +51,7 @@ export const router = createBrowserRouter([
             children: [
               {
                 path: 'dashboard',
-                element: <div>Dashboard (Protected)</div>
+                element: <Dashboard />
               },
               {
                 element: <ProtectedRoute allowedRoles={['superadmin', 'admin', 'user']} />,

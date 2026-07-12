@@ -11,13 +11,15 @@ export interface VaccineCoverageData {
 
 interface VaccineGaugeGridProps {
   data: VaccineCoverageData[];
+  goalTarget?: number; // % เป้าหมาย (default: 90) — ใช้เทียบสีเขียว/แดง
 }
 
-export function VaccineGaugeGrid({ data }: VaccineGaugeGridProps) {
+export function VaccineGaugeGrid({ data, goalTarget = 90 }: VaccineGaugeGridProps) {
   return (
     <div className="flex flex-wrap justify-center gap-4">
       {data.map((item) => {
-        const isTargetMet = item.coverage >= 90;
+        // ✅ ใช้ goalTarget แบบ dynamic แทนการ hardcode 90
+        const isTargetMet = item.coverage >= goalTarget;
         const color = isTargetMet ? '#10B981' : '#EF4444'; // Success Green vs Danger Red
         
         const chartData = [
@@ -41,7 +43,7 @@ export function VaccineGaugeGrid({ data }: VaccineGaugeGridProps) {
                 >
                   <PolarAngleAxis type="number" domain={[0, 100]} angleAxisId={0} tick={false} />
                   <RadialBar 
-                    background={{ fill: '#F4F4F5' }} // zinc-100
+                    background={{ fill: '#F4F4F5' }}
                     dataKey="value" 
                     cornerRadius={10} 
                   />
@@ -59,6 +61,7 @@ export function VaccineGaugeGrid({ data }: VaccineGaugeGridProps) {
               <p className="text-sm font-medium text-zinc-800">
                 {item.result.toLocaleString()} <span className="text-zinc-400">/</span> {item.target.toLocaleString()}
               </p>
+              <p className="text-xs text-zinc-400 mt-0.5">เป้า {goalTarget}%</p>
             </div>
           </div>
         );

@@ -7,6 +7,7 @@ import { VaccineGaugeGrid } from './VaccineGaugeGrid';
 import { VaccineRadarChart } from './VaccineRadarChart';
 import { RefreshCwIcon, AlertCircleIcon, DatabaseIcon } from 'lucide-react';
 import { useAuth } from '../../../shared/contexts/AuthContext';
+import { useTargetSettings } from '../../../shared/hooks/useTargetSettings';
 
 function getCurrentFiscalYear() {
   const today = new Date();
@@ -24,6 +25,7 @@ export interface OpenDataDashboardProps {
 
 export function OpenDataDashboard({ targetTable = 's_epi1' }: OpenDataDashboardProps) {
   const { user } = useAuth();
+  const { getTarget } = useTargetSettings();
   
   // Calculate current fiscal year and generate options
   const currentFY = getCurrentFiscalYear();
@@ -33,7 +35,8 @@ export function OpenDataDashboard({ targetTable = 's_epi1' }: OpenDataDashboardP
   const isEpi1 = targetTable === 's_epi1';
   const isEpi3 = targetTable === 's_epi3';
   const isEpi5 = targetTable === 's_epi5';
-  const [vaccine, setVaccine] = useState(isEpi1 ? 'bcg' : (isEpi3 ? 'je3' : (isEpi5 ? 'dtp5' : 'dtp4'))); // Default
+  const [vaccine, setVaccine] = useState(isEpi1 ? 'bcg' : (isEpi3 ? 'je3' : (isEpi5 ? 'dtp5' : 'dtp4')));
+  const [quarter, setQuarter] = useState<1|2|3|4>(1);
 
   const isAdmin = user?.role === 'admin' || user?.hoscode === '00588';
   const [facilities, setFacilities] = useState<any[]>([]);
@@ -130,6 +133,12 @@ export function OpenDataDashboard({ targetTable = 's_epi1' }: OpenDataDashboardP
 
   const selectedVaccineLabel = vaccineOptions.find(v => v.value === vaccine)?.label || vaccine;
 
+  // คำนวณเป้าหมายแบบ Dynamic ตามไตรมาส + ชนิดวัคซีน (มุมมอง 1 = view1)
+  const vaccineKeyForTarget = vaccine === 'mmr' || vaccine === 'mmr1' || vaccine === 'mmr2' ? 'mmr' : undefined;
+  const dynamicTarget = getTarget(quarter, 1, vaccineKeyForTarget);
+  // เป้าหมายสำหรับ Radar (ใช้ค่าพื้นฐานของไตรมาส ไม่แยกวัคซีน)
+  const radarTarget = getTarget(quarter, 1);
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -158,6 +167,23 @@ export function OpenDataDashboard({ targetTable = 's_epi1' }: OpenDataDashboardP
             </select>
           </div>
           
+          <div className="h-8 w-px bg-zinc-200"></div>
+
+          {/* ── Quarter Selector สำหรับ Dynamic Target ── */}
+          <div className="px-3">
+            <label className="text-xs text-zinc-500 block mb-1">ไตรมาส (เป้าหมาย)</label>
+            <select
+              value={quarter}
+              onChange={(e) => setQuarter(Number(e.target.value) as 1 | 2 | 3 | 4)}
+              className="text-sm border-none bg-transparent font-medium text-zinc-900 focus:ring-0 p-0 cursor-pointer"
+            >
+              <option value={1}>Q1 (ต.ค. - ธ.ค.)</option>
+              <option value={2}>Q2 (ม.ค. - มี.ค.)</option>
+              <option value={3}>Q3 (เม.ย. - มิ.ย.)</option>
+              <option value={4}>Q4 (ก.ค. - ก.ย.)</option>
+            </select>
+          </div>
+
           <div className="h-8 w-px bg-zinc-200"></div>
           
           <div className="px-3">
@@ -215,11 +241,11 @@ export function OpenDataDashboard({ targetTable = 's_epi1' }: OpenDataDashboardP
           <div className={`grid grid-cols-1 ${allVaccinesData.length >= 3 ? 'lg:grid-cols-3' : 'lg:grid-cols-1 max-w-4xl mx-auto'} gap-6 mb-8`}>
             {allVaccinesData.length >= 3 && (
               <div className="lg:col-span-1 h-full">
-                <VaccineRadarChart data={allVaccinesData} />
+                <VaccineRadarChart data={allVaccinesData} goalTarget={radarTarget} />
               </div>
             )}
             <div className={allVaccinesData.length >= 3 ? "lg:col-span-2" : "col-span-1"}>
-              <VaccineGaugeGrid data={allVaccinesData} />
+              <VaccineGaugeGrid data={allVaccinesData} goalTarget={radarTarget} />
             </div>
           </div>
           
@@ -257,16 +283,18 @@ export function OpenDataDashboard({ targetTable = 's_epi1' }: OpenDataDashboardP
               </div>
               <div className="bg-white p-5 rounded-xl border border-zinc-200 relative overflow-hidden">
                 <p className="text-sm text-zinc-500 font-medium">ความครอบคลุมสะสม</p>
-                <p className={`text-3xl font-bold mt-1 ${summary.coverage >= 90 ? 'text-green-600' : 'text-red-600'}`}>
+                <p className={`text-3xl font-bold mt-1 ${summary.coverage >= dynamicTarget ? 'text-green-600' : 'text-red-600'}`}>
                   {summary.coverage.toFixed(2)}%
                 </p>
-                <div className={`absolute bottom-0 left-0 h-1 transition-all ${summary.coverage >= 90 ? 'bg-green-500' : 'bg-red-500'}`} style={{ width: `${summary.coverage}%` }}></div>
+                <p className="text-xs text-zinc-400 mt-0.5">เทียบเป้า {dynamicTarget}% (Q{quarter})</p>
+                <div className={`absolute bottom-0 left-0 h-1 transition-all ${summary.coverage >= dynamicTarget ? 'bg-green-500' : 'bg-red-500'}`} style={{ width: `${Math.min(summary.coverage, 100)}%` }}></div>
               </div>
             </div>
 
             <CoverageBarChart 
               data={chartData} 
               title={`ร้อยละความครอบคลุมวัคซีน ${selectedVaccineLabel} รายเดือน (อ้างอิง HDC OpenData)`} 
+              targetLine={dynamicTarget}
             />
           </div>
         </div>

@@ -3,9 +3,12 @@ import { type VaccineCoverageData } from './VaccineGaugeGrid';
 
 interface VaccineRadarChartProps {
   data: VaccineCoverageData[];
+  goalTarget?: number; // % เป้าหมายในเกจ (default: 90)
 }
 
-export function VaccineRadarChart({ data }: VaccineRadarChartProps) {
+export function VaccineRadarChart({ data, goalTarget = 90 }: VaccineRadarChartProps) {
+  // Inject the goal value into each data point dynamically
+  const dataWithGoal = data.map(d => ({ ...d, goal: goalTarget }));
   return (
     <div className="bg-white p-6 rounded-xl border border-zinc-200 h-96 flex flex-col items-center justify-center relative">
       <h3 className="text-lg font-semibold text-zinc-800 mb-2 absolute top-6 left-6">
@@ -13,7 +16,7 @@ export function VaccineRadarChart({ data }: VaccineRadarChartProps) {
       </h3>
       
       <ResponsiveContainer width="100%" height="100%">
-        <RadarChart cx="50%" cy="55%" outerRadius="70%" data={data}>
+        <RadarChart cx="50%" cy="55%" outerRadius="70%" data={dataWithGoal}>
           <PolarGrid strokeDasharray="3 3" />
           <PolarAngleAxis 
             dataKey="label" 
@@ -33,7 +36,7 @@ export function VaccineRadarChart({ data }: VaccineRadarChartProps) {
             fillOpacity={0.6} 
           />
           <Radar 
-            name="เป้าหมาย (90%)" 
+            name={`เป้าหมาย (${goalTarget}%)`} 
             dataKey="goal" 
             stroke="#EF4444" 
             fill="none" 
