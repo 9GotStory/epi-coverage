@@ -1,4 +1,4 @@
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from 'recharts';
+import { Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine, createHorizontalChart } from 'recharts';
 
 interface ChartData {
   name: string;
@@ -12,23 +12,29 @@ interface CoverageBarChartProps {
   title?: string;
 }
 
+const Typed = createHorizontalChart<ChartData, string, number>()({
+  XAxis,
+  YAxis,
+  Bar
+});
+
 export function CoverageBarChart({ data, title }: CoverageBarChartProps) {
   return (
     <div className="w-full h-80 bg-white p-4 rounded-xl border border-zinc-200">
       {title && <h3 className="text-lg font-semibold text-zinc-800 mb-4 text-center">{title}</h3>}
       <ResponsiveContainer width="100%" height="100%">
-        <BarChart
+        <Typed.BarChart
           data={data}
           margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
         >
           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E4E4E7" />
-          <XAxis 
+          <Typed.XAxis 
             dataKey="name" 
             tick={{ fill: '#71717A', fontSize: 12 }} 
             axisLine={{ stroke: '#E4E4E7' }} 
             tickLine={false} 
           />
-          <YAxis 
+          <Typed.YAxis 
             yAxisId="left" 
             orientation="left" 
             stroke="#71717A"
@@ -36,7 +42,7 @@ export function CoverageBarChart({ data, title }: CoverageBarChartProps) {
             axisLine={false}
             tickLine={false}
           />
-          <YAxis 
+          <Typed.YAxis 
             yAxisId="right" 
             orientation="right" 
             domain={[0, 100]} 
@@ -59,10 +65,10 @@ export function CoverageBarChart({ data, title }: CoverageBarChartProps) {
           
           <ReferenceLine y={90} yAxisId="right" stroke="#EF4444" strokeDasharray="3 3" label={{ position: 'top', value: 'เป้า 90%', fill: '#EF4444', fontSize: 12 }} />
           
-          <Bar yAxisId="left" dataKey="target" name="เป้าหมาย (คน)" fill="#CBD5E1" radius={[4, 4, 0, 0]} maxBarSize={40} />
-          <Bar yAxisId="left" dataKey="result" name="ผลงาน (คน)" fill="#0066CC" radius={[4, 4, 0, 0]} maxBarSize={40} />
-          <Bar yAxisId="right" dataKey="coverage" name="ความครอบคลุม (%)" fill="#10B981" radius={[4, 4, 0, 0]} maxBarSize={40} />
-        </BarChart>
+          <Typed.Bar yAxisId="left" dataKey="target" name="เป้าหมาย (คน)" fill="#CBD5E1" radius={[4, 4, 0, 0]} maxBarSize={40} />
+          <Typed.Bar yAxisId="left" dataKey="result" name="ผลงาน (คน)" fill="#0066CC" radius={[4, 4, 0, 0]} maxBarSize={40} />
+          <Typed.Bar yAxisId="right" dataKey="coverage" name="ความครอบคลุม (%)" fill="#10B981" radius={[4, 4, 0, 0]} maxBarSize={40} />
+        </Typed.BarChart>
       </ResponsiveContainer>
     </div>
   );

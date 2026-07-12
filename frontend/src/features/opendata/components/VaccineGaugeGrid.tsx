@@ -15,7 +15,7 @@ interface VaccineGaugeGridProps {
 
 export function VaccineGaugeGrid({ data }: VaccineGaugeGridProps) {
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
+    <div className="flex flex-wrap justify-center gap-4">
       {data.map((item) => {
         const isTargetMet = item.coverage >= 90;
         const color = isTargetMet ? '#10B981' : '#EF4444'; // Success Green vs Danger Red
@@ -25,7 +25,7 @@ export function VaccineGaugeGrid({ data }: VaccineGaugeGridProps) {
         ];
 
         return (
-          <div key={item.vaccine} className="bg-white p-4 rounded-xl border border-zinc-200 flex flex-col items-center">
+          <div key={item.vaccine} className="bg-white p-4 rounded-xl border border-zinc-200 flex flex-col items-center w-full sm:w-[48%] md:w-[160px]">
             <h4 className="text-sm font-semibold text-zinc-700 text-center h-10 flex items-center justify-center">
               {item.label}
             </h4>

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useOpenData } from '../hooks/useOpenData';
 import { fetchApi } from '../../../shared/lib/api';
 import { CoverageBarChart } from './CoverageBarChart';
@@ -19,7 +19,7 @@ function getCurrentFiscalYear() {
 }
 
 export interface OpenDataDashboardProps {
-  targetTable?: 's_epi1' | 's_epi2' | 's_epi3' | 's_epi5' | 's_epi_complete';
+  targetTable?: 's_epi1' | 's_epi2' | 's_epi3' | 's_epi5';
 }
 
 export function OpenDataDashboard({ targetTable = 's_epi1' }: OpenDataDashboardProps) {
@@ -31,7 +31,9 @@ export function OpenDataDashboard({ targetTable = 's_epi1' }: OpenDataDashboardP
   const [province] = useState('54'); // แพร่
   const [amp] = useState('06'); // สอง
   const isEpi1 = targetTable === 's_epi1';
-  const [vaccine, setVaccine] = useState(isEpi1 ? 'bcg' : 'dtp4'); // Default
+  const isEpi3 = targetTable === 's_epi3';
+  const isEpi5 = targetTable === 's_epi5';
+  const [vaccine, setVaccine] = useState(isEpi1 ? 'bcg' : (isEpi3 ? 'je3' : (isEpi5 ? 'dtp5' : 'dtp4'))); // Default
 
   const isAdmin = user?.role === 'admin' || user?.hoscode === '00588';
   const [facilities, setFacilities] = useState<any[]>([]);
@@ -53,10 +55,16 @@ export function OpenDataDashboard({ targetTable = 's_epi1' }: OpenDataDashboardP
     { value: 'bcg', label: 'BCG (1 เข็ม)' },
     { value: 'hbv4', label: 'HBV (3 เข็ม)' },
     { value: 'dtp_hb3', label: 'DTP (3 เข็ม)' },
+    { value: 'hib3', label: 'Hib (3 เข็ม)' },
     { value: 'opv3', label: 'OPV (1 เข็ม ตอน 6 ด.)' },
     { value: 'ipv', label: 'IPV (2 เข็ม)' },
     { value: 'rota', label: 'Rota (ครบตามเกณฑ์)' },
     { value: 'mmr', label: 'MMR (1 เข็ม)' }
+  ] : isEpi3 ? [
+    { value: 'je3', label: 'LAJE เข็ม 2 / JE เข็ม 3' }
+  ] : isEpi5 ? [
+    { value: 'dtp5', label: 'DTP (เข็ม 5)' },
+    { value: 'opv5', label: 'OPV (เข็ม 5)' }
   ] : [
     { value: 'je2', label: 'LAJE/JE (1 เข็ม หรือ ครบ 2 เข็ม)' },
     { value: 'dtp4', label: 'DTP (เข็ม 4)' },
@@ -65,40 +73,46 @@ export function OpenDataDashboard({ targetTable = 's_epi1' }: OpenDataDashboardP
     { value: 'mmr2', label: 'MMR (เข็ม 2)' }
   ];
 
-  const { data: completeData, isLoading, isError, error, refetch } = useOpenData({
+  const { data, isLoading, isError, error, refetch } = useOpenData({
     tableName: targetTable,
     year,
     province,
     amp
   });
 
-  let chartData: any[] = [];
-  let radarData: any[] = [];
-  let summary = { target: 0, result: 0, coverage: 0 };
-
-  if (completeData && Array.isArray(completeData)) {
-    // Filter by selected hospcode if not 'all'
+  const chartData = useMemo(() => {
+    if (!data || !Array.isArray(data)) return [];
     const filteredData = selectedHosp === 'all' 
-      ? completeData 
-      : completeData.filter(d => d.hospcode === selectedHosp);
+      ? data 
+      : data.filter(d => d.hospcode === selectedHosp);
 
-    chartData = formatEpiDataForChart(filteredData, vaccine);
-    radarData = formatEpiAllVaccines(filteredData, targetTable);
-    
-    // Calculate total summary for the selected year
-    const totalTarget = chartData.reduce((sum, item) => sum + item.target, 0);
-    const totalResult = chartData.reduce((sum, item) => sum + item.result, 0);
-    summary = {
+    return formatEpiDataForChart(filteredData, vaccine);
+  }, [data, selectedHosp, vaccine]);
+
+  // Aggregate stats for gauge and radar (ALL vaccines)
+  const allVaccinesData = useMemo(() => {
+    if (!data || !Array.isArray(data)) return [];
+    const filteredData = selectedHosp === 'all' 
+      ? data 
+      : data.filter(d => d.hospcode === selectedHosp);
+    return formatEpiAllVaccines(filteredData, targetTable);
+  }, [data, selectedHosp, targetTable]);
+
+  // Calculate total summary for the selected year
+  const summary = useMemo(() => {
+    const totalTarget = chartData.reduce((sum: number, item: any) => sum + item.target, 0);
+    const totalResult = chartData.reduce((sum: number, item: any) => sum + item.result, 0);
+    return {
       target: totalTarget,
       result: totalResult,
       coverage: totalTarget > 0 ? (totalResult / totalTarget) * 100 : 0
     };
-  }
+  }, [chartData]);
 
   // Extract active facilities from OpenData dynamically
   const activeHospcodes = new Set<string>();
-  if (completeData && Array.isArray(completeData)) {
-    completeData.forEach(d => {
+  if (data && Array.isArray(data)) {
+    data.forEach(d => {
       if (d.hospcode && d.areacode && String(d.areacode).startsWith('5406')) {
         activeHospcodes.add(d.hospcode);
       }
@@ -122,10 +136,10 @@ export function OpenDataDashboard({ targetTable = 's_epi1' }: OpenDataDashboardP
         <div>
           <h2 className="text-2xl font-bold text-zinc-900 tracking-tight flex items-center gap-2">
             <DatabaseIcon className="w-6 h-6 text-primary" />
-            ภาพรวมข้อมูล HDC (เด็ก {isEpi1 ? '1' : '2'} ปี)
+            ภาพรวมข้อมูล HDC (เด็ก {isEpi1 ? '1' : (isEpi3 ? '3' : (isEpi5 ? '5' : '2'))} ปี)
           </h2>
           <p className="text-zinc-500 text-sm mt-1">
-            ความครอบคลุมการได้รับวัคซีนตามเกณฑ์ในเด็กอายุครบ {isEpi1 ? '1' : '2'} ปี แบบแยกรายชนิด (ดึงข้อมูลจาก HDC OpenData) <br/>
+            ความครอบคลุมการได้รับวัคซีนตามเกณฑ์ในเด็ก อายุครบ {isEpi1 ? '1' : (isEpi3 ? '3' : (isEpi5 ? '5' : '2'))} ปี แบบแยกรายชนิด (ดึงข้อมูลจาก HDC OpenData) <br/>
             <span className="text-blue-600 font-medium">* หมายเหตุ: ข้อมูลสถิติในหน้านี้ใช้เกณฑ์การประเมินแบบเดียวกับ "มุมมองที่ 1"</span>
           </p>
         </div>
@@ -198,9 +212,16 @@ export function OpenDataDashboard({ targetTable = 's_epi1' }: OpenDataDashboardP
         </div>
       ) : (
         <div className="space-y-6">
-          <VaccineGaugeGrid data={radarData} />
-          
-          <VaccineRadarChart data={radarData} />
+          <div className={`grid grid-cols-1 ${allVaccinesData.length >= 3 ? 'lg:grid-cols-3' : 'lg:grid-cols-1 max-w-4xl mx-auto'} gap-6 mb-8`}>
+            {allVaccinesData.length >= 3 && (
+              <div className="lg:col-span-1 h-full">
+                <VaccineRadarChart data={allVaccinesData} />
+              </div>
+            )}
+            <div className={allVaccinesData.length >= 3 ? "lg:col-span-2" : "col-span-1"}>
+              <VaccineGaugeGrid data={allVaccinesData} />
+            </div>
+          </div>
           
           <div className="pt-8 border-t border-zinc-200 mt-8">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">

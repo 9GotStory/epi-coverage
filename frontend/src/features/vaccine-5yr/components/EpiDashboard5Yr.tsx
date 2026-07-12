@@ -105,7 +105,7 @@ export function EpiDashboard5Yr() {
         <div className="bg-white rounded-2xl p-6 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.1)] ring-1 ring-zinc-200/50 min-h-[500px]">
           {activeTab === 'view1' && <View1Individual5Yr fiscalYear={fiscalYear} quarter={quarter} data={data} isLoading={isLoading} error={error} asOfDate={asOfDate} />}
           {activeTab === 'view2' && <View2FullyImmunized5Yr fiscalYear={fiscalYear} quarter={quarter} data={data} isLoading={isLoading} error={error} asOfDate={asOfDate} />}
-          {activeTab === 'view3' && <OpenDataDashboard targetTable="s_epi_complete" />}
+          {activeTab === 'view3' && <OpenDataDashboard targetTable="s_epi5" />}
         </div>
 
       </main>

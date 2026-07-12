@@ -1,4 +1,3 @@
-import type { SEpiCompleteRecord } from './types';
 
 // Map of HDC month codes (Fiscal year months)
 export const MONTHS_MAP: Record<string, string> = {
@@ -18,43 +17,6 @@ export const MONTHS_MAP: Record<string, string> = {
 
 const MONTH_KEYS = Object.keys(MONTHS_MAP);
 
-export function formatCompleteDataForChart(data: SEpiCompleteRecord[]) {
-  // Since we query by amphur, we might get multiple rows (one for each hospcode)
-  // We need to aggregate them to show a total chart, or show them by facility.
-  // For the bar chart (monthly trend), we aggregate all facilities.
-  
-  // Filter for Song District (5406) since MOPH API returns all of Phrae or matches other districts
-  const filteredData = data.filter(row => row.areacode && row.areacode.startsWith('5406'));
-  
-  const monthlyTotals: Record<string, { target: number; result: number }> = {};
-  
-  MONTH_KEYS.forEach(m => {
-    monthlyTotals[m] = { target: 0, result: 0 };
-  });
-
-  filteredData.forEach(row => {
-    MONTH_KEYS.forEach(m => {
-      const t = parseInt(row[`target${m}`] || '0', 10);
-      const r = parseInt(row[`result${m}`] || '0', 10);
-      monthlyTotals[m].target += isNaN(t) ? 0 : t;
-      monthlyTotals[m].result += isNaN(r) ? 0 : r;
-    });
-  });
-
-  // Convert to array for Recharts
-  return MONTH_KEYS.map(m => {
-    const target = monthlyTotals[m].target;
-    const result = monthlyTotals[m].result;
-    const coverage = target > 0 ? (result / target) * 100 : 0;
-    
-    return {
-      name: MONTHS_MAP[m],
-      target,
-      result,
-      coverage: parseFloat(coverage.toFixed(2))
-    };
-  });
-}
 
 export function formatEpiDataForChart(data: any[], vaccineKey: string) {
   // vaccineKey = 'dtp1', 'bcg', 'dtp4', etc.
@@ -103,10 +65,16 @@ export function formatEpiAllVaccines(data: any[], targetTable: string = 's_epi1'
     { key: 'opv4', label: 'OPV (เข็ม 4)' },
     { key: 'mmr1', label: 'MMR (เก็บตกเข็ม 1)' },
     { key: 'mmr2', label: 'MMR (เข็ม 2)' }
+  ] : targetTable === 's_epi3' ? [
+    { key: 'je3', label: 'LAJE เข็ม 2 / JE เข็ม 3' }
+  ] : targetTable === 's_epi5' ? [
+    { key: 'dtp5', label: 'DTP (เข็ม 5)' },
+    { key: 'opv5', label: 'OPV (เข็ม 5)' }
   ] : [
     { key: 'bcg', label: 'BCG (1 เข็ม)' },
     { key: 'hbv4', label: 'HBV (3 เข็ม)' },
     { key: 'dtp_hb3', label: 'DTP (3 เข็ม)' },
+    { key: 'hib3', label: 'Hib (3 เข็ม)' },
     { key: 'opv3', label: 'OPV (1 เข็ม ตอน 6 ด.)' },
     { key: 'ipv', label: 'IPV (2 เข็ม)' },
     { key: 'rota', label: 'Rota (ครบตามเกณฑ์)' },
