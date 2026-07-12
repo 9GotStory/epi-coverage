@@ -24,11 +24,11 @@ export const evaluateView1_5Yr = (r: EpiRecord): View1Status => {
   };
 
   if (!has(r.dtp5_date)) {
-    missingVaccines.push('DTP (คอตีบ บาดทะยัก ไอกรน) - เข็มกระตุ้นอายุ 4 ปี');
+    missingVaccines.push('ขาด DTP เข็ม 5 (035)');
     isPassedAll = false;
   }
   if (!has(r.opv5_date)) {
-    missingVaccines.push('OPV (โปลิโอชนิดหยอด) - เข็มกระตุ้นอายุ 4 ปี');
+    missingVaccines.push('ขาด OPV เข็ม 5 (085)');
     isPassedAll = false;
   }
 
@@ -50,46 +50,69 @@ export const evaluateView2_5Yr = (r: EpiRecord): VaccineStatus => {
   };
 
   // 1. BCG
-  const bcg = has(r.bcg_date);
-  if (!bcg) missingVaccines.push('BCG');
+  if (!has(r.bcg_date)) missingVaccines.push('ขาด BCG (010)');
   
   // 2. HBV 3 ครั้ง (แรกเกิด, 2 เดือน, 6 เดือน)
-  const hbv = has(r.hbv1_date) && has(r.hbv2_date) && has(r.hbv4_date);
-  if (!hbv) missingVaccines.push('HBV 3 เข็ม (แรกเกิด, 2m, 6m)');
+  if (!has(r.hbv1_date)) missingVaccines.push('ขาด HBV เข็ม 1 (041)');
+  if (!has(r.hbv2_date)) missingVaccines.push('ขาด HBV เข็ม 2 (042)');
+  if (!has(r.hbv4_date)) missingVaccines.push('ขาด HBV เข็ม 4 (043)');
   
   // 3. DTP 5 ครั้ง (2 เดือน, 4 เดือน, 6 เดือน, 1 ปี 6 เดือน, 4 ปี)
-  const dtp = has(r.dtp1_date) && has(r.dtp2_date) && has(r.dtp3_date) && has(r.dtp4_date) && has(r.dtp5_date);
-  if (!dtp) missingVaccines.push('DTP ครบ 5 เข็ม');
+  if (!has(r.dtp1_date)) missingVaccines.push('ขาด DTP เข็ม 1 (031)');
+  if (!has(r.dtp2_date)) missingVaccines.push('ขาด DTP เข็ม 2 (032)');
+  if (!has(r.dtp3_date)) missingVaccines.push('ขาด DTP เข็ม 3 (033)');
+  if (!has(r.dtp4_date)) missingVaccines.push('ขาด DTP เข็ม 4 (034)');
+  if (!has(r.dtp5_date)) missingVaccines.push('ขาด DTP เข็ม 5 (035)');
   
   // 4. Hib 3 ครั้ง (2 เดือน, 4 เดือน, 6 เดือน)
-  const hib = has(r.hib1_date) && has(r.hib2_date) && has(r.hib3_date);
-  if (!hib) missingVaccines.push('Hib ครบ 3 เข็ม');
+  if (!has(r.hib1_date)) missingVaccines.push('ขาด Hib เข็ม 1 (H11)');
+  if (!has(r.hib2_date)) missingVaccines.push('ขาด Hib เข็ม 2 (H12)');
+  if (!has(r.hib3_date)) missingVaccines.push('ขาด Hib เข็ม 3 (H13)');
   
   // 5. IPV 2 ครั้ง (2 เดือน, 4 เดือน)
-  const ipv = has(r.ipv1_date) && has(r.ipv2_date);
-  if (!ipv) missingVaccines.push('IPV ครบ 2 เข็ม');
+  if (!has(r.ipv1_date)) missingVaccines.push('ขาด IPV เข็ม 1 (091)');
+  if (!has(r.ipv2_date)) missingVaccines.push('ขาด IPV เข็ม 2 (092)');
   
   // 6. OPV 3 ครั้ง ตาม EPI ใหม่ (6 เดือน, 1 ปี 6 เดือน, 4 ปี)
-  const opv = has(r.opv1_date) && has(r.opv4_date) && has(r.opv5_date);
-  if (!opv) missingVaccines.push('OPV ครบ 3 ครั้ง (6m, 1.5y, 4y)');
+  if (!has(r.opv1_date)) missingVaccines.push('ขาด OPV เข็ม 3 (083)');
+  if (!has(r.opv4_date)) missingVaccines.push('ขาด OPV เข็ม 4 (084)');
+  if (!has(r.opv5_date)) missingVaccines.push('ขาด OPV เข็ม 5 (085)');
   
   // 7. MMR 2 ครั้ง (9 เดือน, 1 ปี 6 เดือน)
-  const mmr = has(r.mmr1_date) && has(r.mmr2_date);
-  if (!mmr) missingVaccines.push('MMR ครบ 2 เข็ม (9m, 1.5y)');
+  if (!has(r.mmr1_date)) missingVaccines.push('ขาด MMR เข็ม 1 (061)');
+  if (!has(r.mmr2_date)) missingVaccines.push('ขาด MMR เข็ม 2 (073)');
   
   // 8. Rota (2 or 3 doses complete)
-  const rota2 = has(r.rv21_date) && has(r.rv22_date);
-  const rota3 = has(r.rv31_date) && has(r.rv32_date) && has(r.rv33_date);
-  const rota = rota2 || rota3;
-  if (!rota) missingVaccines.push('Rota (ครบตามเกณฑ์)');
+  if (has(r.rv31_date) || has(r.rv32_date) || has(r.rv33_date)) {
+    // ใช้แบบ 3 เข็ม
+    if (!has(r.rv31_date)) missingVaccines.push('ขาด Rota เข็ม 1 (R21)');
+    if (!has(r.rv32_date)) missingVaccines.push('ขาด Rota เข็ม 2 (R22)');
+    if (!has(r.rv33_date)) missingVaccines.push('ขาด Rota เข็ม 3 (R23)');
+  } else if (has(r.rv21_date) || has(r.rv22_date)) {
+    // ใช้แบบ 2 เข็ม
+    if (!has(r.rv21_date)) missingVaccines.push('ขาด Rota เข็ม 1 (R11)');
+    if (!has(r.rv22_date)) missingVaccines.push('ขาด Rota เข็ม 2 (R12)');
+  } else {
+    // ไม่มีข้อมูลเลย
+    missingVaccines.push('ขาด Rota (เข็มแรก)');
+  }
   
   // 9. LAJE / JE
-  const laje = has(r.j11_date) && has(r.j12_date);
-  const je = has(r.je1_date) && has(r.je2_date) && has(r.je3_date);
-  const lajeJe = laje || je;
-  if (!lajeJe) missingVaccines.push('LAJE ครบ 2 หรือ JE ครบ 3 เข็ม');
+  if (has(r.je1_date) || has(r.je2_date) || has(r.je3_date)) {
+    // เชื้อตาย 3 เข็ม
+    if (!has(r.je1_date)) missingVaccines.push('ขาด JE เข็ม 1 (051)');
+    if (!has(r.je2_date)) missingVaccines.push('ขาด JE เข็ม 2 (052)');
+    if (!has(r.je3_date)) missingVaccines.push('ขาด JE เข็ม 3 (053)');
+  } else if (has(r.j11_date) || has(r.j12_date)) {
+    // เชื้อเป็น 2 เข็ม
+    if (!has(r.j11_date)) missingVaccines.push('ขาด LAJE เข็ม 1 (J11)');
+    if (!has(r.j12_date)) missingVaccines.push('ขาด LAJE เข็ม 2 (J12)');
+  } else {
+    // ไม่มีข้อมูลเลย
+    missingVaccines.push('ขาด LAJE/JE (เข็มแรก)');
+  }
 
-  const isFullyImmunized = bcg && hbv && dtp && hib && ipv && opv && mmr && rota && lajeJe;
+  const isFullyImmunized = missingVaccines.length === 0;
 
   return {
     isFullyImmunized,

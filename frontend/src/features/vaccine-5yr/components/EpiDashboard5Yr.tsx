@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+﻿import { useState, useMemo, useEffect } from 'react';
 import { SubNav } from '../../../widgets/layout/SubNav';
 import { View1Individual5Yr } from './View1Individual5Yr';
 import { View2FullyImmunized5Yr } from './View2FullyImmunized5Yr';
@@ -49,7 +49,7 @@ export function EpiDashboard5Yr() {
                   : 'text-zinc-500 hover:text-zinc-700'
               }`}
             >
-              มุมมองที่ 1: ความครอบคลุมรายชนิด (1 รายการ)
+              มุมมองที่ 1: ความครอบคลุมรายชนิด (2 รายการ)
             </button>
             <button
               onClick={() => setActiveTab('view2')}

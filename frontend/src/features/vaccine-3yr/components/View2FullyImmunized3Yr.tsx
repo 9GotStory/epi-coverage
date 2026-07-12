@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+﻿import { useMemo, useState } from 'react';
 import { InfoIcon, FileSpreadsheetIcon, FileTextIcon } from 'lucide-react';
 import type { ColumnDef } from '@tanstack/react-table';
 import { evaluateView2_3Yr } from '../utils/vaccineLogic';
@@ -285,7 +285,7 @@ export function View2FullyImmunized3Yr({ fiscalYear, quarter, data, isLoading, e
               </div>
               <div className="flex flex-col gap-0.5">
                 <span className="font-medium text-indigo-900">HBV (ไวรัสตับอักเสบบี) - ครบ 3 เข็ม</span>
-                <span className="text-[11px] text-indigo-700">วิธีบันทึกใน HIS: เลือกลงเป็น <strong>HBV เข็ม 1-4</strong> ตามช่วงอายุ (รหัส 43 แฟ้ม: <code className="bg-indigo-100 px-1 py-0.5 rounded font-mono text-[10px]">041, 042, 043, 044</code>)</span>
+                <span className="text-[11px] text-indigo-700">วิธีบันทึกใน HIS: เลือกลงเป็น <strong>HBV เข็ม 1-3 (แรกเกิด, 2 ด., 6 ด.)</strong> ตามช่วงอายุ (รหัส 43 แฟ้ม: <code className="bg-indigo-100 px-1 py-0.5 rounded font-mono text-[10px]">041, 042, 043</code>)</span>
               </div>
               <div className="flex flex-col gap-0.5">
                 <span className="font-medium text-indigo-900">DTP (คอตีบ บาดทะยัก ไอกรน) - ครบ 4 เข็ม</span>
@@ -301,7 +301,7 @@ export function View2FullyImmunized3Yr({ fiscalYear, quarter, data, isLoading, e
               </div>
               <div className="flex flex-col gap-0.5">
                 <span className="font-medium text-indigo-900">OPV (โปลิโอชนิดหยอด) - ครบ 2 เข็ม</span>
-                <span className="text-[11px] text-indigo-700">วิธีบันทึกใน HIS: เลือกลงเป็น <strong>OPV เข็ม 1, 4</strong> (รหัส 43 แฟ้ม: <code className="bg-indigo-100 px-1 py-0.5 rounded font-mono text-[10px]">081, 084</code>)</span>
+                <span className="text-[11px] text-indigo-700">วิธีบันทึกใน HIS: เลือกลงเป็น <strong>OPV ครั้งที่ 1-2 ตามเกณฑ์ใหม่</strong> (รหัส 43 แฟ้ม: <code className="bg-indigo-100 px-1 py-0.5 rounded font-mono text-[10px]">083, 084</code>)</span>
               </div>
               <div className="flex flex-col gap-0.5">
                 <span className="font-medium text-indigo-900">MMR (หัด หัดเยอรมัน คางทูม) - ครบ 2 เข็ม</span>
@@ -313,7 +313,7 @@ export function View2FullyImmunized3Yr({ fiscalYear, quarter, data, isLoading, e
               </div>
               <div className="flex flex-col gap-0.5">
                 <span className="font-medium text-indigo-900">LAJE / JE (ไข้สมองอักเสบเจอี) - ครบตามเกณฑ์</span>
-                <span className="text-[11px] text-indigo-700">วิธีบันทึกใน HIS: เลือกลงเป็น <strong>LAJE เข็ม 1-2</strong> หรือ <strong>JE เข็ม 1-3</strong> (รหัส 43 แฟ้ม: <code className="bg-indigo-100 px-1 py-0.5 rounded font-mono text-[10px]">J11, J12</code> หรือ <code className="bg-indigo-100 px-1 py-0.5 rounded font-mono text-[10px]">JE1, JE2, JE3</code>)</span>
+                <span className="text-[11px] text-indigo-700">วิธีบันทึกใน HIS: เลือกลงเป็น <strong>LAJE เข็ม 1-2</strong> หรือ <strong>JE เข็ม 1-3</strong> (รหัส 43 แฟ้ม: <code className="bg-indigo-100 px-1 py-0.5 rounded font-mono text-[10px]">J11, J12</code> หรือ <code className="bg-indigo-100 px-1 py-0.5 rounded font-mono text-[10px]">051, 052, 053</code>)</span>
               </div>
             </div>
           </div>
@@ -377,7 +377,7 @@ export function View2FullyImmunized3Yr({ fiscalYear, quarter, data, isLoading, e
             <p className="text-zinc-600">
               <strong className="text-zinc-800">A:</strong> 
               ปัจจุบันมาตรฐานคือชนิดเชื้อเป็น (LAJE) <strong>วิธีบันทึกใน HIS: เลือกลงเป็น LAJE เข็ม 1 (อายุ 1 ปี) และ LAJE เข็ม 2 (อายุ 2.5 ปี)</strong> (รหัส 43 แฟ้ม: <code className="bg-zinc-200 px-1 py-0.5 rounded font-mono text-zinc-700">J11, J12</code>) 
-              แต่กรณี รพ. เอกชนบางแห่งใช้วัคซีนชนิดเชื้อตาย (JE) เด็กจะต้องได้รับครบ 3 เข็ม (รหัส: <code className="bg-zinc-200 px-1 py-0.5 rounded font-mono text-zinc-700">JE1, JE2, JE3</code>) ระบบถึงจะถือว่าผ่านเกณฑ์อย่างสมบูรณ์ครับ
+              แต่กรณี รพ. เอกชนบางแห่งใช้วัคซีนชนิดเชื้อตาย (JE) เด็กจะต้องได้รับครบ 3 เข็ม (รหัส 43 แฟ้ม: <code className="bg-zinc-100 px-1 py-0.5 rounded font-mono text-zinc-700">051, 052, 053</code>) ระบบถึงจะถือว่าผ่านเกณฑ์อย่างสมบูรณ์ครับ
             </p>
           </div>
           

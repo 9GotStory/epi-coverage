@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+﻿import { useMemo, useState } from 'react';
 import { InfoIcon, FileSpreadsheetIcon, FileTextIcon } from 'lucide-react';
 import type { ColumnDef } from '@tanstack/react-table';
 import { evaluateView2 } from '../utils/vaccineLogic';
@@ -285,7 +285,7 @@ export function View2FullyImmunized({ fiscalYear, quarter, data, isLoading, erro
               </div>
               <div className="flex flex-col gap-0.5">
                 <span className="font-medium text-indigo-900">HBV (ไวรัสตับอักเสบบี) - 3 เข็ม (แรกเกิด, 2, 6 เดือน)</span>
-                <span className="text-[11px] text-indigo-700">วิธีบันทึกใน HIS: เลือกลงเป็น <strong>HBV เข็ม 1, 2, 4</strong> (รหัส 43 แฟ้ม: <code className="bg-indigo-100 px-1 py-0.5 rounded font-mono text-[10px]">041, 042, 044</code>)</span>
+                <span className="text-[11px] text-indigo-700">วิธีบันทึกใน HIS: เลือกลงเป็น <strong>HBV เข็ม 1-3 (แรกเกิด, 2 ด., 6 ด.)</strong> (รหัส 43 แฟ้ม: <code className="bg-indigo-100 px-1 py-0.5 rounded font-mono text-[10px]">041, 042, 043</code>)</span>
               </div>
               <div className="flex flex-col gap-0.5">
                 <span className="font-medium text-indigo-900">DTP (คอตีบ บาดทะยัก ไอกรน) - ครบ 3 เข็ม</span>

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+﻿import { useMemo, useState } from 'react';
 import { InfoIcon, FileSpreadsheetIcon, FileTextIcon } from 'lucide-react';
 import type { ColumnDef } from '@tanstack/react-table';
 import { evaluateView2_5Yr } from '../utils/vaccineLogic5Yr';
@@ -179,7 +179,7 @@ export function View2FullyImmunized5Yr({ fiscalYear, quarter, data, isLoading, e
         'ผลการประเมิน (Fully Immunized)': row.evaluation.isFullyImmunized ? 'ผ่านเกณฑ์' : `ตกหล่น: ${missingStr}`
       };
     });
-    exportToExcel(exportData, `EPI_View2_FullyImmunized3Yr_${new Date().getTime()}`);
+    exportToExcel(exportData, `EPI_View2_FullyImmunized5Yr_${new Date().getTime()}`);
   };
 
   const handleExportPdf = () => {
@@ -197,8 +197,8 @@ export function View2FullyImmunized5Yr({ fiscalYear, quarter, data, isLoading, e
         'ผลการประเมิน': row.evaluation.isFullyImmunized ? 'ผ่านเกณฑ์' : `ตกหล่น: ${missingStr}`
       };
     });
-    const title = `ทะเบียนเด็กความครบถ้วนของวัคซีน (Fully Immunized 3 ปี) - ไตรมาส ${quarter}/${fiscalYear}`;
-    exportToPdf(exportData, `EPI_View2_FullyImmunized3Yr_${new Date().getTime()}`, title);
+    const title = `ทะเบียนเด็กความครบถ้วนของวัคซีน (Fully Immunized 5 ปี) - ไตรมาส ${quarter}/${fiscalYear}`;
+    exportToPdf(exportData, `EPI_View2_FullyImmunized5Yr_${new Date().getTime()}`, title);
   };
 
   const asOfDateText = asOfDate
@@ -212,7 +212,7 @@ export function View2FullyImmunized5Yr({ fiscalYear, quarter, data, isLoading, e
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
           <h2 className="text-lg font-semibold text-zinc-900">
-            ทะเบียนเด็กความครบถ้วนของวัคซีน (Fully Immunized เด็กอายุ 3 ปี)
+            ทะเบียนเด็กความครบถ้วนของวัคซีน (Fully Immunized เด็กอายุ 5 ปี)
           </h2>
           <p className="text-sm text-zinc-500 mt-1">
             ข้อมูลอัปเดตล่าสุด: <span className="font-medium text-blue-600">{asOfDateText}</span>
@@ -269,7 +269,7 @@ export function View2FullyImmunized5Yr({ fiscalYear, quarter, data, isLoading, e
       <div className="bg-indigo-50/50 border border-indigo-100 rounded-xl p-4 flex gap-3 text-sm text-indigo-900">
         <InfoIcon className="w-5 h-5 text-indigo-500 shrink-0 mt-0.5" />
         <div>
-          <p className="font-semibold mb-1">เกี่ยวกับมุมมองที่ 2 (Fully Immunized เด็กอายุ 3 ปี)</p>
+          <p className="font-semibold mb-1">เกี่ยวกับมุมมองที่ 2 (Fully Immunized เด็กอายุ 5 ปี)</p>
           <p className="mb-2 text-indigo-800 leading-relaxed">
             มุมมองนี้แสดงผลการประเมิน <strong>ภาพรวมการได้รับวัคซีนของเด็กรายบุคคล</strong> ตามเกณฑ์ตัวชี้วัดความครอบคลุม (Fully Immunized) 
             การประเมินผลจะใช้เงื่อนไขแบบองค์รวม (Strict AND Condition) หากขาดวัคซีนในหมวดใดหมวดหนึ่ง จะถือว่า <strong>"ไม่ผ่านเกณฑ์"</strong> ทันที
@@ -285,11 +285,11 @@ export function View2FullyImmunized5Yr({ fiscalYear, quarter, data, isLoading, e
               </div>
               <div className="flex flex-col gap-0.5">
                 <span className="font-medium text-indigo-900">HBV (ไวรัสตับอักเสบบี) - ครบ 3 เข็ม</span>
-                <span className="text-[11px] text-indigo-700">วิธีบันทึกใน HIS: เลือกลงเป็น <strong>HBV เข็ม 1-4</strong> ตามช่วงอายุ (รหัส 43 แฟ้ม: <code className="bg-indigo-100 px-1 py-0.5 rounded font-mono text-[10px]">041, 042, 043, 044</code>)</span>
+                <span className="text-[11px] text-indigo-700">วิธีบันทึกใน HIS: เลือกลงเป็น <strong>HBV เข็ม 1-3</strong> (แรกเกิด, 2 ด., 6 ด.) (รหัส 43 แฟ้ม: <code className="bg-indigo-100 px-1 py-0.5 rounded font-mono text-[10px]">041, 042, 043</code>)</span>
               </div>
               <div className="flex flex-col gap-0.5">
-                <span className="font-medium text-indigo-900">DTP (คอตีบ บาดทะยัก ไอกรน) - ครบ 4 เข็ม</span>
-                <span className="text-[11px] text-indigo-700">วิธีบันทึกใน HIS: เลือกลงเป็น <strong>DTP เข็ม 1-4</strong> (รหัส 43 แฟ้ม: <code className="bg-indigo-100 px-1 py-0.5 rounded font-mono text-[10px]">031, 032, 033, D54, D14</code>)</span>
+                <span className="font-medium text-indigo-900">DTP (คอตีบ บาดทะยัก ไอกรน) - ครบ 5 เข็ม</span>
+                <span className="text-[11px] text-indigo-700">วิธีบันทึกใน HIS: เลือกลงเป็น <strong>DTP เข็ม 1-5</strong> (รหัส 43 แฟ้ม: <code className="bg-indigo-100 px-1 py-0.5 rounded font-mono text-[10px]">031, 032, 033, 034, 035</code>)</span>
               </div>
               <div className="flex flex-col gap-0.5">
                 <span className="font-medium text-indigo-900">Hib (ฮิบ) - ครบ 3 เข็ม</span>
@@ -300,12 +300,12 @@ export function View2FullyImmunized5Yr({ fiscalYear, quarter, data, isLoading, e
                 <span className="text-[11px] text-indigo-700">วิธีบันทึกใน HIS: เลือกลงเป็น <strong>IPV เข็ม 1-2</strong> (รหัส 43 แฟ้ม: <code className="bg-indigo-100 px-1 py-0.5 rounded font-mono text-[10px]">091, 092</code>)</span>
               </div>
               <div className="flex flex-col gap-0.5">
-                <span className="font-medium text-indigo-900">OPV (โปลิโอชนิดหยอด) - ครบ 2 เข็ม</span>
-                <span className="text-[11px] text-indigo-700">วิธีบันทึกใน HIS: เลือกลงเป็น <strong>OPV เข็ม 1, 4</strong> (รหัส 43 แฟ้ม: <code className="bg-indigo-100 px-1 py-0.5 rounded font-mono text-[10px]">081, 084</code>)</span>
+                <span className="font-medium text-indigo-900">OPV (โปลิโอชนิดหยอด) - ครบ 3 เข็ม</span>
+                <span className="text-[11px] text-indigo-700">วิธีบันทึกใน HIS: เลือกลงเป็น <strong>OPV ครั้งที่ 1-3 ตามเกณฑ์ใหม่</strong> (รหัส 43 แฟ้ม: <code className="bg-indigo-100 px-1 py-0.5 rounded font-mono text-[10px]">083, 084, 085</code>)</span>
               </div>
               <div className="flex flex-col gap-0.5">
                 <span className="font-medium text-indigo-900">MMR (หัด หัดเยอรมัน คางทูม) - ครบ 2 เข็ม</span>
-                <span className="text-[11px] text-indigo-700">วิธีบันทึกใน HIS: เลือกลงเป็น <strong>MMR เข็ม 1-2</strong> (รหัส 43 แฟ้ม: <code className="bg-indigo-100 px-1 py-0.5 rounded font-mono text-[10px]">061, 062</code>)</span>
+                <span className="text-[11px] text-indigo-700">วิธีบันทึกใน HIS: เลือกลงเป็น <strong>MMR เข็ม 1-2</strong> (รหัส 43 แฟ้ม: <code className="bg-indigo-100 px-1 py-0.5 rounded font-mono text-[10px]">061, 073</code>)</span>
               </div>
               <div className="flex flex-col gap-0.5">
                 <span className="font-medium text-indigo-900">Rota (ไวรัสโรต้า) - ครบ 2 หรือ 3 เข็ม</span>
@@ -313,7 +313,7 @@ export function View2FullyImmunized5Yr({ fiscalYear, quarter, data, isLoading, e
               </div>
               <div className="flex flex-col gap-0.5">
                 <span className="font-medium text-indigo-900">LAJE / JE (ไข้สมองอักเสบเจอี) - ครบตามเกณฑ์</span>
-                <span className="text-[11px] text-indigo-700">วิธีบันทึกใน HIS: เลือกลงเป็น <strong>LAJE เข็ม 1-2</strong> หรือ <strong>JE เข็ม 1-3</strong> (รหัส 43 แฟ้ม: <code className="bg-indigo-100 px-1 py-0.5 rounded font-mono text-[10px]">J11, J12</code> หรือ <code className="bg-indigo-100 px-1 py-0.5 rounded font-mono text-[10px]">JE1, JE2, JE3</code>)</span>
+                <span className="text-[11px] text-indigo-700">วิธีบันทึกใน HIS: เลือกลงเป็น <strong>LAJE เข็ม 1-2</strong> หรือ <strong>JE เข็ม 1-3</strong> (รหัส 43 แฟ้ม: <code className="bg-indigo-100 px-1 py-0.5 rounded font-mono text-[10px]">J11, J12</code> หรือ <code className="bg-indigo-100 px-1 py-0.5 rounded font-mono text-[10px]">051, 052, 053</code>)</span>
               </div>
             </div>
           </div>
@@ -363,12 +363,12 @@ export function View2FullyImmunized5Yr({ fiscalYear, quarter, data, isLoading, e
             <p className="text-zinc-600">
               <strong className="text-zinc-800">A:</strong> ปัญหานี้พบบ่อยมากครับ เกิดจาก HDC มีระบบตรวจสอบความสมเหตุสมผลของข้อมูล (Data Validation) เช่น 
               <strong> วันที่รับวัคซีนของเข็มที่ 1 และเข็มที่ 2 ลงเป็นวันเดียวกัน</strong> ระบบจะตัดข้อมูลทิ้งทันทีเพราะถือว่าผิดปกติทางคลินิก 
-              หรือกรณี <strong>วัคซีนเจอี</strong> หากคลินิก/รพ.เอกชนฉีดเป็นชนิดเชื้อตาย (JE) จะต้องคีย์ให้ครบ 3 เข็ม (JE1, JE2, JE3) แต่ถ้าเป็นชนิดเชื้อเป็น (LAJE) ตามที่รัฐจัดสรร จะใช้แค่ 2 เข็ม (J11, J12) หากคีย์รหัสสลับกันระบบจะมองว่าได้รับวัคซีนผิดประเภทและประเมินว่าไม่ผ่านเกณฑ์ครับ
+              หรือกรณี <strong>วัคซีนเจอี</strong> หากคลินิก/รพ.เอกชนฉีดเป็นชนิดเชื้อตาย (JE) จะต้องคีย์ให้ครบ 3 เข็ม (รหัส 43 แฟ้ม: <code className="bg-zinc-100 px-1 py-0.5 rounded font-mono text-zinc-700">051, 052, 053</code>) แต่ถ้าเป็นชนิดเชื้อเป็น (LAJE) ตามที่รัฐจัดสรร จะใช้แค่ 2 เข็ม (รหัส 43 แฟ้ม: <code className="bg-zinc-100 px-1 py-0.5 rounded font-mono text-zinc-700">J11, J12</code>) หากคีย์รหัสสลับกันระบบจะมองว่าได้รับวัคซีนผิดประเภทและประเมินว่าไม่ผ่านเกณฑ์ครับ
             </p>
           </div>
 
           <div className="bg-zinc-50 p-4 rounded-lg border border-zinc-100">
-            <p className="font-semibold text-zinc-800 mb-1">Q: ถ้าพบว่าเด็กตกหล่นวัคซีนตั้งแต่ตอน 1-2 ขวบ (เช่น ขาด Hib เข็ม 3) เจ้าหน้าที่ต้องทำยังไงครับ?</p>
+            <p className="font-semibold text-zinc-800 mb-1">Q: ถ้าพบว่าเด็กตกหล่นวัคซีนในอดีต หรือวัคซีนตอน 4 ขวบ (เช่น ขาด DTP เข็ม 5 หรือ OPV เข็ม 3) เจ้าหน้าที่ต้องทำยังไงครับ?</p>
             <p className="text-zinc-600">
               <strong className="text-zinc-800">A:</strong> พี่ๆ เจ้าหน้าที่สามารถเชิญผู้ปกครองให้นำสมุดสีชมพู (สมุดบันทึกสุขภาพแม่และเด็ก) มาตรวจสอบที่สถานบริการได้เลยครับ 
               หากพบว่าเด็กเคยไปรับบริการที่อื่นแล้วแต่ข้อมูลไม่ลิงก์เข้ามาระบบ สามารถใช้สมุดสีชมพูเป็นหลักฐานในการ <strong>คีย์ประวัติวัคซีนย้อนหลัง (Historical Data)</strong> ลงในระบบ HIS ของหน่วยบริการได้ทันที ข้อมูลก็จะถูกส่งออกไปยัง HDC ในรอบถัดไปครับ

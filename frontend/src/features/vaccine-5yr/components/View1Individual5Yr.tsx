@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+﻿import { useMemo, useState } from 'react';
 import { InfoIcon, FileSpreadsheetIcon, FileTextIcon } from 'lucide-react';
 import type { ColumnDef } from '@tanstack/react-table';
 
@@ -122,13 +122,13 @@ export function View1Individual5Yr({ fiscalYear, quarter, data, isLoading, error
           return (
             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 border border-green-200">
               <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
-              ได้รับวัคซีนครบถ้วน (1 รายการ)
+              ได้รับวัคซีนครบถ้วน (2 รายการ)
             </span>
           );
         }
         return (
           <div className="flex flex-col gap-1 items-start">
-            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 border border-red-200">
+            <span className="inline-flex px-2 py-1 rounded-md bg-red-50 text-red-700 text-xs font-semibold border border-red-100">
               วัคซีนที่ยังขาด
             </span>
             <div className="flex flex-wrap gap-1 mt-1">
@@ -176,7 +176,7 @@ export function View1Individual5Yr({ fiscalYear, quarter, data, isLoading, error
         'ชื่อ': row.name,
         'นามสกุล': row.lname,
         'วันเกิด': birthStr ? `${birthStr}\n(อายุ ${ageStr})` : '',
-        'ผลการประเมิน (1 รายการ)': missingStr.length === 0 ? 'ได้รับวัคซีนครบถ้วน' : `ตกหล่น: ${missingStr}`
+        'ผลการประเมิน (2 รายการ)': missingStr.length === 0 ? 'ได้รับวัคซีนครบถ้วน' : `ตกหล่น: ${missingStr}`
       };
     });
     exportToExcel(exportData, `EPI_View1_Tracking_${new Date().getTime()}`);
@@ -197,7 +197,7 @@ export function View1Individual5Yr({ fiscalYear, quarter, data, isLoading, error
         'ผลการประเมิน': missingStr.length === 0 ? 'ครบถ้วน' : `ตกหล่น: ${missingStr}`
       };
     });
-    const title = `ทะเบียนติดตามเด็กรายบุคคล เด็ก 5 ปี (ความครอบคลุม 1 รายการ) - ไตรมาส ${quarter}/${fiscalYear}`;
+    const title = `ทะเบียนติดตามเด็กรายบุคคล เด็ก 5 ปี (ความครอบคลุม 2 รายการ) - ไตรมาส ${quarter}/${fiscalYear}`;
     exportToPdf(exportData, `EPI_View1_Tracking_${new Date().getTime()}`, title);
   };
 
@@ -212,7 +212,7 @@ export function View1Individual5Yr({ fiscalYear, quarter, data, isLoading, error
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
           <h2 className="text-lg font-semibold text-zinc-900">
-            ทะเบียนติดตามเด็กรายบุคคล (เด็กอายุ 3 ปี): ความครอบคลุมการได้รับวัคซีนรายชนิด (1 รายการ)
+            ทะเบียนติดตามเด็กรายบุคคล (เด็กอายุ 5 ปี): ความครอบคลุมการได้รับวัคซีนรายชนิด (2 รายการ)
           </h2>
           <p className="text-sm text-zinc-500 mt-1">
             ข้อมูลอัปเดตล่าสุด: <span className="font-medium text-blue-600">{asOfDateText}</span>
@@ -238,7 +238,7 @@ export function View1Individual5Yr({ fiscalYear, quarter, data, isLoading, error
             className="px-3 py-2 bg-white border border-zinc-200 rounded-lg text-sm shadow-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
           >
             <option value="all">สถานะการรับวัคซีนทั้งหมด</option>
-            <option value="passed">ได้รับวัคซีนครบถ้วน (1 รายการ)</option>
+            <option value="passed">ได้รับวัคซีนครบถ้วน (2 รายการ)</option>
             <option value="failed">ยังได้รับวัคซีนไม่ครบถ้วน (ตกหล่น)</option>
           </select>
 
@@ -281,11 +281,11 @@ export function View1Individual5Yr({ fiscalYear, quarter, data, isLoading, error
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-3 text-blue-800">
               <div className="flex flex-col gap-0.5">
                 <span className="font-medium text-blue-900">DTP (คอตีบ บาดทะยัก ไอกรน) เข็มกระตุ้น 4 ปี</span>
-                <span className="text-[11px] text-blue-700">วิธีบันทึกใน HIS: เลือกลงเป็น <strong>DTP เข็ม 5</strong> (รหัส 43 แฟ้ม: <code className="bg-blue-100 px-1 py-0.5 rounded font-mono text-[10px]">035</code>)</span>
+                <span className="text-[11px] text-blue-700">วิธีบันทึกใน HIS: เลือกลงเป็น <strong>DTP เข็ม 5</strong> (รหัส 43 แฟ้ม: <code className="bg-blue-100 px-1 py-0.5 rounded font-mono text-[10px]">035</code> หรือ <code className="bg-blue-100 px-1 py-0.5 rounded font-mono text-[10px]">D35, D45, D55, T11</code>)</span>
               </div>
               <div className="flex flex-col gap-0.5">
                 <span className="font-medium text-blue-900">OPV (โปลิโอชนิดหยอด) เข็มกระตุ้น 4 ปี</span>
-                <span className="text-[11px] text-blue-700">วิธีบันทึกใน HIS: เลือกลงเป็น <strong>OPV เข็ม 5</strong> (รหัส 43 แฟ้ม: <code className="bg-blue-100 px-1 py-0.5 rounded font-mono text-[10px]">085</code>)</span>
+                <span className="text-[11px] text-blue-700">วิธีบันทึกใน HIS: เลือกลงเป็น <strong>OPV เข็ม 5 (ครั้งที่ 3)</strong> (รหัส 43 แฟ้ม: <code className="bg-blue-100 px-1 py-0.5 rounded font-mono text-[10px]">085</code> หรือ <code className="bg-blue-100 px-1 py-0.5 rounded font-mono text-[10px]">D35, D45, D55, I15</code>)</span>
               </div>
             </div>
           </div>
@@ -306,7 +306,7 @@ export function View1Individual5Yr({ fiscalYear, quarter, data, isLoading, error
             <p className="font-semibold text-blue-900 mb-1">Q: มุมมองที่ 1 ของเด็ก 5 ปี แตกต่างจากช่วงอายุอื่นอย่างไร?</p>
             <p className="text-blue-800">
               <strong className="text-blue-900">A:</strong> สำหรับเด็กอายุ 5 ปีบริบูรณ์ (ก่อนเข้าเรียน) ระบบจะโฟกัสที่ <strong>วัคซีนเข็มกระตุ้นช่วงอายุ 4 ปี</strong> เป็นหลักครับ 
-              ได้แก่ DTP เข็มที่ 5 (คอตีบ-บาดทะยัก-ไอกรน) และ OPV เข็มที่ 5 (โปลิโอหยอด) ซึ่งเป็นเกณฑ์ชี้วัดสำคัญของช่วงวัยนี้ครับ
+              ได้แก่ DTP เข็มที่ 5 (คอตีบ-บาดทะยัก-ไอกรน) และ OPV เข็มที่ 5 หรือ ครั้งที่ 3 (โปลิโอหยอด) ซึ่งเป็นเกณฑ์ชี้วัดสำคัญของช่วงวัยนี้ครับ
             </p>
           </div>
 
@@ -323,8 +323,8 @@ export function View1Individual5Yr({ fiscalYear, quarter, data, isLoading, error
             <p className="text-zinc-600">
               <strong className="text-zinc-800">A:</strong> มักจะเจอบ่อยๆ จากการคีย์รหัสผิดในระบบ HIS ครับ เช่น:
               <ul className="list-disc pl-5 mt-2 space-y-1">
-                <li>จ่ายวัคซีน DTP เข็มที่ 5 ให้เด็กแล้ว แต่ในโปรแกรมไปเลือกรหัสของเข็มที่ 4 (034) แทนที่จะเป็นเข็มที่ 5 (035)</li>
-                <li>หรือให้ OPV หยอดแล้ว แต่โปรแกรมบันทึกเป็น opv4_date แทนที่จะลงว่า OPV เข็ม 5 (รหัส 085)</li>
+                <li>จ่ายวัคซีน DTP เข็มที่ 5 ให้เด็กแล้ว แต่ในโปรแกรมไปเลือกรหัสของเข็มที่ 4 (รหัส 43 แฟ้ม: <code className="bg-zinc-100 px-1 py-0.5 rounded font-mono text-zinc-700">034</code>) แทนที่จะเป็นเข็มที่ 5 (รหัส 43 แฟ้ม: <code className="bg-zinc-100 px-1 py-0.5 rounded font-mono text-zinc-700">035, T11</code>)</li>
+                <li>หรือให้ OPV หยอดแล้ว แต่ในโปรแกรมไปเลือกรหัสของเข็มที่ 4 (รหัส 43 แฟ้ม: <code className="bg-zinc-100 px-1 py-0.5 rounded font-mono text-zinc-700">084</code>) แทนที่จะเป็น OPV เข็ม 5 (รหัส 43 แฟ้ม: <code className="bg-zinc-100 px-1 py-0.5 rounded font-mono text-zinc-700">085, I15</code>)</li>
               </ul>
               ให้ลองตรวจสอบการลงรหัสวัคซีนในวันรับบริการ (Visit) ของเด็กรายนั้นอีกครั้ง แล้วปรับแก้รหัส 43 แฟ้มให้ถูกต้องครับ
             </p>
