@@ -13,8 +13,8 @@ function shortenFacilityName(name: string) {
   if (!name) return name;
   return name
     .replace(/สำนักงานสาธารณสุขอำเภอ/g, 'สสอ.')
-    .replace(/โรงพยาบาลส่งเสริมสุขภาพตำบล/g, 'þ.?.')
-    .replace(/โรงพยาบาล/g, 'þ.')
+    .replace(/โรงพยาบาลส่งเสริมสุขภาพตำบล/g, 'รพ.สต.')
+    .replace(/โรงพยาบาล/g, 'รพ.')
     .replace(/ศูนย์สุขภาพชุมชน/g, 'สสช.')
     .replace(/สถานบริการสาธารณสุขชุมชน/g, 'สสช.')
     .replace(/สถานีอนามัยเฉลิมพระเกียรติฯ/g, 'สอน.')

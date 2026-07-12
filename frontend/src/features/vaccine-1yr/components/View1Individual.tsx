@@ -13,8 +13,8 @@ function shortenFacilityName(name: string) {
   if (!name) return name;
   return name
     .replace(/สำนักงานสาธารณสุขอำเภอ/g, 'สสอ.')
-    .replace(/โรงพยาบาลส่งเสริมสุขภาพตำบล/g, 'þ.?.')
-    .replace(/โรงพยาบาล/g, 'þ.')
+    .replace(/โรงพยาบาลส่งเสริมสุขภาพตำบล/g, 'รพ.สต.')
+    .replace(/โรงพยาบาล/g, 'รพ.')
     .replace(/ศูนย์สุขภาพชุมชน/g, 'สสช.')
     .replace(/สถานบริการสาธารณสุขชุมชน/g, 'สสช.')
     .replace(/สถานีอนามัยเฉลิมพระเกียรติฯ/g, 'สอน.')
@@ -132,7 +132,7 @@ export function View1Individual({ fiscalYear, quarter, data, isLoading, error, a
             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 border border-red-200">
               วัคซีนที่ยังขาด
             </span>
-            <div className="flex flex-wrap gap-1 mt-1 max-w-[200px]">
+            <div className="flex flex-wrap gap-1 mt-1">
               {row.original.missingVaccines.map((v, i) => (
                 <span key={i} className="inline-flex px-1.5 py-0.5 rounded bg-red-50 text-red-600 text-[10px] font-medium border border-red-100 shadow-sm">
                   {v}

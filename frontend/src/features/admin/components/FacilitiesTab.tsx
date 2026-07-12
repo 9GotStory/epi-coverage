@@ -140,7 +140,7 @@ export function FacilitiesTab() {
                 <Label htmlFor="hosname">Facility Name</Label>
                 <Input
                   id="hosname"
-                  placeholder="e.g. þ.?.บ้านร้องกวาง"
+                  placeholder="e.g. รพ.สต.บ้านร้องกวาง"
                   value={newHosname}
                   onChange={(e) => setNewHosname(e.target.value)}
                 />

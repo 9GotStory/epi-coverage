@@ -132,7 +132,7 @@ export function View1Individual2Yr({ fiscalYear, quarter, data, isLoading, error
             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 border border-red-200">
               วัคซีนที่ยังขาด
             </span>
-            <div className="flex flex-wrap gap-1 mt-1 max-w-[200px]">
+            <div className="flex flex-wrap gap-1 mt-1">
               {row.original.missingVaccines.map((v, i) => (
                 <span key={i} className="inline-flex px-1.5 py-0.5 rounded bg-red-50 text-red-600 text-[10px] font-medium border border-red-100 shadow-sm">
                   {v}

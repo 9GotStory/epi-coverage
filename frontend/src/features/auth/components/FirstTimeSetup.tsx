@@ -96,7 +96,7 @@ export function FirstTimeSetup() {
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="space-y-2">
-            <label className="block text-sm font-medium text-slate-700">Facility (þ.?.)</label>
+            <label className="block text-sm font-medium text-slate-700">Facility (รพ.สต.)</label>
             <select 
               value={selectedHoscode}
               onChange={(e) => setSelectedHoscode(e.target.value)}

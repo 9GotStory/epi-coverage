@@ -123,7 +123,7 @@ export function View1Individual3Yr({ fiscalYear, quarter, data, isLoading, error
           return (
             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 border border-green-200">
               <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
-              ได้รับวัคซีนครบถ้วน (20 รายการ)
+              ได้รับวัคซีนครบถ้วน (LAJE เข็ม 2 / JE เข็ม 3)
             </span>
           );
         }
@@ -132,7 +132,7 @@ export function View1Individual3Yr({ fiscalYear, quarter, data, isLoading, error
             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 border border-red-200">
               วัคซีนที่ยังขาด
             </span>
-            <div className="flex flex-wrap gap-1 mt-1 max-w-[200px]">
+            <div className="flex flex-wrap gap-1 mt-1">
               {row.original.missingVaccines.map((v, i) => (
                 <span key={i} className="inline-flex px-1.5 py-0.5 rounded bg-red-50 text-red-600 text-[10px] font-medium border border-red-100 shadow-sm">
                   {v}
@@ -177,7 +177,7 @@ export function View1Individual3Yr({ fiscalYear, quarter, data, isLoading, error
         'ชื่อ': row.name,
         'นามสกุล': row.lname,
         'วันเกิด': birthStr ? `${birthStr}\n(อายุ ${ageStr})` : '',
-        'ผลการประเมิน (20 รายการ)': missingStr.length === 0 ? 'ได้รับวัคซีนครบถ้วน' : `ตกหล่น: ${missingStr}`
+        'ผลการประเมิน (LAJE2 / JE3)': missingStr.length === 0 ? 'ได้รับวัคซีนครบถ้วน' : `ตกหล่น: ${missingStr}`
       };
     });
     exportToExcel(exportData, `EPI_View1_Tracking_${new Date().getTime()}`);
@@ -198,7 +198,7 @@ export function View1Individual3Yr({ fiscalYear, quarter, data, isLoading, error
         'ผลการประเมิน': missingStr.length === 0 ? 'ครบถ้วน' : `ตกหล่น: ${missingStr}`
       };
     });
-    const title = `ทะเบียนติดตามเด็กรายบุคคล (ความครอบคลุม 20 รายการ) - ไตรมาส ${quarter}/${fiscalYear}`;
+    const title = `ทะเบียนติดตามเด็กรายบุคคล (ความครอบคลุม LAJE/JE) - ไตรมาส ${quarter}/${fiscalYear}`;
     exportToPdf(exportData, `EPI_View1_Tracking_${new Date().getTime()}`, title);
   };
 
@@ -239,7 +239,7 @@ export function View1Individual3Yr({ fiscalYear, quarter, data, isLoading, error
             className="px-3 py-2 bg-white border border-zinc-200 rounded-lg text-sm shadow-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
           >
             <option value="all">สถานะการรับวัคซีนทั้งหมด</option>
-            <option value="passed">ได้รับวัคซีนครบถ้วน (20 รายการ)</option>
+            <option value="passed">ได้รับวัคซีนครบถ้วน (LAJE เข็ม 2 / JE เข็ม 3)</option>
             <option value="failed">ยังได้รับวัคซีนไม่ครบถ้วน (ตกหล่น)</option>
           </select>
 
@@ -268,52 +268,24 @@ export function View1Individual3Yr({ fiscalYear, quarter, data, isLoading, error
       <div className="bg-blue-50/50 border border-blue-100 rounded-xl p-4 flex gap-3 text-sm text-blue-900">
         <InfoIcon className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
         <div>
-          <p className="font-semibold mb-1">เกี่ยวกับมุมมองที่ 1 (ความครอบคลุมรายชนิดวัคซีนรวม)</p>
+          <p className="font-semibold mb-1">เกี่ยวกับมุมมองที่ 1 (ความครอบคลุมวัคซีน LAJE เข็ม 2)</p>
           <p className="mb-2 text-blue-800 leading-relaxed">
-            มุมมองนี้แสดงประวัติการได้รับวัคซีนแบบ <strong>แยกตามชนิดและเข็ม (รวม 20 รายการ)</strong> 
-            เพื่อสนับสนุนการปฏิบัติงานของเจ้าหน้าที่ในการ <strong>ติดตามเด็กที่ได้รับวัคซีนไม่ครบถ้วน</strong> ได้อย่างแม่นยำ 
-            (หมายเหตุ: เด็ก 1 รายอาจขาดวัคซีนบางรายการในมุมมองนี้ แต่ยังคงผ่านเกณฑ์ตัวชี้วัด Fully Immunized ในภาพรวมได้เนื่องจากเงื่อนไขการประเมินที่ต่างกัน)
+            มุมมองนี้แสดงประวัติการได้รับวัคซีน <strong>LAJE เข็มที่ 2 หรือ JE เข็มที่ 3</strong> 
+            เพื่อสนับสนุนการปฏิบัติงานของเจ้าหน้าที่ในการ <strong>ติดตามเด็กอายุครบ 3 ปีที่ยังไม่ได้รับวัคซีนสมองอักเสบเจอี</strong> ได้อย่างแม่นยำ 
+            (หมายเหตุ: เด็ก 1 รายอาจขาดวัคซีนในมุมมองนี้ แต่หากเคยได้รับวัคซีนตัวอื่นๆ ตอนอายุ 1-2 ปีไม่ครบ ก็อาจจะไม่ผ่านเกณฑ์ตัวชี้วัด Fully Immunized ในภาพรวมได้เช่นกัน)
           </p>
           <div className="bg-white/70 p-4 rounded-lg border border-blue-100/50 mt-3 text-xs shadow-sm">
             <p className="font-semibold mb-3 text-blue-900 border-b border-blue-100 pb-2">
-              คู่มือและเกณฑ์ประเมินรหัสวัคซีนรวม HDC (ปรับปรุงปี 2569) สำหรับเด็ก 1 ปี
+              คู่มือและเกณฑ์ประเมินรหัสวัคซีนรวม HDC (ปรับปรุงปี 2569) สำหรับเด็ก 3 ปี
             </p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-3 text-blue-800">
               <div className="flex flex-col gap-0.5">
-                <span className="font-medium text-blue-900">BCG (ป้องกันวัณโรค)</span>
-                <span className="text-[11px] text-blue-700">วิธีบันทึกใน HIS: เลือกลงเป็น <strong>BCG</strong> (รหัส 43 แฟ้ม: <code className="bg-blue-100 px-1 py-0.5 rounded font-mono text-[10px]">011</code>)</span>
+                <span className="font-medium text-blue-900">LAJE (สมองอักเสบเจอี ชนิดเชื้อเป็น)</span>
+                <span className="text-[11px] text-blue-700">วิธีบันทึกใน HIS: เลือกลงเป็น <strong>LAJE เข็ม 2</strong> (รหัส 43 แฟ้ม: <code className="bg-blue-100 px-1 py-0.5 rounded font-mono text-[10px]">J12 หรือ 053</code>)</span>
               </div>
               <div className="flex flex-col gap-0.5">
-                <span className="font-medium text-blue-900">HBV (ไวรัสตับอักเสบบี)</span>
-                <span className="text-[11px] text-blue-700">วิธีบันทึกใน HIS: เลือกลงเป็น <strong>HBV เข็ม 1-4</strong> ตามช่วงอายุรหัส (รหัส 43 แฟ้ม: <code className="bg-blue-100 px-1 py-0.5 rounded font-mono text-[10px]">041, 042, 043, 044</code>)</span>
-              </div>
-              <div className="flex flex-col gap-0.5">
-                <span className="font-medium text-blue-900">DTP (คอตีบ บาดทะยัก ไอกรน)</span>
-                <span className="text-[11px] text-blue-700">วิธีบันทึกใน HIS: เลือกลงเป็น <strong>DTP เข็ม 1-3</strong> หรือ <strong>วัคซีนรวม (Pentavalent)</strong> (รหัส 43 แฟ้ม: <code className="bg-blue-100 px-1 py-0.5 rounded font-mono text-[10px]">031, 032, 033</code>)</span>
-              </div>
-              <div className="flex flex-col gap-0.5">
-                <span className="font-medium text-blue-900">Hib (ฮิบ)</span>
-                <span className="text-[11px] text-blue-700">วิธีบันทึกใน HIS: เลือกลงเป็น <strong>วัคซีนรวม (Pentavalent)</strong> (รหัส 43 แฟ้ม: <code className="bg-blue-100 px-1 py-0.5 rounded font-mono text-[10px]">H11, H12, H13</code>)</span>
-              </div>
-              <div className="flex flex-col gap-0.5">
-                <span className="font-medium text-blue-900">OPV (โปลิโอชนิดหยอด)</span>
-                <span className="text-[11px] text-blue-700">วิธีบันทึกใน HIS: เลือกลงเป็น <strong>OPV เข็ม 1-3</strong> (รหัส 43 แฟ้ม: <code className="bg-blue-100 px-1 py-0.5 rounded font-mono text-[10px]">081, 082, 083</code>)</span>
-              </div>
-              <div className="flex flex-col gap-0.5">
-                <span className="font-medium text-blue-900">IPV (โปลิโอชนิดฉีด)</span>
-                <span className="text-[11px] text-blue-700">วิธีบันทึกใน HIS: เลือกลงเป็น <strong>IPV เข็ม 1-2</strong> (รหัส 43 แฟ้ม: <code className="bg-blue-100 px-1 py-0.5 rounded font-mono text-[10px]">091, 092</code>)</span>
-              </div>
-              <div className="flex flex-col gap-0.5">
-                <span className="font-medium text-blue-900">MMR (หัด หัดเยอรมัน คางทูม)</span>
-                <span className="text-[11px] text-blue-700">วิธีบันทึกใน HIS: เลือกลงเป็น <strong>MMR เข็ม 1</strong> (รหัส 43 แฟ้ม: <code className="bg-blue-100 px-1 py-0.5 rounded font-mono text-[10px]">061</code>)</span>
-              </div>
-              <div className="flex flex-col gap-0.5">
-                <span className="font-medium text-blue-900">Rota (ไวรัสโรต้า)</span>
-                <span className="text-[11px] text-blue-700">วิธีบันทึกใน HIS: เลือกลงเป็น <strong>Rota เข็ม 1-3</strong> (รหัส 43 แฟ้ม: <code className="bg-blue-100 px-1 py-0.5 rounded font-mono text-[10px]">R11, R12, R13</code> หรือ R21-R31)</span>
-              </div>
-              <div className="flex flex-col gap-0.5">
-                <span className="font-medium text-blue-900">PCV (นิวโมค็อกคัส)</span>
-                <span className="text-[11px] text-blue-700">วิธีบันทึกใน HIS: เลือกลงเป็น <strong>PCV เข็ม 1-3</strong> (รหัส 43 แฟ้ม: <code className="bg-blue-100 px-1 py-0.5 rounded font-mono text-[10px]">P11, P12, P13</code>)</span>
+                <span className="font-medium text-blue-900">JE (สมองอักเสบเจอี ชนิดเชื้อตาย)</span>
+                <span className="text-[11px] text-blue-700">วิธีบันทึกใน HIS: เลือกลงเป็น <strong>JE เข็ม 3</strong> (รหัส 43 แฟ้ม: <code className="bg-blue-100 px-1 py-0.5 rounded font-mono text-[10px]">JE3</code>)</span>
               </div>
             </div>
           </div>

@@ -13,8 +13,8 @@ function shortenFacilityName(name: string) {
   if (!name) return name;
   return name
     .replace(/สำนักงานสาธารณสุขอำเภอ/g, 'สสอ.')
-    .replace(/โรงพยาบาลส่งเสริมสุขภาพตำบล/g, 'þ.?.')
-    .replace(/โรงพยาบาล/g, 'þ.')
+    .replace(/โรงพยาบาลส่งเสริมสุขภาพตำบล/g, 'รพ.สต.')
+    .replace(/โรงพยาบาล/g, 'รพ.')
     .replace(/ศูนย์สุขภาพชุมชน/g, 'สสช.')
     .replace(/สถานบริการสาธารณสุขชุมชน/g, 'สสช.')
     .replace(/สถานีอนามัยเฉลิมพระเกียรติฯ/g, 'สอน.')
@@ -353,8 +353,22 @@ export function View2FullyImmunized3Yr({ fiscalYear, quarter, data, isLoading, e
           <div className="bg-blue-50/50 p-4 rounded-lg border border-blue-100">
             <p className="font-semibold text-blue-900 mb-1">Q: มุมมอง Fully Immunized ของเด็กอายุ 3 ปี ประเมินวัคซีนหมวดไหนเป็นพิเศษครับ?</p>
             <p className="text-blue-800">
-              <strong className="text-blue-900">A:</strong> ในเด็กอายุ 3 ปีบริบูรณ์ ถือเป็นจุดสิ้นสุดของการประเมิน Fully Immunized ตามเกณฑ์ของกระทรวงสาธารณสุขครับ 
-              ระบบจะตรวจสอบความครบถ้วนสะสมตั้งแต่วัยทารก รวม 9 หมวด (BCG, HBV, DTP, Hib, OPV, IPV, MMR, Rota และที่สำคัญคือ <strong>LAJE เข็มที่ 2</strong> หรือวัคซีนสมองอักเสบเจอี ที่ต้องได้รับช่วงอายุ 2.5 ขวบ) ถือเป็นการสรุปผลประเมินรวบยอดก่อนเด็กเข้าวัยเรียนครับ
+              <strong className="text-blue-900">A:</strong> ในเด็กอายุ 3 ปีบริบูรณ์ ถือเป็นอีกหนึ่งจุดประเมินสำคัญของ Fully Immunized ตามเกณฑ์กระทรวงฯ ครับ 
+              ระบบจะตรวจสอบความครบถ้วนสะสมตั้งแต่วัยทารก รวม 9 หมวด (BCG, HBV, DTP, Hib, OPV, IPV, MMR, Rota และที่สำคัญคือ <strong>LAJE เข็มที่ 2</strong> ที่ต้องได้รับช่วงอายุ 2.5 ขวบ) ถือเป็นการสรุปผลประเมินรวบยอดก่อนเด็กเข้าวัยเรียนครับ
+            </p>
+          </div>
+
+          <div className="bg-zinc-50 p-4 rounded-lg border border-zinc-100">
+            <p className="font-semibold text-zinc-800 mb-1">Q: ระบบแจ้งว่า "ขาด HBV เข็ม 4 (043)" ทั้งที่เด็กฉีดวัคซีนรวม 6 เดือนไปแล้ว เกิดจากอะไร?</p>
+            <p className="text-zinc-600">
+              <strong className="text-zinc-800">A:</strong> อาจเกิดจากการแมปปิ้งรหัสวัคซีนในโปรแกรม HIS ผิดครับ สำหรับวัคซีนตับอักเสบบีเข็มที่ 4 (ที่ฉีดตอนอายุ 6 เดือน พร้อม DTP-HB-Hib) <strong>รหัส 43 แฟ้มมาตรฐานของ HDC ที่ถูกต้องคือ <code className="bg-zinc-200 px-1 py-0.5 rounded text-zinc-800">043</code></strong> (ซึ่งคือชื่อรหัสเดิม HBV3) รบกวนเจ้าหน้าที่ตรวจสอบรหัสส่งออกใน HIS ว่าตั้งค่าไว้ตรงกับ 043 หรือไม่ครับ
+            </p>
+          </div>
+
+          <div className="bg-zinc-50 p-4 rounded-lg border border-zinc-100">
+            <p className="font-semibold text-zinc-800 mb-1">Q: ทำไมผลประเมินแจ้ง "ขาด OPV เข็ม 3 (083)" หรือ "เข็ม 4 (084)" ทั้งที่เกณฑ์บอกว่าใช้ OPV แค่ 2 ครั้ง?</p>
+            <p className="text-zinc-600">
+              <strong className="text-zinc-800">A:</strong> คำว่า "OPV 2 ครั้ง" ในเกณฑ์ HDC สำหรับประเมินเด็ก 3 ปี จะเจาะจงตรวจสอบจากวัคซีน 2 เข็มหลัก ได้แก่ <strong>OPV เข็ม 3 (ตอนอายุ 6 เดือน รหัส <code className="bg-zinc-200 px-1 py-0.5 rounded text-zinc-800">083</code>)</strong> และ <strong>OPV เข็ม 4 (ตอนอายุ 1.5 ปี รหัส <code className="bg-zinc-200 px-1 py-0.5 rounded text-zinc-800">084</code>)</strong> ครับ หากเด็กได้รับ OPV1 และ OPV2 แต่ขาดเข็มใดเข็มหนึ่งในช่วง 6 เดือน หรือ 1.5 ปี ระบบจะถือว่าตกหล่นทันทีครับ
             </p>
           </div>
 
@@ -362,17 +376,17 @@ export function View2FullyImmunized3Yr({ fiscalYear, quarter, data, isLoading, e
             <p className="font-semibold text-zinc-800 mb-1">Q: วัคซีนสมองอักเสบเจอี (JE) ช่วงอายุ 2 ปีครึ่ง ลงข้อมูลอย่างไรให้ผ่านเกณฑ์?</p>
             <p className="text-zinc-600">
               <strong className="text-zinc-800">A:</strong> 
-              ปัจจุบันมาตรฐานวัคซีนคือชนิดเชื้อเป็น (LAJE) <strong>วิธีบันทึกใน HIS: เลือกลงเป็น LAJE เข็ม 1 (อายุ 1 ปี) และ LAJE เข็ม 2 (อายุ 2 ปีครึ่ง)</strong> (รหัส 43 แฟ้ม: <code className="bg-zinc-100 px-1 py-0.5 rounded font-mono text-zinc-700">J11, J12</code>) 
-              แต่ในกรณีที่คลินิกหรือ รพ. เอกชนบางแห่งยังใช้วัคซีนชนิดเชื้อตาย (JE) เด็กจะต้องได้รับครบ 3 เข็มนะครับ (รหัส 43 แฟ้ม: <code className="bg-zinc-100 px-1 py-0.5 rounded font-mono text-zinc-700">JE1, JE2, JE3</code>) ระบบถึงจะถือว่าผ่านเกณฑ์อย่างสมบูรณ์ครับ
+              ปัจจุบันมาตรฐานคือชนิดเชื้อเป็น (LAJE) <strong>วิธีบันทึกใน HIS: เลือกลงเป็น LAJE เข็ม 1 (อายุ 1 ปี) และ LAJE เข็ม 2 (อายุ 2.5 ปี)</strong> (รหัส 43 แฟ้ม: <code className="bg-zinc-200 px-1 py-0.5 rounded font-mono text-zinc-700">J11, J12</code>) 
+              แต่กรณี รพ. เอกชนบางแห่งใช้วัคซีนชนิดเชื้อตาย (JE) เด็กจะต้องได้รับครบ 3 เข็ม (รหัส: <code className="bg-zinc-200 px-1 py-0.5 rounded font-mono text-zinc-700">JE1, JE2, JE3</code>) ระบบถึงจะถือว่าผ่านเกณฑ์อย่างสมบูรณ์ครับ
             </p>
           </div>
-
+          
           <div className="bg-zinc-50 p-4 rounded-lg border border-zinc-100">
             <p className="font-semibold text-zinc-800 mb-1">Q: หากผลประเมิน Fully Immunized ขึ้นว่า "ไม่ผ่าน" จากวัคซีนช่วงขวบปีแรก (เช่น Rota) ต้องทำยังไง?</p>
             <p className="text-zinc-600">
               <strong className="text-zinc-800">A:</strong> 
               มักเกิดจากการคีย์ข้อมูลตกหล่น หรือคีย์วันที่ผิดครับ (เช่น หลงคีย์วัคซีน Rota เข็ม 1 และ 2 เป็นวันเดียวกัน) ทำให้ระบบส่วนกลาง (HDC) ตัดสิทธิ์เพราะผิดเงื่อนไขทางคลินิก 
-              แนะนำให้พี่ๆ เจ้าหน้าที่เปิดสมุดสีชมพูเทียบกับโปรแกรม HIS เพื่อแก้ไขวันที่ให้ถูกต้อง หรือคีย์ประวัติเก่าเพิ่มเข้าไป ข้อมูลก็จะสมบูรณ์ในรอบอัปโหลดถัดไปครับ
+              แนะนำให้เปิดสมุดสีชมพูเทียบกับโปรแกรม HIS เพื่อแก้ไขวันที่ให้ถูกต้อง ข้อมูลก็จะสมบูรณ์ในรอบอัปโหลดถัดไปครับ
             </p>
           </div>
           
