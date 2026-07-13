@@ -21,11 +21,11 @@ function calcGroupSummary(
   data: any[],
   evalView1Fn: (r: any) => { missingVaccines: string[]; passedCount?: number; results?: Record<string, boolean> },
   evalView2Fn: (r: any) => { isFullyImmunized: boolean },
-  fiscalYear?: number
+  _fiscalYear?: number // ไม่ได้ใช้ — HDC นับ active ทุก record ไม่กรองปี
 ) {
-  const filtered = fiscalYear
-    ? data.filter((r) => Number(r.fiscal_year) === fiscalYear)
-    : data;
+  // HDC นับทุก Active record ในชีต โดยไม่กรองปีงบประมาณ
+  // (fiscal_year ใช้สำหรับ Upload เท่านั้น ไม่ใช่สำหรับ filter การแสดงผล)
+  const filtered = data;
   
   const total = filtered.length;
   let view1PassedDoses = 0;
@@ -51,6 +51,7 @@ function calcGroupSummary(
 
   return { total, view1PassedDoses, view1TotalDoses, view2Passed, view1Coverage, view2Coverage };
 }
+
 
 // ──────────────────────────────────────────────
 // Helper: คำนวณ รพ.สต. ที่มีเด็กตกหล่นมากที่สุด
@@ -142,7 +143,7 @@ const AgeGroupSection = memo(function AgeGroupSection({
 
           <div className="mt-4 flex items-end justify-between">
             <div>
-              <p className="text-3xl font-bold text-zinc-900 tracking-tight">{summary.view1Coverage.toFixed(1)}<span className="text-xl text-zinc-400 font-medium ml-0.5">%</span></p>
+              <p className="text-3xl font-bold text-zinc-900 tracking-tight">{summary.view1Coverage.toFixed(2)}<span className="text-xl text-zinc-400 font-medium ml-0.5">%</span></p>
               <p className="text-sm text-zinc-500 mt-1">
                 ได้รับแล้ว <strong className="text-zinc-800">{summary.view1PassedDoses.toLocaleString()}</strong> จาก <strong className="text-zinc-800">{summary.view1TotalDoses.toLocaleString()}</strong> โดส
               </p>
@@ -177,7 +178,7 @@ const AgeGroupSection = memo(function AgeGroupSection({
 
           <div className="mt-4 flex items-end justify-between">
             <div>
-              <p className="text-3xl font-bold text-zinc-900 tracking-tight">{summary.view2Coverage.toFixed(1)}<span className="text-xl text-zinc-400 font-medium ml-0.5">%</span></p>
+              <p className="text-3xl font-bold text-zinc-900 tracking-tight">{summary.view2Coverage.toFixed(2)}<span className="text-xl text-zinc-400 font-medium ml-0.5">%</span></p>
               <p className="text-sm text-zinc-500 mt-1">
                 ผ่านเกณฑ์ <strong className="text-zinc-800">{summary.view2Passed.toLocaleString()}</strong> คน
               </p>

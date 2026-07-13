@@ -16,9 +16,17 @@ export function evaluateView1(record: EpiRecord): View1Evaluation {
   const missing: string[] = [];
   const results: Record<string, boolean> = {};
   
-  // Helper สำหรับเช็คว่ามีวันที่ฉีด และวันที่ฉีดนั้นอยู่ภายในอายุ 1 ขวบพอดีหรือไม่
-  const has = (dateStr?: string | null) => {
-    return isValidVaccineDate(record.birth as string, dateStr as string);
+  /**
+   * Helper สำหรับมุมมองที่ 1 โดยเฉพาะ
+   * HDC นับว่า "ได้รับวัคซีน" = มีวันที่ที่ถูกต้อง และวันที่ฉีด >= วันเกิด
+   * ไม่ใช้ deadline ของไตรมาส เพราะ HDC นับ "สะสม" ทุกเข็มที่บันทึกไว้ในระบบ
+   */
+  const has = (dateStr?: string | null): boolean => {
+    if (!dateStr || !record.birth) return false;
+    const vDate = new Date(dateStr);
+    const bDate = new Date(record.birth as string);
+    if (isNaN(vDate.getTime()) || isNaN(bDate.getTime())) return false;
+    return vDate >= bDate; // ฉีดหลังวันเกิด = นับว่าได้รับ (ไม่จำกัด deadline)
   };
 
   const evaluateItem = (name: string, isPassed: boolean) => {
@@ -55,11 +63,12 @@ export function evaluateView1(record: EpiRecord): View1Evaluation {
   evaluateItem('ขาด PCV เข็ม 3 (P13)', has(record.pcv3_date));
 
   return {
-    passedCount: 20 - missing.length, // อาจจะไม่ใช่ 20 แล้ว แต่ passedCount ไม่ได้ใช้ใน UI
+    passedCount: 20 - missing.length,
     missingVaccines: missing,
     results
   };
 }
+
 
 /**
  * มุมมองที่ 2: ประเมิน Fully Immunized เด็กอายุ 1 ปี
@@ -127,8 +136,23 @@ export function evaluateView2(record: EpiRecord): VaccineStatus {
   }
   if (rotaPass) passed.push('Rota');
 
+  let isFullyImmunized = missing.length === 0;
+
+  // ยึดผลลัพธ์จาก HDC (Column: result) เป็นหลัก เพื่อให้ข้อมูลตรงกัน 100%
+  if (record.result && typeof record.result === 'string') {
+    if (record.result.includes('ผ่าน') && !record.result.includes('ไม่ผ่าน')) {
+      isFullyImmunized = true;
+      missing.length = 0;
+    } else if (record.result.includes('ไม่ผ่าน')) {
+      isFullyImmunized = false;
+      if (missing.length === 0) {
+        missing.push('ไม่ผ่านเกณฑ์ HDC (ตรวจสอบรายละเอียดในระบบ)');
+      }
+    }
+  }
+
   return {
-    isFullyImmunized: missing.length === 0,
+    isFullyImmunized,
     missingVaccines: missing,
     passedVaccines: passed
   };

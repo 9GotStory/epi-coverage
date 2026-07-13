@@ -15,14 +15,21 @@ export interface View2Status {
 
 // ==========================================
 // View 1 (Individual) - เด็ก 5 ปี
-// เกณฑ์: DTP 4 ปี และ OPV 4 ปี (เข็มที่ 5)
+// เกณฑ์: DTP เข็ม 5 (4 ปี) และ OPV เข็ม 5 (4 ปี)
 // ==========================================
 export const evaluateView1_5Yr = (r: EpiRecord): View1Status => {
   const missingVaccines: string[] = [];
   let isPassedAll = true;
 
-  const has = (dateStr?: string | null) => {
-    return isValidVaccineDate(r.birth as string, dateStr as string, 5);
+  /**
+   * HDC นับว่า "ได้รับวัคซีน" = มีวันที่บันทึกหลังวันเกิด (ไม่จำกัด deadline)
+   */
+  const has = (dateStr?: string | null): boolean => {
+    if (!dateStr || !r.birth) return false;
+    const vDate = new Date(dateStr);
+    const bDate = new Date(r.birth as string);
+    if (isNaN(vDate.getTime()) || isNaN(bDate.getTime())) return false;
+    return vDate >= bDate;
   };
 
   if (!has(r.dtp5_date)) {
@@ -78,9 +85,8 @@ export const evaluateView2_5Yr = (r: EpiRecord): VaccineStatus => {
   if (!has(r.hib2_date)) missingVaccines.push('ขาด Hib เข็ม 2 (H12)');
   if (!has(r.hib3_date)) missingVaccines.push('ขาด Hib เข็ม 3 (H13)');
   
-  // 5. IPV 2 ครั้ง (2 เดือน, 4 เดือน)
+  // 5. IPV 1 ครั้ง (4 เดือน) *เด็ก 5 ปีเกิดก่อนนโยบาย IPV 2 เข็ม
   if (!has(r.ipv1_date)) missingVaccines.push('ขาด IPV เข็ม 1 (091)');
-  if (!has(r.ipv2_date)) missingVaccines.push('ขาด IPV เข็ม 2 (092)');
   
   // 6. OPV 3 ครั้ง ตาม EPI ใหม่ (6 เดือน, 1 ปี 6 เดือน, 4 ปี)
   if (!has(r.opv1_date)) missingVaccines.push('ขาด OPV เข็ม 3 (083)');
@@ -91,20 +97,8 @@ export const evaluateView2_5Yr = (r: EpiRecord): VaccineStatus => {
   if (!has(r.mmr1_date)) missingVaccines.push('ขาด MMR เข็ม 1 (061)');
   if (!has(r.mmr2_date)) missingVaccines.push('ขาด MMR เข็ม 2 (073)');
   
-  // 8. Rota (2 or 3 doses complete)
-  if (has(r.rv31_date) || has(r.rv32_date) || has(r.rv33_date)) {
-    // ใช้แบบ 3 เข็ม
-    if (!has(r.rv31_date)) missingVaccines.push('ขาด Rota เข็ม 1 (R21)');
-    if (!has(r.rv32_date)) missingVaccines.push('ขาด Rota เข็ม 2 (R22)');
-    if (!has(r.rv33_date)) missingVaccines.push('ขาด Rota เข็ม 3 (R23)');
-  } else if (has(r.rv21_date) || has(r.rv22_date)) {
-    // ใช้แบบ 2 เข็ม
-    if (!has(r.rv21_date)) missingVaccines.push('ขาด Rota เข็ม 1 (R11)');
-    if (!has(r.rv22_date)) missingVaccines.push('ขาด Rota เข็ม 2 (R12)');
-  } else {
-    // ไม่มีข้อมูลเลย
-    missingVaccines.push('ขาด Rota (เข็มแรก)');
-  }
+  // 8. Rota (ยกเว้นในเด็ก 5 ปี เนื่องจากเกิดก่อนนโยบายวัคซีนใหม่)
+  // (นำออกตาม feedback ผู้ใช้)
   
   // 9. LAJE / JE
   if (has(r.je1_date) || has(r.je2_date) || has(r.je3_date)) {
@@ -121,7 +115,21 @@ export const evaluateView2_5Yr = (r: EpiRecord): VaccineStatus => {
     missingVaccines.push('ขาด LAJE/JE (เข็มแรก)');
   }
 
-  const isFullyImmunized = missingVaccines.length === 0;
+  let isFullyImmunized = missingVaccines.length === 0;
+
+  // 10. ยึดผลลัพธ์จาก HDC (Column: result) เป็นหลัก เพื่อให้ข้อมูลตรงกัน 100%
+  if (r.result && typeof r.result === 'string') {
+    if (r.result.includes('ผ่าน') && !r.result.includes('ไม่ผ่าน')) {
+      isFullyImmunized = true;
+      missingVaccines.length = 0; // ล้างข้อมูลตกหล่นเพราะ HDC ให้ผ่าน
+    } else if (r.result.includes('ไม่ผ่าน')) {
+      isFullyImmunized = false;
+      // หาก HDC ให้ไม่ผ่าน แต่ manual logic ให้ผ่าน เราควรยึด HDC และใส่อย่างน้อย 1 สาเหตุ
+      if (missingVaccines.length === 0) {
+        missingVaccines.push('ไม่ผ่านเกณฑ์ HDC (ตรวจสอบรายละเอียดในระบบ)');
+      }
+    }
+  }
 
   return {
     isFullyImmunized,

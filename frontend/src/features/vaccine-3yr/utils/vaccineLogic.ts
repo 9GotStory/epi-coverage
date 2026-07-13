@@ -15,10 +15,16 @@ export function evaluateView1_3Yr(record: EpiRecord): View1Evaluation {
   const missing: string[] = [];
   const results: Record<string, boolean> = {};
   
-  const has = (dateStr?: string | null) => {
-    return isValidVaccineDate(record.birth as string, dateStr as string, 3);
+  /**
+   * HDC นับว่า "ได้รับวัคซีน" = มีวันที่บันทึกหลังวันเกิด (ไม่จำกัด deadline)
+   */
+  const has = (dateStr?: string | null): boolean => {
+    if (!dateStr || !record.birth) return false;
+    const vDate = new Date(dateStr);
+    const bDate = new Date(record.birth as string);
+    if (isNaN(vDate.getTime()) || isNaN(bDate.getTime())) return false;
+    return vDate >= bDate;
   };
-
 
   // View 1 (รายเข็ม): เช็คความครบถ้วนของ LAJE 2 ครั้ง หรือ JE 3 ครั้ง
   let lajePass = has(record.j12_date) || has(record.je3_date);
@@ -120,8 +126,23 @@ export function evaluateView2_3Yr(record: EpiRecord): VaccineStatus {
   }
   if (jeCompletePass) passed.push('LAJE/JE');
 
+  let isFullyImmunized = missing.length === 0;
+
+  // ยึดผลลัพธ์จาก HDC (Column: result) เป็นหลัก เพื่อให้ข้อมูลตรงกัน 100%
+  if (record.result && typeof record.result === 'string') {
+    if (record.result.includes('ผ่าน') && !record.result.includes('ไม่ผ่าน')) {
+      isFullyImmunized = true;
+      missing.length = 0;
+    } else if (record.result.includes('ไม่ผ่าน')) {
+      isFullyImmunized = false;
+      if (missing.length === 0) {
+        missing.push('ไม่ผ่านเกณฑ์ HDC (ตรวจสอบรายละเอียดในระบบ)');
+      }
+    }
+  }
+
   return {
-    isFullyImmunized: missing.length === 0,
+    isFullyImmunized,
     missingVaccines: missing,
     passedVaccines: passed
   };

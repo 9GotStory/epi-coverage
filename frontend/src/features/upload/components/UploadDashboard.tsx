@@ -386,7 +386,7 @@ export function UploadDashboard() {
                           <td className="px-4 py-3 font-mono text-xs">{row.cid}</td>
                           <td className="px-4 py-3 whitespace-nowrap">{row.name} {row.lname}</td>
                           <td className="px-4 py-3">
-                            {String(row.sex) === '1' ? 'ชาย' : String(row.sex) === '2' ? '??' : row.sex}
+                            {String(row.sex) === '1' ? 'ชาย' : String(row.sex) === '2' ? 'หญิง' : row.sex}
                           </td>
                           <td className="px-4 py-3 whitespace-nowrap">
                             {row.birth} <span className="text-slate-400 text-xs ml-1">({getAgeString(row.birth)})</span>

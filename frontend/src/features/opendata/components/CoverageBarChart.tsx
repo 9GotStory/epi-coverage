@@ -41,7 +41,7 @@ const LEGEND_STYLE = { paddingTop: '20px' };
 const CHART_MARGIN = { top: 10, right: 30, left: 0, bottom: 0 };
 
 // Formatter ที่ไม่ขึ้นกับ props → ย้ายออกนอก component
-function tooltipFormatter(value: number | string, name: string): [string | number, string] {
+function tooltipFormatter(value: any, name: any): [any, any] {
   if (name === 'coverage') return [`${value}%`, 'ความครอบคลุม'];
   if (name === 'target') return [value, 'เป้าหมาย'];
   if (name === 'result') return [value, 'ผลงาน'];
