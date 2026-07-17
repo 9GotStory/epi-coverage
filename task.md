@@ -149,9 +149,11 @@
 - `[x]` Create `VaccineRadarChart.tsx` component (Recharts `RadarChart`)
 - `[x]` Update `OpenDataDashboard.tsx` to include new components in Top/Middle sections
 - `[x]` Verify UI layout and data accuracy
-- `[x]` **7.2** Facility Leaderboard Implementation
-  - `[x]` Update `calcGroupSummary` in `src/pages/Dashboard.tsx` to generate `facilityBreakdown`.
-  - `[x]` Update `AgeGroupSection` in `src/pages/Dashboard.tsx` to show the new Facility Leaderboard UI (Pass/Fail segmented list with Gap Analyzer).
+- `[x]` **7.2** Facility Overview: View 1 Integration Tasks
+  - `[x]` Update `calcGroupSummary` in `src/pages/Dashboard.tsx` to generate `facilityBreakdownV1`.
+  - `[x]` Refactor `AgeGroupSection` in `src/pages/Dashboard.tsx` to use the `Tabs` component.
+  - `[x]` Implement `TabsContent value="view1"` (View 1 Breakdown + View 1 Leaderboard).
+  - `[x]` Implement `TabsContent value="view2"` (View 2 Breakdown + View 2 Leaderboard).
   - `[x]` Verify UI rendering.
   - `[x]` Update `walkthrough.md`.
 - `[x]` **7.5** Empty State (กรณีไม่มีข้อมูล)
