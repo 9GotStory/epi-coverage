@@ -149,8 +149,8 @@
 - `[x]` Create `VaccineRadarChart.tsx` component (Recharts `RadarChart`)
 - `[x]` Update `OpenDataDashboard.tsx` to include new components in Top/Middle sections
 - `[x]` Verify UI layout and data accuracy
-- `[ ]` **7.5** Empty State (กรณีไม่มีข้อมูล)
-- `[ ]` **7.6** Error Boundary
+- `[x]` **7.5** Empty State (กรณีไม่มีข้อมูล)
+- `[x]` **7.6** Error Boundary
 
 ---
 
