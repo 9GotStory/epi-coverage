@@ -113,6 +113,15 @@ export function View2FullyImmunized5Yr({ fiscalYear, quarter, data, isLoading, e
       },
     },
     {
+      header: 'HDC Result (Debug)',
+      accessorKey: 'result',
+      size: 140,
+      cell: info => {
+        const val = info.getValue() as string;
+        return <span className="text-blue-600 font-mono text-xs">{val || 'MISSING'}</span>;
+      },
+    },
+    {
       header: 'ผลการประเมิน Fully Immunized',
       id: 'status',
       size: 500,

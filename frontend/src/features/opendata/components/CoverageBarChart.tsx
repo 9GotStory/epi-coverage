@@ -1,14 +1,14 @@
 import { useMemo } from 'react';
 import {
+  BarChart,
   Bar,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
-  Legend,
   ResponsiveContainer,
   ReferenceLine,
-  createHorizontalChart,
+  Cell
 } from 'recharts';
 
 interface ChartData {
@@ -24,37 +24,33 @@ interface CoverageBarChartProps {
   targetLine?: number; // % เป้าหมาย (default: 90)
 }
 
-const Typed = createHorizontalChart<ChartData, string, number>()({
-  XAxis,
-  YAxis,
-  Bar,
-});
-
-// Static style objects ที่ไม่เปลี่ยนแปลง — วางนอก component เพื่อป้องกัน
-// object identity เปลี่ยนทุก render (Recharts มักทำ shallow compare)
-const TOOLTIP_STYLE = {
-  borderRadius: '8px',
-  border: 'none',
-  boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
-};
-const LEGEND_STYLE = { paddingTop: '20px' };
-const CHART_MARGIN = { top: 10, right: 30, left: 0, bottom: 0 };
-
-// Formatter ที่ไม่ขึ้นกับ props → ย้ายออกนอก component
-function tooltipFormatter(value: any, name: any): [any, any] {
-  if (name === 'coverage') return [`${value}%`, 'ความครอบคลุม'];
-  if (name === 'target') return [value, 'เป้าหมาย'];
-  if (name === 'result') return [value, 'ผลงาน'];
-  return [value, name];
-}
+const CHART_MARGIN = { top: 20, right: 30, left: 0, bottom: 0 };
 
 function pctTickFormatter(val: number) {
   return `${val}%`;
 }
 
+// Custom Tooltip component to show all data
+const CustomTooltip = ({ active, payload, label }: any) => {
+  if (active && payload && payload.length) {
+    const data = payload[0].payload;
+    return (
+      <div className="bg-white p-3 border border-zinc-200 rounded-lg shadow-sm text-sm">
+        <p className="font-semibold text-zinc-800 mb-2">{label}</p>
+        <div className="space-y-1">
+          <p className="text-zinc-500">เป้าหมาย: <span className="font-medium text-zinc-900">{data.target}</span> คน</p>
+          <p className="text-zinc-500">ผลงาน: <span className="font-medium text-blue-600">{data.result}</span> คน</p>
+          <p className="text-zinc-500 mt-2 pt-2 border-t border-zinc-100">
+            ความครอบคลุม: <span className={`font-bold ${data.coverage >= 90 ? 'text-green-600' : 'text-red-600'}`}>{data.coverage}%</span>
+          </p>
+        </div>
+      </div>
+    );
+  }
+  return null;
+};
+
 export function CoverageBarChart({ data, title, targetLine = 90 }: CoverageBarChartProps) {
-  // ✅ Memoize label object เพื่อป้องกัน Recharts re-render เกินจำเป็น
-  // (Recharts ตรวจ identity ของ label prop ใน ReferenceLine)
   const referenceLabel = useMemo(
     () => ({ position: 'top' as const, value: `เป้า ${targetLine}%`, fill: '#EF4444', fontSize: 12 }),
     [targetLine],
@@ -64,47 +60,37 @@ export function CoverageBarChart({ data, title, targetLine = 90 }: CoverageBarCh
     <div className="w-full h-80 bg-white p-4 rounded-xl border border-zinc-200">
       {title && <h3 className="text-lg font-semibold text-zinc-800 mb-4 text-center">{title}</h3>}
       <ResponsiveContainer width="100%" height="100%">
-        <Typed.BarChart data={data} margin={CHART_MARGIN}>
+        <BarChart data={data} margin={CHART_MARGIN}>
           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E4E4E7" />
-          <Typed.XAxis
+          <XAxis
             dataKey="name"
             tick={{ fill: '#71717A', fontSize: 12 }}
             axisLine={{ stroke: '#E4E4E7' }}
             tickLine={false}
           />
-          <Typed.YAxis
-            yAxisId="left"
-            orientation="left"
+          <YAxis
+            domain={[0, 100]}
+            tickFormatter={pctTickFormatter}
             stroke="#71717A"
             tick={{ fill: '#71717A', fontSize: 12 }}
             axisLine={false}
             tickLine={false}
           />
-          <Typed.YAxis
-            yAxisId="right"
-            orientation="right"
-            domain={[0, 100]}
-            tickFormatter={pctTickFormatter}
-            stroke="#10B981"
-            tick={{ fill: '#10B981', fontSize: 12 }}
-            axisLine={false}
-            tickLine={false}
-          />
-          <Tooltip contentStyle={TOOLTIP_STYLE} formatter={tooltipFormatter} />
-          <Legend wrapperStyle={LEGEND_STYLE} />
+          <Tooltip content={<CustomTooltip />} cursor={{ fill: '#F4F4F5' }} />
 
           <ReferenceLine
             y={targetLine}
-            yAxisId="right"
             stroke="#EF4444"
             strokeDasharray="3 3"
             label={referenceLabel}
           />
 
-          <Typed.Bar yAxisId="left" dataKey="target" name="เป้าหมาย (คน)" fill="#CBD5E1" radius={[4, 4, 0, 0]} maxBarSize={40} />
-          <Typed.Bar yAxisId="left" dataKey="result" name="ผลงาน (คน)" fill="#0066CC" radius={[4, 4, 0, 0]} maxBarSize={40} />
-          <Typed.Bar yAxisId="right" dataKey="coverage" name="ความครอบคลุม (%)" fill="#10B981" radius={[4, 4, 0, 0]} maxBarSize={40} />
-        </Typed.BarChart>
+          <Bar dataKey="coverage" name="ความครอบคลุม" radius={[4, 4, 0, 0]} maxBarSize={40}>
+            {data.map((entry, index) => (
+              <Cell key={`cell-${index}`} fill={entry.coverage >= targetLine ? '#10B981' : '#F59E0B'} />
+            ))}
+          </Bar>
+        </BarChart>
       </ResponsiveContainer>
     </div>
   );

@@ -9,7 +9,7 @@ export interface View1Evaluation {
 }
 
 /**
- * มุมมองที่ 1: ตรวจสอบความครอบคลุมรายชนิดวัคซีน 20 รายการ
+ * มุมมองที่ 1: ตรวจสอบความครอบคลุมรายชนิดวัคซีน 17 รายการ
  * อ้างอิงตาม HDC: ความครอบคลุมของการได้รับวัคซีนตามเกณฑ์ในเด็กอายุครบ 1 ปี ที่ได้รับวัคซีนแต่ละชนิด รายไตรมาส
  */
 export function evaluateView1(record: EpiRecord): View1Evaluation {
@@ -58,12 +58,8 @@ export function evaluateView1(record: EpiRecord): View1Evaluation {
                        (has(record.rv31_date) && has(record.rv32_date) && has(record.rv33_date));
   evaluateItem('ขาด Rota (ครบถ้วน)', rotaComplete);
   
-  evaluateItem('ขาด PCV เข็ม 1 (P11)', has(record.pcv1_date));
-  evaluateItem('ขาด PCV เข็ม 2 (P12)', has(record.pcv2_date));
-  evaluateItem('ขาด PCV เข็ม 3 (P13)', has(record.pcv3_date));
-
   return {
-    passedCount: 20 - missing.length,
+    passedCount: 17 - missing.length,
     missingVaccines: missing,
     results
   };
@@ -83,40 +79,40 @@ export function evaluateView2(record: EpiRecord): VaccineStatus {
   };
 
   // 1. BCG
-  if (!has(record.bcg_date)) missing.push('ขาด BCG (010)'); else passed.push('BCG');
+  if (!has(record.bcg_date)) missing.push('ขาด BCG (010)'); else passed.push('BCG 1 เข็ม');
 
   // 2. HBV 3 times
   let hbvPass = true;
   if (!has(record.hbv1_date)) { missing.push('ขาด HBV เข็ม 1 (041)'); hbvPass = false; }
   if (!has(record.hbv2_date)) { missing.push('ขาด HBV เข็ม 2 (042)'); hbvPass = false; }
   if (!has(record.hbv4_date)) { missing.push('ขาด HBV เข็ม 4 (043)'); hbvPass = false; }
-  if (hbvPass) passed.push('HBV');
+  if (hbvPass) passed.push('HBV ครบ 3 เข็ม');
 
   // 3. DTP 3 times
   let dtpPass = true;
   if (!has(record.dtp1_date)) { missing.push('ขาด DTP เข็ม 1 (031)'); dtpPass = false; }
   if (!has(record.dtp2_date)) { missing.push('ขาด DTP เข็ม 2 (032)'); dtpPass = false; }
   if (!has(record.dtp3_date)) { missing.push('ขาด DTP เข็ม 3 (033)'); dtpPass = false; }
-  if (dtpPass) passed.push('DTP');
+  if (dtpPass) passed.push('DTP ครบ 3 เข็ม');
 
   // 4. Hib 3 times
   let hibPass = true;
   if (!has(record.hib1_date)) { missing.push('ขาด Hib เข็ม 1 (H11)'); hibPass = false; }
   if (!has(record.hib2_date)) { missing.push('ขาด Hib เข็ม 2 (H12)'); hibPass = false; }
   if (!has(record.hib3_date)) { missing.push('ขาด Hib เข็ม 3 (H13)'); hibPass = false; }
-  if (hibPass) passed.push('Hib');
+  if (hibPass) passed.push('Hib ครบ 3 เข็ม');
 
   // 5. IPV 2 times
   let ipvPass = true;
   if (!has(record.ipv1_date)) { missing.push('ขาด IPV เข็ม 1 (091)'); ipvPass = false; }
   if (!has(record.ipv2_date)) { missing.push('ขาด IPV เข็ม 2 (092)'); ipvPass = false; }
-  if (ipvPass) passed.push('IPV');
+  if (ipvPass) passed.push('IPV ครบ 2 เข็ม');
 
   // 6. OPV 1 time (ที่อายุ 6 เดือน ซึ่งใน sheet คือ opv1_date)
-  if (!has(record.opv1_date)) missing.push('ขาด OPV เข็ม 3 (083)'); else passed.push('OPV');
+  if (!has(record.opv1_date)) missing.push('ขาด OPV เข็ม 3 (083)'); else passed.push('OPV 3');
 
   // 7. MMR 1 time
-  if (!has(record.mmr1_date)) missing.push('ขาด MMR เข็ม 1 (061)'); else passed.push('MMR');
+  if (!has(record.mmr1_date)) missing.push('ขาด MMR เข็ม 1 (061)'); else passed.push('MMR 1 เข็ม');
 
   // 8. Rota 2 or 3 times
   let rotaPass = true;
@@ -134,7 +130,7 @@ export function evaluateView2(record: EpiRecord): VaccineStatus {
     missing.push('ขาด Rota (เข็มแรก)');
     rotaPass = false;
   }
-  if (rotaPass) passed.push('Rota');
+  if (rotaPass) passed.push('Rota (ครบ)');
 
   let isFullyImmunized = missing.length === 0;
 

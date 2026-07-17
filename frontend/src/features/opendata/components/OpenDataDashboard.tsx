@@ -36,7 +36,7 @@ export function OpenDataDashboard({ targetTable = 's_epi1' }: OpenDataDashboardP
   const isEpi3 = targetTable === 's_epi3';
   const isEpi5 = targetTable === 's_epi5';
   const [vaccine, setVaccine] = useState(isEpi1 ? 'bcg' : (isEpi3 ? 'je3' : (isEpi5 ? 'dtp5' : 'dtp4')));
-  const [quarter, setQuarter] = useState<1|2|3|4>(1);
+  const [quarter, setQuarter] = useState<1|2|3|4|'all'>('all');
 
   const isAdmin = user?.role === 'admin' || user?.hoscode === '00588';
   const [facilities, setFacilities] = useState<any[]>([]);
@@ -174,9 +174,10 @@ export function OpenDataDashboard({ targetTable = 's_epi1' }: OpenDataDashboardP
             <label className="text-xs text-zinc-500 block mb-1">ไตรมาส (เป้าหมาย)</label>
             <select
               value={quarter}
-              onChange={(e) => setQuarter(Number(e.target.value) as 1 | 2 | 3 | 4)}
+              onChange={(e) => setQuarter(e.target.value === 'all' ? 'all' : Number(e.target.value) as 1 | 2 | 3 | 4)}
               className="text-sm border-none bg-transparent font-medium text-zinc-900 focus:ring-0 p-0 cursor-pointer"
             >
+              <option value="all">ภาพรวมทั้งปีงบประมาณ</option>
               <option value={1}>Q1 (ต.ค. - ธ.ค.)</option>
               <option value={2}>Q2 (ม.ค. - มี.ค.)</option>
               <option value={3}>Q3 (เม.ย. - มิ.ย.)</option>

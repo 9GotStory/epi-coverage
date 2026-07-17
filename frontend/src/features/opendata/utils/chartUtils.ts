@@ -19,19 +19,14 @@ const MONTH_KEYS = Object.keys(MONTHS_MAP);
 
 
 export function formatEpiDataForChart(data: any[], vaccineKey: string) {
-  // vaccineKey = 'dtp1', 'bcg', 'dtp4', etc.
-  // We aggregate for the whole amphur over the months
-  
-  // Filter for Song District (5406)
-  const filteredData = data.filter(row => row.areacode && String(row.areacode).startsWith('5406'));
-  
+  // data is already filtered by OpenDataDashboard (either 'all' or specific hospital)
   const monthlyTotals: Record<string, { target: number; result: number }> = {};
   
   MONTH_KEYS.forEach(m => {
     monthlyTotals[m] = { target: 0, result: 0 };
   });
 
-  filteredData.forEach(row => {
+  data.forEach(row => {
     MONTH_KEYS.forEach(m => {
       const t = parseInt(row[`target${m}`] as string || '0', 10);
       const r = parseInt(row[`${vaccineKey}_${m}`] as string || '0', 10);
@@ -56,8 +51,7 @@ export function formatEpiDataForChart(data: any[], vaccineKey: string) {
 
 export function formatEpiAllVaccines(data: any[], targetTable: string = 's_epi1') {
   // We want to calculate the YTD cumulative target and result for all key vaccines
-  
-  const filteredData = data.filter(row => row.areacode && String(row.areacode).startsWith('5406'));
+  // data is already filtered by OpenDataDashboard
   
   const vaccines = targetTable === 's_epi2' ? [
     { key: 'je2', label: 'LAJE/JE (1 เข็ม หรือ ครบ 2 เข็ม)' },
@@ -87,18 +81,16 @@ export function formatEpiAllVaccines(data: any[], targetTable: string = 's_epi1'
     totals[v.key] = { target: 0, result: 0, label: v.label };
   });
 
-  filteredData.forEach(row => {
+  data.forEach(row => {
     MONTH_KEYS.forEach(m => {
       const t = parseInt(row[`target${m}`] as string || '0', 10);
+      const validT = isNaN(t) ? 0 : t;
       
-      // If target is valid, we add to all vaccines
-      if (!isNaN(t) && t > 0) {
-        vaccines.forEach(v => {
-          const r = parseInt(row[`${v.key}_${m}`] as string || '0', 10);
-          totals[v.key].target += t;
-          totals[v.key].result += isNaN(r) ? 0 : r;
-        });
-      }
+      vaccines.forEach(v => {
+        const r = parseInt(row[`${v.key}_${m}`] as string || '0', 10);
+        totals[v.key].target += validT;
+        totals[v.key].result += isNaN(r) ? 0 : r;
+      });
     });
   });
 

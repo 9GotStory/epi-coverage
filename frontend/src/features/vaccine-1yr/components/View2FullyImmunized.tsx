@@ -27,7 +27,7 @@ type ProcessedFullyImmunizedRecord = EpiRecord & {
 
 interface View2Props {
   fiscalYear: number;
-  quarter: number;
+  quarter: number | 'all';
   data: EpiRecord[];
   isLoading: boolean;
   error: string | null;
@@ -198,7 +198,8 @@ export function View2FullyImmunized({ fiscalYear, quarter, data, isLoading, erro
         'ผลการประเมิน': row.evaluation.isFullyImmunized ? 'ผ่านเกณฑ์' : `ตกหล่น: ${missingStr}`
       };
     });
-    const title = `ทะเบียนเด็กความครบถ้วนของวัคซีน (Fully Immunized 1 ปี) - ไตรมาส ${quarter}/${fiscalYear}`;
+    const quarterLabel = quarter === 'all' ? `ภาพรวมทั้งปีงบประมาณ ${fiscalYear}` : `ไตรมาส ${quarter}/${fiscalYear}`;
+    const title = `ทะเบียนเด็กความครบถ้วนของวัคซีน (Fully Immunized 1 ปี) - ${quarterLabel}`;
     exportToPdf(exportData, `EPI_View2_FullyImmunized1Yr_${new Date().getTime()}`, title);
   };
 

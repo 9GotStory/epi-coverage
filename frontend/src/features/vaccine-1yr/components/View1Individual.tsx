@@ -28,7 +28,7 @@ type ProcessedView1Record = EpiRecord & {
 
 interface View1Props {
   fiscalYear: number;
-  quarter: number;
+  quarter: number | 'all';
   data: EpiRecord[];
   isLoading: boolean;
   error: string | null;
@@ -123,7 +123,7 @@ export function View1Individual({ fiscalYear, quarter, data, isLoading, error, a
           return (
             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 border border-green-200">
               <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
-              ได้รับวัคซีนครบถ้วน (20 รายการ)
+              ได้รับวัคซีนครบถ้วน (17 รายการ)
             </span>
           );
         }
@@ -178,7 +178,7 @@ export function View1Individual({ fiscalYear, quarter, data, isLoading, error, a
         'ชื่อ': row.name,
         'นามสกุล': row.lname,
         'วันเกิด': birthStr ? `${birthStr}\n(อายุ ${ageStr})` : '',
-        'ผลการประเมิน (20 รายการ)': missingStr.length === 0 ? 'ได้รับวัคซีนครบถ้วน' : `ตกหล่น: ${missingStr}`
+        'ผลการประเมิน (17 รายการ)': missingStr.length === 0 ? 'ได้รับวัคซีนครบถ้วน' : `ตกหล่น: ${missingStr}`
       };
     });
     exportToExcel(exportData, `EPI_View1_Tracking_${new Date().getTime()}`);
@@ -199,7 +199,8 @@ export function View1Individual({ fiscalYear, quarter, data, isLoading, error, a
         'ผลการประเมิน': missingStr.length === 0 ? 'ครบถ้วน' : `ตกหล่น: ${missingStr}`
       };
     });
-    const title = `ทะเบียนติดตามเด็กรายบุคคล (ความครอบคลุม 20 รายการ) - ไตรมาส ${quarter}/${fiscalYear}`;
+    const quarterLabel = quarter === 'all' ? `ภาพรวมทั้งปีงบประมาณ ${fiscalYear}` : `ไตรมาส ${quarter}/${fiscalYear}`;
+    const title = `ทะเบียนติดตามเด็กรายบุคคล (ความครอบคลุม 17 รายการ) - ${quarterLabel}`;
     exportToPdf(exportData, `EPI_View1_Tracking_${new Date().getTime()}`, title);
   };
 
@@ -214,7 +215,7 @@ export function View1Individual({ fiscalYear, quarter, data, isLoading, error, a
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
           <h2 className="text-lg font-semibold text-zinc-900">
-            ทะเบียนติดตามเด็กรายบุคคล: ความครอบคลุมการได้รับวัคซีนรายชนิด (20 รายการ)
+            ทะเบียนติดตามเด็กรายบุคคล: ความครอบคลุมการได้รับวัคซีนรายชนิด (17 รายการ)
           </h2>
           <p className="text-sm text-zinc-500 mt-1">
             ข้อมูลอัปเดตล่าสุด: <span className="font-medium text-blue-600">{asOfDateText}</span>
@@ -240,7 +241,7 @@ export function View1Individual({ fiscalYear, quarter, data, isLoading, error, a
             className="px-3 py-2 bg-white border border-zinc-200 rounded-lg text-sm shadow-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
           >
             <option value="all">สถานะการรับวัคซีนทั้งหมด</option>
-            <option value="passed">ได้รับวัคซีนครบถ้วน (20 รายการ)</option>
+            <option value="passed">ได้รับวัคซีนครบถ้วน (17 รายการ)</option>
             <option value="failed">ยังได้รับวัคซีนไม่ครบถ้วน (ตกหล่น)</option>
           </select>
 
@@ -271,7 +272,7 @@ export function View1Individual({ fiscalYear, quarter, data, isLoading, error, a
         <div>
           <p className="font-semibold mb-1">เกี่ยวกับมุมมองที่ 1 (ความครอบคลุมรายชนิดวัคซีน)</p>
           <p className="mb-2 text-blue-800 leading-relaxed">
-            มุมมองนี้แสดงประวัติการได้รับวัคซีนแบบ <strong>แยกตามชนิดและเข็ม (รวม 20 รายการ)</strong> 
+            มุมมองนี้แสดงประวัติการได้รับวัคซีนแบบ <strong>แยกตามชนิดและเข็ม (รวม 17 รายการ)</strong> 
             เพื่อสนับสนุนการปฏิบัติงานของเจ้าหน้าที่ในการ <strong>ติดตามเด็กที่ได้รับวัคซีนไม่ครบถ้วน</strong> ได้อย่างแม่นยำ 
             (หมายเหตุ: เด็ก 1 รายอาจขาดวัคซีนบางรายการในมุมมองนี้ แต่ยังคงผ่านเกณฑ์ตัวชี้วัด Fully Immunized ในภาพรวมได้เนื่องจากเงื่อนไขการประเมินที่ต่างกัน)
           </p>
@@ -379,7 +380,7 @@ export function View1Individual({ fiscalYear, quarter, data, isLoading, error, a
             <p className="text-zinc-600">
               <strong className="text-zinc-800">A:</strong> เพราะ 2 มุมมองนี้ใช้ <strong>เกณฑ์การประเมินที่ต่างกันครับ</strong>:
               <ul className="list-disc pl-5 mt-2 space-y-1">
-                <li><strong>มุมมองที่ 1:</strong> เป็นการตรวจสอบ "ความสมบูรณ์ของการบันทึกข้อมูลแบบรายเข็ม" (เข้มงวด 20 รายการ) เช็คแม้กระทั่ง HBV เข็ม 3 หรือ PCV</li>
+                <li><strong>มุมมองที่ 1:</strong> เป็นการตรวจสอบ "ความสมบูรณ์ของการบันทึกข้อมูลแบบรายเข็ม" (เข้มงวด 17 รายการ) เช็คแม้กระทั่ง HBV เข็ม 3 (PCV ไม่นำมารวมแล้ว)</li>
                 <li><strong>มุมมองที่ 2 (Fully Immunized):</strong> ประเมินเฉพาะ "วัคซีนพื้นฐาน 8 หมวด" ตามเกณฑ์ชี้วัดหลักระดับประเทศ หากได้วัคซีนหลักครบ ก็ถือว่าเด็กมีภูมิคุ้มกันที่เพียงพอและผ่านเกณฑ์ครับ</li>
               </ul>
             </p>

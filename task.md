@@ -140,7 +140,7 @@
 
 ## Phase 7: UI/UX Polish
 
-- `[ ]` **7.1** Responsive Design (Mobile + Desktop)
+- `[x]` **7.1** Responsive Design (Mobile + Desktop)
 - `[x]` 1. **Database & Types**
   - `[x]` 1.1 Update `frontend/src/shared/types/index.ts` (add `dtp5_date`, `opv5_date`)
   - `[x]` 1.2 Update `backend/Code.gs` (add `Epi_5_Year` sheet setup)
@@ -149,6 +149,11 @@
 - `[x]` Create `VaccineRadarChart.tsx` component (Recharts `RadarChart`)
 - `[x]` Update `OpenDataDashboard.tsx` to include new components in Top/Middle sections
 - `[x]` Verify UI layout and data accuracy
+- `[x]` **7.2** Facility Leaderboard Implementation
+  - `[x]` Update `calcGroupSummary` in `src/pages/Dashboard.tsx` to generate `facilityBreakdown`.
+  - `[x]` Update `AgeGroupSection` in `src/pages/Dashboard.tsx` to show the new Facility Leaderboard UI (Pass/Fail segmented list with Gap Analyzer).
+  - `[x]` Verify UI rendering.
+  - `[x]` Update `walkthrough.md`.
 - `[x]` **7.5** Empty State (กรณีไม่มีข้อมูล)
 - `[x]` **7.6** Error Boundary
 

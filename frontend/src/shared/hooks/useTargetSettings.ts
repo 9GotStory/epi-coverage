@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useCallback } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { fetchApi } from '../lib/api';
 
 // ประเภทของ Config Map
@@ -8,26 +9,9 @@ type ConfigMap = Record<string, number | string>;
 interface UseTargetSettingsResult {
   config: ConfigMap;
   isLoading: boolean;
-  /**
-   * คำนวณค่าเป้าหมายโดยใช้ระบบ Fallback
-   * ลำดับความสำคัญ: วัคซีนเฉพาะ > มุมมองเฉพาะ > ไตรมาสพื้นฐาน > ค่า Default
-   *
-   * @param quarter    - ไตรมาสที่เลือก (1-4)
-   * @param view       - มุมมองที่ใช้ (1 หรือ 2) — optional
-   * @param vaccineKey - ชนิดวัคซีน เช่น 'mmr', 'bcg' — optional
-   * @returns ค่าเป้าหมายเป็น number (%)
-   */
-  getTarget: (quarter: number, view?: 1 | 2, vaccineKey?: string) => number;
+  isError: boolean;
+  getTarget: (quarter: number | 'all', view?: 1 | 2, vaccineKey?: string) => number;
 }
-
-// ──────────────────────────────────────────────────────
-// Module-level Promise cache (Best Practice จาก React Docs)
-// ref: https://react.dev/reference/react/use#usage
-// ──────────────────────────────────────────────────────
-let configPromise: Promise<ConfigMap> | null = null;
-let cachedConfig: ConfigMap | null = null;
-let cacheTimestamp = 0;
-const CACHE_TTL_MS = 5 * 60 * 1000; // 5 นาที
 
 const DEFAULT_CONFIG: ConfigMap = {
   target_q1: 50,
@@ -40,71 +24,24 @@ const DEFAULT_CONFIG: ConfigMap = {
   target_mmr_q4: 95,
 };
 
-function fetchConfigFromApi(): Promise<ConfigMap> {
-  // Reuse Promise ที่กำลังโหลดอยู่ (ป้องกัน duplicate request)
-  if (configPromise) return configPromise;
-
-  configPromise = fetchApi('getTargetConfig')
-    .then((res) => {
-      const data: ConfigMap = res?.data || res || {};
-      const merged = Object.keys(data).length > 0 ? data : DEFAULT_CONFIG;
-      cachedConfig = merged;
-      cacheTimestamp = Date.now();
-      return merged;
-    })
-    .catch((err) => {
-      console.warn('[useTargetSettings] ดึง config ไม่ได้ ใช้ค่า default:', err);
-      cachedConfig = DEFAULT_CONFIG;
-      cacheTimestamp = Date.now();
-      return DEFAULT_CONFIG;
-    })
-    .finally(() => {
-      // Reset promise หลัง resolve/reject เพื่อให้ refresh ในอนาคตได้
-      configPromise = null;
-    });
-
-  return configPromise;
-}
-
 export function useTargetSettings(): UseTargetSettingsResult {
-  const [config, setConfig] = useState<ConfigMap>(cachedConfig || DEFAULT_CONFIG);
-  const [isLoading, setIsLoading] = useState<boolean>(!cachedConfig);
+  const { data: configData, isLoading, isError } = useQuery<ConfigMap>({
+    queryKey: ['targetConfig'],
+    queryFn: async () => {
+      const res = await fetchApi('getTargetConfig');
+      const data: ConfigMap = res?.data || res || {};
+      return Object.keys(data).length > 0 ? data : DEFAULT_CONFIG;
+    },
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+    retry: 2,
+  });
 
-  useEffect(() => {
-    const now = Date.now();
-    // ใช้ cache ถ้ายังไม่หมดอายุ — ไม่ต้องเรียก API ซ้ำ
-    if (cachedConfig && now - cacheTimestamp < CACHE_TTL_MS) {
-      setConfig(cachedConfig);
-      setIsLoading(false);
-      return;
-    }
-
-    // ✅ ignore flag ตาม React Docs เพื่อป้องกัน setState หลัง unmount
-    // ref: https://react.dev/learn/synchronizing-with-effects#fetching-data
-    let ignore = false;
-
-    setIsLoading(true);
-    fetchConfigFromApi()
-      .then((data) => {
-        if (!ignore) {
-          setConfig(data);
-        }
-      })
-      .finally(() => {
-        if (!ignore) {
-          setIsLoading(false);
-        }
-      });
-
-    return () => {
-      ignore = true;
-    };
-  }, []);
+  const config = configData || DEFAULT_CONFIG;
 
   // ✅ useCallback ให้ getTarget มี stable reference ไม่สร้างใหม่ทุก render
   const getTarget = useCallback(
-    (quarter: number, view?: 1 | 2, vaccineKey?: string): number => {
-      const q = `q${quarter}`;
+    (quarter: number | 'all', view?: 1 | 2, vaccineKey?: string): number => {
+      const q = quarter === 'all' ? 'q4' : `q${quarter}`;
       const DEFAULT_TARGET = 90;
 
       // ลำดับ 1: เป้าหมายเฉพาะวัคซีน + ไตรมาส (เช่น target_mmr_q4 = 95)
@@ -129,5 +66,5 @@ export function useTargetSettings(): UseTargetSettingsResult {
     [config],
   );
 
-  return { config, isLoading, getTarget };
+  return { config, isLoading, isError, getTarget };
 }

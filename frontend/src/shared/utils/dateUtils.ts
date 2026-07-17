@@ -38,7 +38,7 @@ export function formatDateTimeStr(dateStr: Date | string | null | undefined): st
  * @param targetAge อายุเด็ก (ค่าเริ่มต้นคือ 1 ปี)
  * @returns { start: Date, end: Date }
  */
-export function getBirthDateRangeForQuarter(fiscalYear: number, quarter: number, targetAge: number = 1): { start: Date; end: Date } {
+export function getBirthDateRangeForQuarter(fiscalYear: number, quarter: number | 'all', targetAge: number = 1): { start: Date; end: Date } {
   // ปีงบประมาณ 2567 = ตุลาคม 2566 ถึง กันยายน 2567
   // เด็ก 1 ปี คือเด็กที่เกิดเมื่อ 1 ปีที่แล้ว, เด็ก 2 ปี เกิดเมื่อ 2 ปีที่แล้ว
   
@@ -48,7 +48,11 @@ export function getBirthDateRangeForQuarter(fiscalYear: number, quarter: number,
   let startStr = '';
   let endStr = '';
 
-  if (quarter === 1) {
+  if (quarter === 'all') {
+    // ตลอดทั้งปีงบประมาณ
+    startStr = `${calYearForQuarter1 - targetAge}-10-01`;
+    endStr = `${calYearForOtherQuarters - targetAge}-09-30`;
+  } else if (quarter === 1) {
     // ตุลาคม - ธันวาคม
     startStr = `${calYearForQuarter1 - targetAge}-10-01`;
     endStr = `${calYearForQuarter1 - targetAge}-12-31`;

@@ -11,7 +11,7 @@ export function EpiDashboard() {
   // Global Filters for Cohort
   const currentYear = new Date().getFullYear() + 543;
   const [fiscalYear, setFiscalYear] = useState<number>(currentYear);
-  const [quarter, setQuarter] = useState<number>(1);
+  const [quarter, setQuarter] = useState<number | 'all'>('all');
 
   const { data, isLoading, error, asOfDate } = useEpiData();
 
@@ -49,7 +49,7 @@ export function EpiDashboard() {
                   : 'text-zinc-500 hover:text-zinc-700'
               }`}
             >
-              มุมมองที่ 1: ความครอบคลุมรายชนิด (20 รายการ)
+              มุมมองที่ 1: ความครอบคลุมรายชนิด (17 รายการ)
             </button>
             <button
               onClick={() => setActiveTab('view2')}
@@ -89,9 +89,10 @@ export function EpiDashboard() {
             <span className="text-sm text-zinc-500 font-medium ml-2">ไตรมาส:</span>
             <select 
               value={quarter}
-              onChange={e => setQuarter(Number(e.target.value))}
+              onChange={e => setQuarter(e.target.value === 'all' ? 'all' : Number(e.target.value))}
               className="px-2 py-1 bg-white border border-zinc-200 rounded-md text-sm shadow-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
             >
+              <option value="all">ภาพรวมทั้งปีงบประมาณ</option>
               <option value={1}>ไตรมาส 1 (ต.ค. - ธ.ค.)</option>
               <option value={2}>ไตรมาส 2 (ม.ค. - มี.ค.)</option>
               <option value={3}>ไตรมาส 3 (เม.ย. - มิ.ย.)</option>
