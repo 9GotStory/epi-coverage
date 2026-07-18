@@ -1,0 +1,104 @@
+/**
+ * ──────────────────────────────────────────────
+ * Dashboard Cache System (PDPA Compliance)
+ * ──────────────────────────────────────────────
+ * Stores pre-calculated aggregated summaries of EPI data.
+ * This ensures that the public dashboard does not need to download raw PII data.
+ */
+
+const DASHBOARD_SUMMARY_SHEET = 'Dashboard_Summaries';
+
+/**
+ * Ensures the summary sheet exists and has headers.
+ */
+function ensureSummarySheet() {
+  const ss = getSpreadsheet();
+  let sheet = ss.getSheetByName(DASHBOARD_SUMMARY_SHEET);
+  if (!sheet) {
+    sheet = ss.insertSheet(DASHBOARD_SUMMARY_SHEET);
+    sheet.getRange(1, 1, 1, 5).setValues([
+      ['id', 'targetTable', 'fiscalYear', 'summaryData', 'updated_at']
+    ]);
+    sheet.getRange(1, 1, 1, 5).setFontWeight('bold');
+    sheet.setFrozenRows(1);
+  }
+  return sheet;
+}
+
+/**
+ * Saves a calculated dashboard summary JSON to the database.
+ * @param {string} targetTable - The target table name (e.g. 'Epi_1_Year')
+ * @param {number|string} fiscalYear - The fiscal year
+ * @param {string} summaryData - JSON string of the pre-calculated summary
+ */
+function saveDashboardSummary(targetTable, fiscalYear, summaryData) {
+  try {
+    const sheet = ensureSummarySheet();
+    const id = `${targetTable}_${fiscalYear}`;
+    const updatedAt = new Date();
+
+    const data = sheet.getDataRange().getValues();
+    let rowIndex = -1;
+
+    // Search for existing entry
+    for (let i = 1; i < data.length; i++) {
+      if (data[i][0] === id) {
+        rowIndex = i + 1; // 1-indexed for getRange
+        break;
+      }
+    }
+
+    if (rowIndex !== -1) {
+      // Update existing
+      sheet.getRange(rowIndex, 4, 1, 2).setValues([[summaryData, updatedAt]]);
+    } else {
+      // Insert new
+      sheet.appendRow([id, targetTable, fiscalYear, summaryData, updatedAt]);
+    }
+
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.toString() };
+  }
+}
+
+/**
+ * Gets all dashboard summaries for a given fiscal year.
+ * @param {number|string} fiscalYear - The fiscal year to filter by
+ */
+function getDashboardSummaries(fiscalYear) {
+  try {
+    const sheet = ensureSummarySheet();
+    const data = sheet.getDataRange().getValues();
+    const summaries = [];
+
+    // Skip header row
+    for (let i = 1; i < data.length; i++) {
+      const row = data[i];
+      const rowId = row[0];
+      const rowTargetTable = row[1];
+      const rowFiscalYear = row[2];
+      const rowSummaryData = row[3];
+      const rowUpdatedAt = row[4];
+
+      // Convert fiscalYear to string for safe comparison
+      if (rowFiscalYear.toString() === fiscalYear.toString()) {
+        try {
+          summaries.push({
+            id: rowId,
+            targetTable: rowTargetTable,
+            fiscalYear: rowFiscalYear,
+            summaryData: JSON.parse(rowSummaryData),
+            updated_at: rowUpdatedAt
+          });
+        } catch (e) {
+          // Ignore invalid JSON strings
+        }
+      }
+    }
+
+    return { success: true, summaries };
+  } catch (error) {
+    return { success: false, error: error.toString() };
+  }
+}

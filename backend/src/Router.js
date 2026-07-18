@@ -24,7 +24,7 @@ function handleRequest(method, e) {
     const authToken = e.parameter.auth_token || body.auth_token;
     
     // 4. Public Actions (ไม่ใช้ Token)
-    const publicActions = ['setup', 'verifyToken', 'createUser', 'createSession', 'getUser', 'updateLastLogin'];
+    const publicActions = ['setup', 'verifyToken', 'createUser', 'createSession', 'getUser', 'updateLastLogin', 'getTargetConfig', 'getDashboardSummaries'];
     if (publicActions.includes(action)) {
       switch (action) {
         case 'setup': return responseJson(setupDatabase());
@@ -33,6 +33,8 @@ function handleRequest(method, e) {
         case 'createSession': return responseJson(createSession(body.userId, body.token, body.ipAddress || '', body.userAgent || ''));
         case 'getUser': return responseJson(getUserByGoogleId(e.parameter.googleId || body.googleId));
         case 'updateLastLogin': return responseJson(updateLastLogin(body.googleId));
+        case 'getTargetConfig': return responseJson(getTargetConfig());
+        case 'getDashboardSummaries': return responseJson(getDashboardSummaries(e.parameter.fiscalYear || body.fiscalYear));
       }
     }
 
@@ -45,7 +47,8 @@ function handleRequest(method, e) {
     // 6. Admin Actions (ต้องเป็น Admin เท่านั้น)
     const adminActions = [
       'getAllUsers', 'getUsers', 'updateUserStatus', 'updateUserFacility', 
-      'upsertFacility', 'upsertEpiData', 'cleanupEpiData', 'getAuditLogs'
+      'upsertFacility', 'upsertEpiData', 'cleanupEpiData', 'getAuditLogs',
+      'saveDashboardSummary'
     ];
     if (adminActions.includes(action) && authResult.role !== 'admin') {
       return responseJson({ error: 'Forbidden: Admin access required' }, 403);
@@ -57,7 +60,6 @@ function handleRequest(method, e) {
       case 'upsertEpiData': return responseJson(upsertEpiData(body.chunk, body.batchId, body.adminEmail, body.fiscalYear, body.targetTable));
       case 'cleanupEpiData': return responseJson(cleanupEpiData(body.batchId, body.touchedHoscodes, body.adminEmail, body.fiscalYear, body.targetTable));
       case 'getOpenData': return responseJson(fetchOpenDataProxy(body.payload || {}));
-      case 'getTargetConfig': return responseJson(getTargetConfig());
       case 'getUsers': return responseJson(getUsers());
       case 'getFacilities': return responseJson(getFacilities());
       case 'getAuditLogs': return responseJson(getAuditLogs(e.parameter.email, e.parameter.actionType));
@@ -66,6 +68,7 @@ function handleRequest(method, e) {
       case 'updateUserStatus': return responseJson(updateUserStatus(body.googleId, body.status, body.role));
       case 'updateUserFacility': return responseJson(updateUserFacility(body.googleId, body.hoscode));
       case 'deleteSession': return responseJson(deleteSession(body.token));
+      case 'saveDashboardSummary': return responseJson(saveDashboardSummary(body.targetTable, body.fiscalYear, body.summaryData));
       default:
         return responseJson({ error: 'Unknown action: ' + action }, 400);
     }

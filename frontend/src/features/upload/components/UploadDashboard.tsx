@@ -8,6 +8,12 @@ import { Alert, AlertDescription, AlertTitle } from '../../../shared/components/
 import { SubNav } from '../../../widgets/layout/SubNav';
 import { fetchApi } from '../../../shared/lib/api';
 import { v4 as uuidv4 } from 'uuid';
+import { RefreshCw } from 'lucide-react';
+import { calcGroupSummary } from '../../../shared/utils/dashboardLogic';
+import { evaluateView1, evaluateView2 } from '../../vaccine-1yr/utils/vaccineLogic';
+import { evaluateView1_2Yr, evaluateView2_2Yr } from '../../vaccine-2yr/utils/vaccineLogic';
+import { evaluateView1_3Yr, evaluateView2_3Yr } from '../../vaccine-3yr/utils/vaccineLogic';
+import { evaluateView1_5Yr, evaluateView2_5Yr } from '../../vaccine-5yr/utils/vaccineLogic5Yr';
 
 const CHUNK_SIZE = 500;
 
@@ -22,7 +28,7 @@ export function UploadDashboard() {
   
   const [isUploading, setIsUploading] = useState(false);
   const [progress, setProgress] = useState(0);
-  const [status, setStatus] = useState<'idle' | 'parsing' | 'uploading' | 'cleaning' | 'success' | 'error'>('idle');
+  const [status, setStatus] = useState<'idle' | 'parsing' | 'uploading' | 'cleaning' | 'generating_summary' | 'success' | 'error'>('idle');
   const [errorMsg, setErrorMsg] = useState('');
   const [results, setResults] = useState<{inserted: number, updated: number, deactivated: number}>({inserted: 0, updated: 0, deactivated: 0});
 
@@ -203,6 +209,25 @@ export function UploadDashboard() {
       const cleanupPayload = cleanupRes.data;
       if (cleanupPayload.error) throw new Error(cleanupPayload.error);
       
+      // ── Generate and Save Dashboard Summary ──
+      setStatus('generating_summary');
+      setProgress(90);
+      
+      const fullDataRes = await fetchApi('getEpiData', { targetTable, fiscalYear: Number(fiscalYear) });
+      const fullData = fullDataRes.data.data || fullDataRes.data || [];
+      
+      let evalV1, evalV2;
+      switch (targetTable) {
+        case 'Epi_1_Year': evalV1 = evaluateView1; evalV2 = evaluateView2; break;
+        case 'Epi_2_Year': evalV1 = evaluateView1_2Yr; evalV2 = evaluateView2_2Yr; break;
+        case 'Epi_3_Year': evalV1 = evaluateView1_3Yr; evalV2 = evaluateView2_3Yr; break;
+        case 'Epi_5_Year': evalV1 = evaluateView1_5Yr; evalV2 = evaluateView2_5Yr; break;
+        default: throw new Error("Unknown target table for summary calculation.");
+      }
+      
+      const summary = calcGroupSummary(fullData, evalV1, evalV2, Number(fiscalYear));
+      await fetchApi('saveDashboardSummary', { targetTable, fiscalYear, summaryData: JSON.stringify(summary) });
+
       setProgress(100);
       setResults({ inserted, updated, deactivated: cleanupPayload.deactivated || 0 });
       setStatus('success');
@@ -223,6 +248,37 @@ export function UploadDashboard() {
     setStatus('idle');
     setProgress(0);
     setErrorMsg('');
+  };
+
+  const [isSyncing, setIsSyncing] = useState(false);
+  const handleSyncAll = async () => {
+    if (!confirm('การประมวลผลใหม่อาจใช้เวลาสักครู่ ต้องการดำเนินการต่อหรือไม่?')) return;
+    setIsSyncing(true);
+    try {
+      const tables = ['Epi_1_Year', 'Epi_2_Year', 'Epi_3_Year', 'Epi_5_Year'];
+      for (const t of tables) {
+        const fullDataRes = await fetchApi('getEpiData', { targetTable: t, fiscalYear: Number(fiscalYear) });
+        const fullData = fullDataRes.data.data || fullDataRes.data || [];
+        
+        let evalV1, evalV2;
+        switch (t) {
+          case 'Epi_1_Year': evalV1 = evaluateView1; evalV2 = evaluateView2; break;
+          case 'Epi_2_Year': evalV1 = evaluateView1_2Yr; evalV2 = evaluateView2_2Yr; break;
+          case 'Epi_3_Year': evalV1 = evaluateView1_3Yr; evalV2 = evaluateView2_3Yr; break;
+          case 'Epi_5_Year': evalV1 = evaluateView1_5Yr; evalV2 = evaluateView2_5Yr; break;
+          default: continue;
+        }
+        
+        const summary = calcGroupSummary(fullData, evalV1, evalV2, Number(fiscalYear));
+        await fetchApi('saveDashboardSummary', { targetTable: t, fiscalYear: Number(fiscalYear), summaryData: JSON.stringify(summary) });
+      }
+      alert('ประมวลผล Dashboard สำหรับทุกกลุ่มอายุเรียบร้อยแล้ว!');
+    } catch (error: any) {
+      console.error(error);
+      alert('เกิดข้อผิดพลาดในการประมวลผล: ' + (error.message || 'Unknown error'));
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
   return (
@@ -390,7 +446,8 @@ export function UploadDashboard() {
               <div className="space-y-4">
                 <div className="flex justify-between text-sm font-medium">
                   <span className="text-slate-600">
-                    {status === 'cleaning' ? 'กำลังจัดระเบียบและตรวจสอบข้อมูลเก่า...' : 'กำลังนำเข้าข้อมูล...'}
+                    {status === 'cleaning' ? 'กำลังจัดระเบียบและตรวจสอบข้อมูลเก่า...' : 
+                     status === 'generating_summary' ? 'กำลังประมวลผลข้อมูลภาพรวม Dashboard...' : 'กำลังนำเข้าข้อมูล...'}
                   </span>
                   <span className="text-primary font-bold">{progress}%</span>
                 </div>
@@ -455,6 +512,32 @@ export function UploadDashboard() {
           </div>
         </div>
         )}
+
+        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm mt-8">
+          <h3 className="text-base font-semibold text-slate-900 flex items-center gap-2 mb-2">
+            <RefreshCw className="w-5 h-5 text-slate-400" />
+            เครื่องมือขั้นสูง: ประมวลผล Dashboard ใหม่ (Sync Summaries)
+          </h3>
+          <p className="text-sm text-slate-500 mb-4">
+            ใช้ปุ่มนี้เพื่อคำนวณและสร้าง Cache สำหรับหน้า Dashboard ใหม่ทั้งหมด (ทั้ง 4 กลุ่มอายุ) สำหรับปีงบประมาณ {fiscalYear} 
+            โดยดึงข้อมูลล่าสุดจากฐานข้อมูล (ใช้ในกรณีที่ข้อมูลหน้า Dashboard ไม่ตรงกับฐานข้อมูล)
+          </p>
+          <Button 
+            variant="outline" 
+            onClick={handleSyncAll} 
+            disabled={isSyncing || isUploading}
+            className="font-medium"
+          >
+            {isSyncing ? (
+              <>
+                <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                กำลังประมวลผล...
+              </>
+            ) : (
+              'ประมวลผล Dashboard ใหม่ทั้งหมด'
+            )}
+          </Button>
+        </div>
       </div>
     </>
   );

@@ -1,12 +1,8 @@
 import { useMemo, memo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useEpiData } from '../shared/hooks/useEpiData';
+import { useDashboardSummaries } from '../shared/hooks/useDashboardSummaries';
 import { useTargetSettings } from '../shared/hooks/useTargetSettings';
 import { SubNav } from '../widgets/layout/SubNav';
-import { evaluateView1, evaluateView2 } from '../features/vaccine-1yr/utils/vaccineLogic';
-import { evaluateView1_2Yr, evaluateView2_2Yr } from '../features/vaccine-2yr/utils/vaccineLogic';
-import { evaluateView1_3Yr, evaluateView2_3Yr } from '../features/vaccine-3yr/utils/vaccineLogic';
-import { evaluateView1_5Yr, evaluateView2_5Yr } from '../features/vaccine-5yr/utils/vaccineLogic5Yr';
 import type { EpiRecord } from '../shared/types';
 import {
   ChevronRightIcon,
@@ -174,21 +170,33 @@ export function Dashboard() {
   const currentYear = new Date().getFullYear() + 543;
   const { getTarget } = useTargetSettings();
 
-  // โหลดข้อมูล Excel ทั้ง 4 กลุ่มอายุ
-  const { data: data1yr, isLoading: loading1 } = useEpiData('Epi_1_Year');
-  const { data: data2yr, isLoading: loading2 } = useEpiData('Epi_2_Year');
-  const { data: data3yr, isLoading: loading3 } = useEpiData('Epi_3_Year');
-  const { data: data5yr, isLoading: loading5 } = useEpiData('Epi_5_Year');
+  // โหลดข้อมูลผลสรุป (JSON Cache) จาก API แทนการโหลดข้อมูลดิบ
+  const { data: summaries, isLoading } = useDashboardSummaries(currentYear);
 
   // ดึงเป้าหมายแบบไดนามิก (ใช้ไตรมาส 4 เป็นค่าเริ่มต้นสำหรับภาพรวมรายปี)
   const targetView1 = getTarget(4, 1);
   const targetView2 = getTarget(4, 2);
 
-  // สรุปผลแต่ละกลุ่มอายุ
-  const summary1yr = useMemo(() => calcGroupSummary(data1yr, evaluateView1, evaluateView2, currentYear), [data1yr, currentYear]);
-  const summary2yr = useMemo(() => calcGroupSummary(data2yr, evaluateView1_2Yr, evaluateView2_2Yr, currentYear), [data2yr, currentYear]);
-  const summary3yr = useMemo(() => calcGroupSummary(data3yr, evaluateView1_3Yr, evaluateView2_3Yr, currentYear), [data3yr, currentYear]);
-  const summary5yr = useMemo(() => calcGroupSummary(data5yr, evaluateView1_5Yr, evaluateView2_5Yr, currentYear), [data5yr, currentYear]);
+  // ดึง summary ของแต่ละกลุ่มอายุจาก Array ที่ได้กลับมา
+  const getSummary = (table: string) => {
+    const found = summaries.find(s => s.targetTable === table);
+    if (found && found.summaryData) {
+      return found.summaryData;
+    }
+    // ส่งค่า Default กลับไปถ้ายังไม่มีข้อมูล Cache
+    return {
+      total: 0,
+      view1Coverage: 0, view1PassedDoses: 0, view1TotalDoses: 0, view1Breakdown: {},
+      view2Coverage: 0, view2Passed: 0, view2Failed: 0, view2Breakdown: {},
+      passedFacilitiesV1: [], failedFacilitiesV1: [],
+      passedFacilitiesV2: [], failedFacilitiesV2: []
+    };
+  };
+
+  const summary1yr = getSummary('Epi_1_Year');
+  const summary2yr = getSummary('Epi_2_Year');
+  const summary3yr = getSummary('Epi_3_Year');
+  const summary5yr = getSummary('Epi_5_Year');
 
   return (
     <div className="flex flex-col min-h-screen bg-zinc-50/50">
@@ -203,7 +211,7 @@ export function Dashboard() {
           summary={summary1yr}
           targetView1={targetView1}
           targetView2={targetView2}
-          isLoading={loading1}
+          isLoading={isLoading}
           path="/dashboard/epi-1yr"
         />
         
@@ -212,7 +220,7 @@ export function Dashboard() {
           summary={summary2yr}
           targetView1={targetView1}
           targetView2={targetView2}
-          isLoading={loading2}
+          isLoading={isLoading}
           path="/dashboard/epi-2yr"
         />
 
@@ -221,7 +229,7 @@ export function Dashboard() {
           summary={summary3yr}
           targetView1={targetView1}
           targetView2={targetView2}
-          isLoading={loading3}
+          isLoading={isLoading}
           path="/dashboard/epi-3yr"
         />
 
@@ -230,7 +238,7 @@ export function Dashboard() {
           summary={summary5yr}
           targetView1={targetView1}
           targetView2={targetView2}
-          isLoading={loading5}
+          isLoading={isLoading}
           path="/dashboard/epi-5yr"
         />
 
