@@ -149,6 +149,8 @@ const AgeGroupSection = memo(function AgeGroupSection({
               <p className="text-3xl font-bold text-zinc-900 tracking-tight">{summary.view2Coverage.toFixed(2)}<span className="text-xl text-zinc-400 font-medium ml-0.5">%</span></p>
               <p className="text-sm text-zinc-500 mt-1">
                 ผ่านเกณฑ์ <strong className="text-zinc-800">{summary.view2Passed.toLocaleString()}</strong> คน
+                <span className="mx-1.5 text-zinc-300">|</span>
+                <span className="text-red-500 font-medium">ตกหล่น {(summary.total - summary.view2Passed).toLocaleString()} คน</span>
               </p>
             </div>
             <div className="text-right">
