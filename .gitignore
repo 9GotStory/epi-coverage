@@ -117,10 +117,13 @@ Thumbs.db
 
 # Scratch scripts / Temporary files
 *.cjs
+*.mjs
 *.js
 !frontend/postcss.config.js
 !frontend/tailwind.config.js
 !frontend/vite.config.js
+!backend/src/**/*.js
+!backend/src/*.js
 
 # Data files / PDFs (Exclude PII data)
 *.xlsx
