@@ -224,7 +224,7 @@ export function Dashboard() {
 
   return (
     <div className="flex flex-col min-h-screen bg-zinc-50/50">
-      <SubNav title="ศูนย์ปฏิบัติการ (Executive Summary)" />
+      <SubNav title="ภาพรวมการดำเนินงาน (Executive Summary)" />
 
       <main className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
         <p className="text-zinc-500 font-medium">ภาพรวมผลการดำเนินงานสร้างเสริมภูมิคุ้มกันโรค ปีงบประมาณ {currentYear}</p>
