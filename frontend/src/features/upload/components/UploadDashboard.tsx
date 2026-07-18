@@ -213,7 +213,7 @@ export function UploadDashboard() {
       setStatus('generating_summary');
       setProgress(90);
       
-      const fullDataRes = await fetchApi('getEpiData', { targetTable, fiscalYear: Number(fiscalYear) });
+      const fullDataRes = await fetchApi('getEpiData', { targetTable, fiscalYear: Number(fiscalYear), hoscode: '00588' });
       const fullData = fullDataRes.data.data || fullDataRes.data || [];
       
       let evalV1, evalV2;
@@ -257,7 +257,7 @@ export function UploadDashboard() {
     try {
       const tables = ['Epi_1_Year', 'Epi_2_Year', 'Epi_3_Year', 'Epi_5_Year'];
       for (const t of tables) {
-        const fullDataRes = await fetchApi('getEpiData', { targetTable: t, fiscalYear: Number(fiscalYear) });
+        const fullDataRes = await fetchApi('getEpiData', { targetTable: t, fiscalYear: Number(fiscalYear), hoscode: '00588' });
         const fullData = fullDataRes.data.data || fullDataRes.data || [];
         
         let evalV1, evalV2;
