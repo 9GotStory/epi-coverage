@@ -3,6 +3,8 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { SARABUN_REGULAR_B64 } from './SarabunFont';
 
+import { toast } from 'sonner';
+
 /**
  * Export data to Excel (.xlsx) file
  * @param data Array of flat objects representing rows
@@ -11,7 +13,7 @@ import { SARABUN_REGULAR_B64 } from './SarabunFont';
  */
 export function exportToExcel(data: any[], filename: string, sheetName: string = 'Sheet1') {
   if (data.length === 0) {
-    alert('ไม่มีข้อมูลสำหรับ Export');
+    toast.warning('ไม่มีข้อมูลสำหรับ Export');
     return;
   }
 
@@ -48,7 +50,7 @@ export function exportToExcel(data: any[], filename: string, sheetName: string =
  */
 export function exportToPdf(data: any[], filename: string, title: string) {
   if (data.length === 0) {
-    alert('ไม่มีข้อมูลสำหรับ Export');
+    toast.warning('ไม่มีข้อมูลสำหรับ Export');
     return;
   }
 

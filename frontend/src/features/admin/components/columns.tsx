@@ -10,7 +10,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '../../../shared/components/ui/dropdown-menu';
-import { MoreHorizontal, CheckCircle2, XCircle, ShieldAlert } from 'lucide-react';
+import { MoreHorizontal, CheckCircle2, XCircle, ShieldAlert, Building2 } from 'lucide-react';
 import { useState } from 'react';
 import {
   AlertDialog,
@@ -22,6 +22,21 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '../../../shared/components/ui/alert-dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '../../../shared/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '../../../shared/components/ui/select';
 
 // We extend the TableMeta interface in a global declaration to have strong typing for our custom meta
 declare module '@tanstack/react-table' {
@@ -29,6 +44,8 @@ declare module '@tanstack/react-table' {
     currentUserId?: string;
     isUpdating?: string | null;
     handleUpdateStatus?: (googleId: string, newStatus: UserStatus, newRole?: UserRole) => Promise<void>;
+    handleUpdateFacility?: (googleId: string, newHoscode: string) => Promise<void>;
+    facilities?: {hoscode: string, hosname: string, is_active: boolean}[];
     handleToggleActive?: (hoscode: string, currentActive: boolean) => Promise<void>;
   }
 }
@@ -92,12 +109,22 @@ export const columns: ColumnDef<User>[] = [
 const UserCellActions = ({ user, meta, disabled }: { user: User; meta: any; disabled: boolean }) => {
   const [isAlertOpen, setIsAlertOpen] = useState(false);
   const [alertType, setAlertType] = useState<'approve' | 'reject' | 'promote' | null>(null);
+  
+  const [isFacilityDialogOpen, setIsFacilityDialogOpen] = useState(false);
+  const [selectedHoscode, setSelectedHoscode] = useState<string>(user.hoscode || '');
 
   const handleConfirm = () => {
     if (alertType === 'approve') meta?.handleUpdateStatus?.(user.google_id, 'approved');
     if (alertType === 'reject') meta?.handleUpdateStatus?.(user.google_id, 'rejected');
     if (alertType === 'promote') meta?.handleUpdateStatus?.(user.google_id, user.status, 'admin');
     setIsAlertOpen(false);
+  };
+
+  const handleUpdateFacility = () => {
+    if (selectedHoscode && selectedHoscode !== user.hoscode) {
+      meta?.handleUpdateFacility?.(user.google_id, selectedHoscode);
+    }
+    setIsFacilityDialogOpen(false);
   };
 
   const getAlertContent = () => {
@@ -142,6 +169,13 @@ const UserCellActions = ({ user, meta, disabled }: { user: User; meta: any; disa
             </DropdownMenuItem>
           )}
 
+          <DropdownMenuSeparator />
+          
+          <DropdownMenuItem onClick={() => setIsFacilityDialogOpen(true)} className="cursor-pointer">
+            <Building2 className="mr-2 h-4 w-4" />
+            ย้ายสังกัด / เปลี่ยน รพ.สต.
+          </DropdownMenuItem>
+
           {user.role === 'user' && (
             <>
               <DropdownMenuSeparator />
@@ -168,6 +202,42 @@ const UserCellActions = ({ user, meta, disabled }: { user: User; meta: any; disa
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog open={isFacilityDialogOpen} onOpenChange={setIsFacilityDialogOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>ย้ายสังกัดสถานบริการ</DialogTitle>
+            <DialogDescription>
+              เลือกสถานบริการใหม่สำหรับผู้ใช้งาน <strong>{user.email}</strong>
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <label htmlFor="facility" className="text-sm font-medium leading-none">
+                สถานบริการ
+              </label>
+              <Select value={selectedHoscode} onValueChange={setSelectedHoscode}>
+                <SelectTrigger id="facility" className="w-full">
+                  <SelectValue placeholder="เลือกสถานบริการ" />
+                </SelectTrigger>
+                <SelectContent>
+                  {meta?.facilities?.filter((f: any) => f.is_active).map((fac: any) => (
+                    <SelectItem key={fac.hoscode} value={fac.hoscode}>
+                      [{fac.hoscode}] {fac.hosname}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsFacilityDialogOpen(false)}>ยกเลิก</Button>
+            <Button onClick={handleUpdateFacility} disabled={!selectedHoscode || selectedHoscode === user.hoscode}>
+              บันทึกการเปลี่ยนแปลง
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

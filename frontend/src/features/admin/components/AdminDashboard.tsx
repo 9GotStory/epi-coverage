@@ -9,10 +9,12 @@ import type { User, UserRole, UserStatus } from '../../../shared/types';
 import { Users, Building2, ScrollText } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../../shared/components/ui/tabs';
 import { SubNav } from '../../../widgets/layout/SubNav';
+import { toast } from 'sonner';
 
 export function AdminDashboard() {
   const { user: currentUser } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
+  const [facilities, setFacilities] = useState<{hoscode: string, hosname: string, is_active: boolean}[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isUpdating, setIsUpdating] = useState<string | null>(null);
@@ -25,12 +27,13 @@ export function AdminDashboard() {
       
       const res = await fetchApi('updateUserStatus', payload);
       if (res.data?.success) {
+        toast.success(`อัปเดตสิทธิ์ผู้ใช้งานเรียบร้อยแล้ว`);
         loadUsers();
       } else {
-        alert(res.data?.error || 'Failed to update user');
+        toast.error(res.data?.error || 'ไม่สามารถอัปเดตผู้ใช้งานได้');
       }
     } catch (err: any) {
-      alert(err.message || 'Error updating user');
+      toast.error(err.message || 'เกิดข้อผิดพลาดในการอัปเดต');
     } finally {
       setIsUpdating(null);
     }
@@ -40,9 +43,16 @@ export function AdminDashboard() {
     setIsLoading(true);
     setError(null);
     try {
-      const res = await fetchApi('getAllUsers', {});
-      if (res.data) {
-        setUsers(res.data);
+      const [usersRes, facRes] = await Promise.all([
+        fetchApi('getAllUsers', {}),
+        fetchApi('getFacilities', {})
+      ]);
+      
+      if (usersRes.data) {
+        setUsers(usersRes.data);
+      }
+      if (facRes.data) {
+        setFacilities(facRes.data);
       }
     } catch (err: any) {
       setError(err.message || 'Failed to load users');
@@ -54,6 +64,23 @@ export function AdminDashboard() {
   useEffect(() => {
     loadUsers();
   }, []);
+
+  const handleUpdateFacility = async (googleId: string, newHoscode: string) => {
+    setIsUpdating(googleId);
+    try {
+      const res = await fetchApi('updateUserFacility', { googleId, hoscode: newHoscode });
+      if (res.data?.success) {
+        toast.success(`ย้ายสังกัดผู้ใช้งานเรียบร้อยแล้ว`);
+        loadUsers();
+      } else {
+        toast.error(res.data?.error || 'ไม่สามารถย้ายสังกัดผู้ใช้งานได้');
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'เกิดข้อผิดพลาดในการย้ายสังกัด');
+    } finally {
+      setIsUpdating(null);
+    }
+  };
 
   return (
     <>
@@ -105,6 +132,8 @@ export function AdminDashboard() {
                   currentUserId: currentUser?.google_id || '',
                   isUpdating,
                   handleUpdateStatus,
+                  handleUpdateFacility,
+                  facilities,
                 }}
               />
             </div>

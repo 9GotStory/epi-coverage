@@ -17,6 +17,7 @@ import {
   DialogTrigger,
 } from '../../../shared/components/ui/dialog';
 import { Building2, Plus } from 'lucide-react';
+import { toast } from 'sonner';
 
 interface Facility {
   hoscode: string;
@@ -63,18 +64,19 @@ export function FacilitiesTab() {
         adminEmail: user?.email
       });
       if (res.data?.success) {
+        toast.success(`อัปเดตสถานะสถานบริการ ${hoscode} สำเร็จ`);
         loadFacilities();
       } else {
-        alert(res.data?.error || 'Failed to update facility');
+        toast.error(res.data?.error || 'ไม่สามารถอัปเดตสถานบริการได้');
       }
     } catch (err: any) {
-      alert(err.message || 'Error updating facility');
+      toast.error(err.message || 'เกิดข้อผิดพลาดในการอัปเดตสถานบริการ');
     }
   };
 
   const handleAddFacility = async () => {
     if (!newHoscode.trim() || !newHosname.trim()) {
-      alert('Please fill in both fields.');
+      toast.warning('โปรดกรอกข้อมูลให้ครบทั้ง 2 ช่อง');
       return;
     }
     
@@ -87,15 +89,16 @@ export function FacilitiesTab() {
         adminEmail: user?.email
       });
       if (res.data?.success) {
+        toast.success(`เพิ่มสถานบริการใหม่เรียบร้อยแล้ว`);
         setIsOpen(false);
         setNewHoscode('');
         setNewHosname('');
         loadFacilities();
       } else {
-        alert(res.data?.error || 'Failed to add facility');
+        toast.error(res.data?.error || 'ไม่สามารถเพิ่มสถานบริการได้');
       }
     } catch (err: any) {
-      alert(err.message || 'Error adding facility');
+      toast.error(err.message || 'เกิดข้อผิดพลาดในการเพิ่มสถานบริการ');
     } finally {
       setIsSubmitting(false);
     }
