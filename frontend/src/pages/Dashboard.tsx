@@ -21,28 +21,6 @@ import { AgeGroupExpandedView } from '../shared/components/AgeGroupExpandedView'
 import { calcGroupSummary } from '../shared/utils/dashboardLogic';
 
 // ──────────────────────────────────────────────
-// Helper: คำนวณ รพ.สต. ที่มีเด็กตกหล่นมากที่สุด
-// รวมทุกกลุ่มอายุเข้าด้วยกัน สำหรับมุมมองที่ 2
-// ──────────────────────────────────────────────
-function calcFacilityRanking(allGroupedData: { data: EpiRecord[]; evalFn: (r: EpiRecord) => { isFullyImmunized: boolean } }[]) {
-  const failCountMap: Record<string, { hosname: string; failCount: number; total: number }> = {};
-  for (const { data, evalFn } of allGroupedData) {
-    for (const r of data) {
-      const hoscode = r.hoscode || 'unknown';
-      if (!failCountMap[hoscode]) {
-        failCountMap[hoscode] = { hosname: r.hosname || hoscode, failCount: 0, total: 0 };
-      }
-      failCountMap[hoscode].total += 1;
-      if (!evalFn(r).isFullyImmunized) failCountMap[hoscode].failCount += 1;
-    }
-  }
-  return Object.entries(failCountMap)
-    .map(([hoscode, v]) => ({ hoscode, ...v }))
-    .sort((a, b) => b.failCount - a.failCount)
-    .slice(0, 10);
-}
-
-// ──────────────────────────────────────────────
 // AgeGroupSection Component
 // ──────────────────────────────────────────────
 const AgeGroupSection = memo(function AgeGroupSection({
@@ -211,18 +189,6 @@ export function Dashboard() {
   const summary2yr = useMemo(() => calcGroupSummary(data2yr, evaluateView1_2Yr, evaluateView2_2Yr, currentYear), [data2yr, currentYear]);
   const summary3yr = useMemo(() => calcGroupSummary(data3yr, evaluateView1_3Yr, evaluateView2_3Yr, currentYear), [data3yr, currentYear]);
   const summary5yr = useMemo(() => calcGroupSummary(data5yr, evaluateView1_5Yr, evaluateView2_5Yr, currentYear), [data5yr, currentYear]);
-
-  // Ranking (ยังคงไว้สำหรับมุมมองที่ 2)
-  const isAnyLoading = loading1 || loading2 || loading3 || loading5;
-  const facilityRanking = useMemo(() => {
-    if (isAnyLoading) return [];
-    return calcFacilityRanking([
-      { data: data1yr, evalFn: evaluateView2 },
-      { data: data2yr, evalFn: evaluateView2_2Yr },
-      { data: data3yr, evalFn: evaluateView2_3Yr },
-      { data: data5yr, evalFn: evaluateView2_5Yr },
-    ]);
-  }, [data1yr, data2yr, data3yr, data5yr, isAnyLoading]);
 
   return (
     <div className="flex flex-col min-h-screen bg-zinc-50/50">
