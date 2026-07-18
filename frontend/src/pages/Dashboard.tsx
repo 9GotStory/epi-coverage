@@ -188,8 +188,8 @@ export function Dashboard() {
       total: 0,
       view1Coverage: 0, view1PassedDoses: 0, view1TotalDoses: 0, view1Breakdown: {},
       view2Coverage: 0, view2Passed: 0, view2Failed: 0, view2Breakdown: {},
-      passedFacilitiesV1: [], failedFacilitiesV1: [],
-      passedFacilitiesV2: [], failedFacilitiesV2: []
+      facilityBreakdownV1: [],
+      facilityBreakdownV2: []
     };
   };
 
