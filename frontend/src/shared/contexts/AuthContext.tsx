@@ -28,6 +28,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setToken(storedToken);
     }
     setIsLoading(false);
+
+    // Global listener for 401 Unauthorized API responses
+    const handleUnauthorized = () => {
+      setUser(null);
+      setToken(null);
+      localStorage.removeItem('user');
+      localStorage.removeItem('token');
+      // No need to redirect via window.location.href! 
+      // Setting state to null will automatically re-render the app and the React Router will show LoginScreen.
+    };
+
+    window.addEventListener('auth:unauthorized', handleUnauthorized);
+    return () => window.removeEventListener('auth:unauthorized', handleUnauthorized);
   }, []);
 
   const login = (userData: User, authToken: string) => {
