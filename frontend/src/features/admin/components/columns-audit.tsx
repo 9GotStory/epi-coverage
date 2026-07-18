@@ -5,7 +5,7 @@ import type { AuditLog } from '../../../shared/types';
 export const auditColumns: ColumnDef<AuditLog>[] = [
   {
     accessorKey: 'timestamp',
-    header: 'Timestamp',
+    header: 'วัน-เวลา',
     cell: ({ row }) => (
       <span className="text-xs text-slate-500 whitespace-nowrap">
         {new Date(row.getValue('timestamp')).toLocaleString('th-TH')}
@@ -14,12 +14,12 @@ export const auditColumns: ColumnDef<AuditLog>[] = [
   },
   {
     accessorKey: 'email',
-    header: 'User',
+    header: 'ผู้ดำเนินการ',
     cell: ({ row }) => <span className="font-medium text-slate-900 text-sm">{row.getValue('email')}</span>,
   },
   {
     accessorKey: 'action',
-    header: 'Action',
+    header: 'การกระทำ',
     cell: ({ row }) => (
       <Badge variant="secondary" className="font-mono text-[10px]">
         {row.getValue('action')}
@@ -28,7 +28,7 @@ export const auditColumns: ColumnDef<AuditLog>[] = [
   },
   {
     accessorKey: 'details',
-    header: 'Details',
+    header: 'รายละเอียดเพิ่มเติม',
     cell: ({ row }) => <span className="text-sm text-slate-600">{row.getValue('details')}</span>,
   },
 ];

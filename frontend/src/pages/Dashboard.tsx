@@ -16,14 +16,9 @@ import {
   ChevronDownIcon,
   ChevronUpIcon,
 } from 'lucide-react';
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from '../shared/components/ui/tabs';
+
 import { AgeGroupExpandedView } from '../shared/components/AgeGroupExpandedView';
-import { calcGroupSummary, type GroupSummary } from '../shared/utils/dashboardLogic';
+import { calcGroupSummary } from '../shared/utils/dashboardLogic';
 
 // ──────────────────────────────────────────────
 // Helper: คำนวณ รพ.สต. ที่มีเด็กตกหล่นมากที่สุด

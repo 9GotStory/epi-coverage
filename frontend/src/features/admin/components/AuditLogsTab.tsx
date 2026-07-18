@@ -35,9 +35,9 @@ export function AuditLogsTab() {
         <div>
           <h2 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
             <ScrollText className="w-5 h-5 text-slate-400" />
-            Audit Logs
+            ประวัติการทำงานของระบบ (Audit Logs)
           </h2>
-          <p className="text-sm text-slate-500 mt-1">Review system activity and administrative actions.</p>
+          <p className="text-sm text-slate-500 mt-1">ตรวจสอบประวัติการแก้ไขข้อมูลและการกระทำของแอดมิน</p>
         </div>
       </div>
 
@@ -53,7 +53,7 @@ export function AuditLogsTab() {
           data={logs} 
           isLoading={isLoading} 
           searchKey="email"
-          searchPlaceholder="Search logs by email..."
+          searchPlaceholder="ค้นหาประวัติจากอีเมล..."
           meta={{}}
         />
       </div>

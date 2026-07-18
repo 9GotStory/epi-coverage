@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import type { GroupSummary } from '../utils/dashboardLogic';
 
@@ -15,9 +16,14 @@ interface AgeGroupExpandedViewProps {
   targetView2: number;
 }
 
-// Helper function for rendering facility group
-// Placed outside to avoid recreation on every render
-const renderFacilityGroup = (title: string, facilities: FacilityData[], target: number, isPassedGroup: boolean) => {
+interface FacilityGroupProps {
+  title: string;
+  facilities: FacilityData[];
+  target: number;
+  isPassedGroup: boolean;
+}
+
+const FacilityGroup = ({ title, facilities, target, isPassedGroup }: FacilityGroupProps) => {
   const classes = isPassedGroup ? {
     bg: 'bg-green-50/50',
     border: 'border-green-100',
@@ -82,11 +88,12 @@ const renderFacilityGroup = (title: string, facilities: FacilityData[], target: 
 };
 
 export function AgeGroupExpandedView({ summary, targetView1, targetView2 }: AgeGroupExpandedViewProps) {
-  const passedFacilitiesV1 = summary.facilityBreakdownV1.filter(f => f.coverage >= targetView1);
-  const failedFacilitiesV1 = summary.facilityBreakdownV1.filter(f => f.coverage < targetView1).sort((a, b) => a.coverage - b.coverage);
+  // Use useMemo to avoid recalculating array filters on every re-render
+  const passedFacilitiesV1 = useMemo(() => summary.facilityBreakdownV1.filter(f => f.coverage >= targetView1), [summary.facilityBreakdownV1, targetView1]);
+  const failedFacilitiesV1 = useMemo(() => summary.facilityBreakdownV1.filter(f => f.coverage < targetView1).sort((a, b) => a.coverage - b.coverage), [summary.facilityBreakdownV1, targetView1]);
   
-  const passedFacilitiesV2 = summary.facilityBreakdownV2.filter(f => f.coverage >= targetView2);
-  const failedFacilitiesV2 = summary.facilityBreakdownV2.filter(f => f.coverage < targetView2).sort((a, b) => a.coverage - b.coverage);
+  const passedFacilitiesV2 = useMemo(() => summary.facilityBreakdownV2.filter(f => f.coverage >= targetView2), [summary.facilityBreakdownV2, targetView2]);
+  const failedFacilitiesV2 = useMemo(() => summary.facilityBreakdownV2.filter(f => f.coverage < targetView2).sort((a, b) => a.coverage - b.coverage), [summary.facilityBreakdownV2, targetView2]);
   
   return (
     <div className="mt-4 pt-5 border-t border-zinc-100 animate-in fade-in slide-in-from-top-2 duration-300">
@@ -131,8 +138,8 @@ export function AgeGroupExpandedView({ summary, targetView1, targetView2 }: AgeG
               ผลการดำเนินงานรายหน่วยบริการ (รพ.สต.) - มุมมองที่ 1
             </h4>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {renderFacilityGroup('กลุ่มผ่านเกณฑ์', passedFacilitiesV1, targetView1, true)}
-              {renderFacilityGroup('กลุ่มต้องเร่งติดตาม', failedFacilitiesV1, targetView1, false)}
+              <FacilityGroup title="กลุ่มผ่านเกณฑ์" facilities={passedFacilitiesV1} target={targetView1} isPassedGroup={true} />
+              <FacilityGroup title="กลุ่มต้องเร่งติดตาม" facilities={failedFacilitiesV1} target={targetView1} isPassedGroup={false} />
             </div>
           </div>
         </TabsContent>
@@ -170,8 +177,8 @@ export function AgeGroupExpandedView({ summary, targetView1, targetView2 }: AgeG
               ผลการดำเนินงานรายหน่วยบริการ (รพ.สต.) - มุมมองที่ 2
             </h4>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {renderFacilityGroup('กลุ่มผ่านเกณฑ์', passedFacilitiesV2, targetView2, true)}
-              {renderFacilityGroup('กลุ่มต้องเร่งติดตาม', failedFacilitiesV2, targetView2, false)}
+              <FacilityGroup title="กลุ่มผ่านเกณฑ์" facilities={passedFacilitiesV2} target={targetView2} isPassedGroup={true} />
+              <FacilityGroup title="กลุ่มต้องเร่งติดตาม" facilities={failedFacilitiesV2} target={targetView2} isPassedGroup={false} />
             </div>
           </div>
         </TabsContent>

@@ -119,7 +119,7 @@ export function DataTable<TData, TValue>({
             ) : (
               <TableRow>
                 <TableCell colSpan={columns.length} className="h-24 text-center text-slate-500 font-medium">
-                  No users found.
+                  ไม่พบข้อมูล
                 </TableCell>
               </TableRow>
             )}
@@ -135,7 +135,7 @@ export function DataTable<TData, TValue>({
           onClick={() => table.previousPage()}
           disabled={!table.getCanPreviousPage()}
         >
-          Previous
+          ย้อนกลับ
         </Button>
         <Button
           variant="outline"
@@ -143,7 +143,7 @@ export function DataTable<TData, TValue>({
           onClick={() => table.nextPage()}
           disabled={!table.getCanNextPage()}
         >
-          Next
+          หน้าถัดไป
         </Button>
       </div>
     </div>

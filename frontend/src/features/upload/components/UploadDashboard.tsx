@@ -37,7 +37,9 @@ export function UploadDashboard() {
       if (!isNaN(d.getTime())) {
         return d.toISOString().split('T')[0];
       }
-    } catch(e) {}
+    } catch {
+      // Ignore parse error
+    }
     
     // If it's a serial number from Excel
     if (typeof val === 'number') {
@@ -116,6 +118,27 @@ export function UploadDashboard() {
       const ws = wb.Sheets[wsname];
       
       const data = utils.sheet_to_json(ws);
+      
+      if (data.length === 0) {
+        throw new Error('ไฟล์ว่างเปล่า (ไม่พบข้อมูลในชีตแรก)');
+      }
+      
+      // Smart File Validation
+      const firstRow = data[0] as any;
+      const columns = Object.keys(firstRow).map(k => k.toLowerCase());
+      
+      if (!columns.includes('hoscode') && !columns.includes('hospcode') && !columns.includes('hosp')) {
+        throw new Error('ไม่พบคอลัมน์ "hoscode" ในไฟล์นี้ โปรดตรวจสอบรูปแบบไฟล์');
+      }
+      if (!columns.includes('cid')) {
+        throw new Error('ไม่พบคอลัมน์ "cid" (เลขบัตรประชาชน) ในไฟล์นี้');
+      }
+      if (!columns.some(col => col.includes('_date') || col === 'bcg' || col.includes('hbv'))) {
+         // This assumes EPI files will have columns ending in _date or specific vaccine names
+         // If HDC 1 year has 'bcg_date', this passes.
+         throw new Error('ไฟล์นี้ไม่ใช่ไฟล์รายงานความครอบคลุมวัคซีน (ไม่พบคอลัมน์วันที่รับบริการ)');
+      }
+
       const cleaned = cleanData(data);
       
       setTotalRows(cleaned.length);
@@ -124,7 +147,8 @@ export function UploadDashboard() {
     } catch (err: any) {
       console.error(err);
       setStatus('error');
-      setErrorMsg('Failed to parse Excel file. Please check the file format.');
+      setFile(null); // Reset file if validation fails
+      setErrorMsg(err.message || 'ไม่สามารถอ่านไฟล์ Excel ได้ โปรดตรวจสอบรูปแบบไฟล์');
     }
   }, []);
 
@@ -186,7 +210,7 @@ export function UploadDashboard() {
     } catch (err: any) {
       console.error(err);
       setStatus('error');
-      setErrorMsg(err.message || 'An error occurred during upload.');
+      setErrorMsg(err.message || 'เกิดข้อผิดพลาดระหว่างการนำเข้าข้อมูล');
     } finally {
       setIsUploading(false);
     }
@@ -203,12 +227,12 @@ export function UploadDashboard() {
 
   return (
     <>
-      <SubNav title="Upload EPI Data" />
+      <SubNav title="นำเข้าข้อมูลวัคซีน (EPI)" />
       
       <div className="max-w-[1440px] mx-auto w-full px-4 md:px-8 py-8 space-y-6">
         <div className="max-w-2xl">
           <p className="text-[17px] font-normal leading-[1.47] tracking-[-0.374px] text-[#1d1d1f]">
-            Upload Excel file (.xlsx) from HDC to update the vaccine coverage database.
+            อัปโหลดไฟล์ Excel (.xlsx, .xls) ที่ส่งออกจากระบบ HDC เพื่อปรับปรุงฐานข้อมูลความครอบคลุมการได้รับวัคซีน
           </p>
         </div>
 
@@ -287,24 +311,33 @@ export function UploadDashboard() {
         </div>
 
       {status === 'error' && (
-        <Alert variant="destructive">
+        <Alert variant="destructive" className="animate-in fade-in slide-in-from-top-2 duration-300">
           <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>Error</AlertTitle>
+          <AlertTitle>เกิดข้อผิดพลาด</AlertTitle>
           <AlertDescription>{errorMsg}</AlertDescription>
         </Alert>
       )}
 
       {status === 'success' && (
-        <Alert className="bg-emerald-50 text-emerald-800 border-emerald-200">
-          <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-          <AlertTitle className="text-emerald-800">Upload Complete</AlertTitle>
-          <AlertDescription>
-            Successfully processed {results.inserted + results.updated} records.
-            <ul className="list-disc pl-5 mt-2 space-y-1">
-              <li>Inserted: {results.inserted} new records</li>
-              <li>Updated: {results.updated} existing records</li>
-              <li>Deactivated: {results.deactivated} records (Soft Deleted)</li>
-            </ul>
+        <Alert className="bg-emerald-50 text-emerald-800 border-emerald-200 animate-in fade-in slide-in-from-top-2 duration-300 shadow-sm">
+          <CheckCircle2 className="h-5 w-5 text-emerald-600 mt-0.5" />
+          <AlertTitle className="text-emerald-900 font-bold text-base">นำเข้าข้อมูลสำเร็จ</AlertTitle>
+          <AlertDescription className="text-emerald-800/90 mt-2">
+            ประมวลผลข้อมูลสำเร็จจำนวน <strong className="font-semibold">{results.inserted + results.updated}</strong> รายการ
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
+              <div className="bg-white/60 p-3 rounded-lg border border-emerald-100/50 flex flex-col">
+                <span className="text-xs text-emerald-600 font-medium uppercase tracking-wider">เพิ่มข้อมูลใหม่</span>
+                <span className="text-2xl font-bold text-emerald-700">{results.inserted.toLocaleString()}</span>
+              </div>
+              <div className="bg-white/60 p-3 rounded-lg border border-emerald-100/50 flex flex-col">
+                <span className="text-xs text-emerald-600 font-medium uppercase tracking-wider">อัปเดตข้อมูลเดิม</span>
+                <span className="text-2xl font-bold text-emerald-700">{results.updated.toLocaleString()}</span>
+              </div>
+              <div className="bg-white/60 p-3 rounded-lg border border-emerald-100/50 flex flex-col">
+                <span className="text-xs text-emerald-600 font-medium uppercase tracking-wider">ลบ/ซ่อนข้อมูลเก่า</span>
+                <span className="text-2xl font-bold text-emerald-700">{results.deactivated.toLocaleString()}</span>
+              </div>
+            </div>
           </AlertDescription>
         </Alert>
       )}
@@ -314,16 +347,18 @@ export function UploadDashboard() {
           <h3 className="text-base font-medium text-slate-900 ml-1">3. อัปโหลดไฟล์ Excel</h3>
           <div
             {...getRootProps()}
-            className={`border-2 border-dashed rounded-xl p-12 text-center cursor-pointer transition-colors
-              ${isDragActive ? 'border-primary bg-primary/5' : 'border-slate-200 hover:border-primary/50 hover:bg-slate-50'}`}
+            className={`border-2 border-dashed rounded-2xl p-12 text-center cursor-pointer transition-all duration-300 ease-in-out
+              ${isDragActive 
+                ? 'border-blue-400 bg-blue-50/80 shadow-[inset_0_0_20px_rgba(59,130,246,0.05)] scale-[1.01]' 
+                : 'border-slate-200 hover:border-blue-300 hover:bg-slate-50'}`}
           >
           <input {...getInputProps()} />
-          <UploadCloud className="mx-auto h-12 w-12 text-slate-400 mb-4" />
-          <h3 className="text-lg font-medium text-slate-900 mb-1">
-            Drag & drop Excel file here
+          <UploadCloud className={`mx-auto h-14 w-14 mb-4 transition-colors duration-300 ${isDragActive ? 'text-blue-500 animate-bounce' : 'text-slate-300'}`} />
+          <h3 className="text-lg font-semibold text-slate-900 mb-1 tracking-tight">
+            ลากไฟล์ Excel มาวางที่นี่
           </h3>
           <p className="text-sm text-slate-500">
-            or click to select file (only .xlsx or .xls)
+            หรือคลิกเพื่อเลือกไฟล์ (รองรับเฉพาะ .xlsx หรือ .xls)
           </p>
           </div>
         </div>
@@ -344,8 +379,8 @@ export function UploadDashboard() {
               </div>
             </div>
             {!isUploading && (
-              <Button variant="outline" onClick={handleReset}>
-                Cancel
+              <Button variant="outline" onClick={handleReset} className="font-medium">
+                ยกเลิก
               </Button>
             )}
           </div>
@@ -355,46 +390,48 @@ export function UploadDashboard() {
               <div className="space-y-4">
                 <div className="flex justify-between text-sm font-medium">
                   <span className="text-slate-600">
-                    {status === 'cleaning' ? 'Cleaning up old records...' : 'Uploading data...'}
+                    {status === 'cleaning' ? 'กำลังจัดระเบียบและตรวจสอบข้อมูลเก่า...' : 'กำลังนำเข้าข้อมูล...'}
                   </span>
-                  <span className="text-primary">{progress}%</span>
+                  <span className="text-primary font-bold">{progress}%</span>
                 </div>
-                <Progress value={progress} className="h-2" />
+                <Progress value={progress} className="h-2.5 bg-slate-100 transition-all duration-300" />
               </div>
             ) : (
-              <div>
-                <h4 className="text-sm font-medium text-slate-900 mb-3">Data Preview (First 10 rows)</h4>
-                <div className="overflow-x-auto rounded-lg border border-slate-200">
+              <div className="animate-in fade-in duration-500">
+                <h4 className="text-sm font-semibold text-slate-900 mb-3 flex items-center gap-2">
+                  ตัวอย่างข้อมูล <span className="px-2 py-0.5 bg-slate-100 text-slate-500 rounded-full text-xs font-medium">10 แถวแรก</span>
+                </h4>
+                <div className="overflow-x-auto rounded-xl border border-slate-200 shadow-sm">
                   <table className="w-full text-sm text-left">
-                    <thead className="bg-slate-50 text-slate-600 font-medium">
+                    <thead className="bg-slate-50/80 text-slate-600 font-medium border-b border-slate-200 backdrop-blur-sm">
                       <tr>
-                        <th className="px-4 py-3">hoscode</th>
-                        <th className="px-4 py-3">pid</th>
-                        <th className="px-4 py-3">cid</th>
-                        <th className="px-4 py-3">name</th>
-                        <th className="px-4 py-3">sex</th>
-                        <th className="px-4 py-3">birth</th>
-                        <th className="px-4 py-3">result</th>
-                        <th className="px-4 py-3">check_vhid</th>
+                        <th className="px-4 py-3 whitespace-nowrap">รหัสสถานบริการ</th>
+                        <th className="px-4 py-3 whitespace-nowrap">PID</th>
+                        <th className="px-4 py-3 whitespace-nowrap">เลขบัตรประชาชน</th>
+                        <th className="px-4 py-3 whitespace-nowrap">ชื่อ-สกุล</th>
+                        <th className="px-4 py-3 whitespace-nowrap">เพศ</th>
+                        <th className="px-4 py-3 whitespace-nowrap">วันเกิด</th>
+                        <th className="px-4 py-3 whitespace-nowrap">ผลประเมิน</th>
+                        <th className="px-4 py-3 whitespace-nowrap">บ้านเลขที่</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-200">
+                    <tbody className="divide-y divide-slate-100 bg-white">
                       {previewData.map((row, i) => (
-                        <tr key={i} className="hover:bg-slate-50">
-                          <td className="px-4 py-3 font-mono text-xs">{row.hoscode}</td>
+                        <tr key={i} className="hover:bg-blue-50/40 transition-colors duration-150">
+                          <td className="px-4 py-3 font-mono text-xs">{row.hoscode || row.hospcode || row.hosp}</td>
                           <td className="px-4 py-3 font-mono text-xs text-slate-500">{row.pid}</td>
-                          <td className="px-4 py-3 font-mono text-xs">{row.cid}</td>
-                          <td className="px-4 py-3 whitespace-nowrap">{row.name} {row.lname}</td>
-                          <td className="px-4 py-3">
+                          <td className="px-4 py-3 font-mono text-xs text-slate-700">{row.cid}</td>
+                          <td className="px-4 py-3 whitespace-nowrap font-medium text-slate-800">{row.name} {row.lname}</td>
+                          <td className="px-4 py-3 text-slate-600">
                             {String(row.sex) === '1' ? 'ชาย' : String(row.sex) === '2' ? 'หญิง' : row.sex}
                           </td>
-                          <td className="px-4 py-3 whitespace-nowrap">
-                            {row.birth} <span className="text-slate-400 text-xs ml-1">({getAgeString(row.birth)})</span>
+                          <td className="px-4 py-3 whitespace-nowrap text-slate-600">
+                            {row.birth} <span className="text-slate-400 text-xs ml-1 font-medium">({getAgeString(row.birth)})</span>
                           </td>
                           <td className="px-4 py-3">
                             {row.result ? (
-                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                                row.result.includes('ไม่ผ่าน') ? 'bg-red-100 text-red-800' : 'bg-emerald-100 text-emerald-800'
+                              <span className={`inline-flex items-center px-2 py-1 rounded text-[11px] font-bold tracking-wide ${
+                                row.result.includes('ไม่ผ่าน') ? 'bg-red-50 text-red-700 border border-red-100' : 'bg-emerald-50 text-emerald-700 border border-emerald-100'
                               }`}>
                                 {row.result}
                               </span>
@@ -408,9 +445,9 @@ export function UploadDashboard() {
                 </div>
                 
                 <div className="mt-6 flex justify-end">
-                  <Button onClick={handleUpload} size="lg" className="w-full sm:w-auto" disabled={!fiscalYear}>
-                    <UploadCloud className="mr-2 h-4 w-4" />
-                    Upload {totalRows.toLocaleString()} Records
+                  <Button onClick={handleUpload} size="lg" className="w-full sm:w-auto shadow-sm" disabled={!fiscalYear}>
+                    <UploadCloud className="mr-2 h-5 w-5" />
+                    เริ่มนำเข้า {totalRows.toLocaleString()} รายการ
                   </Button>
                 </div>
               </div>

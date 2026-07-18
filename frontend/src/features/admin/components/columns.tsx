@@ -36,17 +36,17 @@ declare module '@tanstack/react-table' {
 export const columns: ColumnDef<User>[] = [
   {
     accessorKey: 'name',
-    header: 'Name',
+    header: 'ชื่อ-สกุล',
     cell: ({ row }) => <span className="font-medium text-slate-900">{row.getValue('name')}</span>,
   },
   {
     accessorKey: 'email',
-    header: 'Email',
+    header: 'อีเมล',
     cell: ({ row }) => <span className="text-slate-500">{row.getValue('email')}</span>,
   },
   {
     accessorKey: 'hoscode',
-    header: 'Facility (Hoscode)',
+    header: 'รหัสสถานบริการ',
     cell: ({ row }) => (
       <Badge variant="outline" className="font-mono text-xs">
         {row.getValue('hoscode')}
@@ -55,7 +55,7 @@ export const columns: ColumnDef<User>[] = [
   },
   {
     accessorKey: 'role',
-    header: 'Role',
+    header: 'สิทธิ์ (Role)',
     cell: ({ row }) => {
       const role = row.getValue('role') as UserRole;
       return (
@@ -67,12 +67,12 @@ export const columns: ColumnDef<User>[] = [
   },
   {
     accessorKey: 'status',
-    header: 'Status',
+    header: 'สถานะ',
     cell: ({ row }) => {
       const status = row.getValue('status') as UserStatus;
-      if (status === 'approved') return <Badge className="bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border-0">Approved</Badge>;
-      if (status === 'pending') return <Badge className="bg-amber-50 text-amber-600 hover:bg-amber-100 border-0">Pending</Badge>;
-      return <Badge className="bg-red-50 text-red-600 hover:bg-red-100 border-0">Rejected</Badge>;
+      if (status === 'approved') return <Badge className="bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border-0">อนุญาต</Badge>;
+      if (status === 'pending') return <Badge className="bg-amber-50 text-amber-600 hover:bg-amber-100 border-0">รออนุมัติ</Badge>;
+      return <Badge className="bg-red-50 text-red-600 hover:bg-red-100 border-0">ระงับสิทธิ์</Badge>;
     },
   },
   {
@@ -102,9 +102,9 @@ const UserCellActions = ({ user, meta, disabled }: { user: User; meta: any; disa
 
   const getAlertContent = () => {
     switch (alertType) {
-      case 'approve': return { title: 'Approve User', desc: `Are you sure you want to approve access for ${user.email}?`, confirm: 'Approve' };
-      case 'reject': return { title: 'Reject / Suspend User', desc: `Are you sure you want to reject or suspend access for ${user.email}? They will no longer be able to log in.`, confirm: 'Reject', destructive: true };
-      case 'promote': return { title: 'Promote to Admin', desc: `Are you sure you want to promote ${user.email} to Admin? They will have full access to manage users and facilities.`, confirm: 'Promote' };
+      case 'approve': return { title: 'ยืนยันการอนุมัติสิทธิ์', desc: `คุณต้องการอนุมัติสิทธิ์การเข้าใช้งานให้ ${user.email} ใช่หรือไม่?`, confirm: 'อนุมัติ' };
+      case 'reject': return { title: 'ระงับสิทธิ์ผู้ใช้งาน', desc: `คุณแน่ใจหรือไม่ที่จะระงับสิทธิ์ของ ${user.email}? บัญชีนี้จะไม่สามารถเข้าถึงข้อมูลในระบบได้อีก`, confirm: 'ระงับสิทธิ์', destructive: true };
+      case 'promote': return { title: 'ปรับสิทธิ์เป็น Admin', desc: `คุณต้องการปรับสิทธิ์ให้ ${user.email} เป็น Admin ใช่หรือไม่? พวกเขาจะสามารถจัดการผู้ใช้และสถานบริการได้ทั้งหมด`, confirm: 'ยืนยันปรับสิทธิ์' };
       default: return { title: '', desc: '', confirm: '' };
     }
   };
@@ -125,20 +125,20 @@ const UserCellActions = ({ user, meta, disabled }: { user: User; meta: any; disa
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DropdownMenuLabel>Actions</DropdownMenuLabel>
+          <DropdownMenuLabel>การจัดการ</DropdownMenuLabel>
           <DropdownMenuSeparator />
           
           {user.status !== 'approved' && (
             <DropdownMenuItem onClick={() => { setAlertType('approve'); setIsAlertOpen(true); }} className="text-emerald-600 focus:text-emerald-700 cursor-pointer">
               <CheckCircle2 className="mr-2 h-4 w-4" />
-              Approve Access
+              อนุมัติสิทธิ์เข้าใช้งาน
             </DropdownMenuItem>
           )}
           
           {user.status !== 'rejected' && (
             <DropdownMenuItem onClick={() => { setAlertType('reject'); setIsAlertOpen(true); }} className="text-red-600 focus:text-red-700 cursor-pointer">
               <XCircle className="mr-2 h-4 w-4" />
-              Reject / Suspend
+              ระงับสิทธิ์ / ปฏิเสธ
             </DropdownMenuItem>
           )}
 
@@ -147,7 +147,7 @@ const UserCellActions = ({ user, meta, disabled }: { user: User; meta: any; disa
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => { setAlertType('promote'); setIsAlertOpen(true); }} className="cursor-pointer">
                 <ShieldAlert className="mr-2 h-4 w-4" />
-                Promote to Admin
+                ตั้งเป็น Admin
               </DropdownMenuItem>
             </>
           )}
@@ -161,7 +161,7 @@ const UserCellActions = ({ user, meta, disabled }: { user: User; meta: any; disa
             <AlertDialogDescription>{alertContent.desc}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>ยกเลิก</AlertDialogCancel>
             <AlertDialogAction onClick={handleConfirm} className={alertContent.destructive ? 'bg-red-600 hover:bg-red-700' : ''}>
               {alertContent.confirm}
             </AlertDialogAction>

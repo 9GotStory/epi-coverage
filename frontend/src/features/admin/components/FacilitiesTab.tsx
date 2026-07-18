@@ -107,40 +107,40 @@ export function FacilitiesTab() {
         <div>
           <h2 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
             <Building2 className="w-5 h-5 text-slate-400" />
-            Facilities Management
+            รายชื่อสถานบริการในเครือข่าย
           </h2>
-          <p className="text-sm text-slate-500 mt-1">Manage health facilities and their active status.</p>
+          <p className="text-sm text-slate-500 mt-1">จัดการรายชื่อ รพ.สต. และเปิด/ปิดสถานะการทำงานเพื่อคำนวณเป้าหมาย</p>
         </div>
         
         <Dialog open={isOpen} onOpenChange={setIsOpen}>
           <DialogTrigger asChild>
             <Button className="bg-primary hover:bg-primary/90 text-white">
               <Plus className="w-4 h-4 mr-2" />
-              Add Facility
+              เพิ่มสถานบริการ
             </Button>
           </DialogTrigger>
           <DialogContent className="sm:max-w-[425px]">
             <DialogHeader>
-              <DialogTitle>Add New Facility</DialogTitle>
+              <DialogTitle>เพิ่มสถานบริการใหม่</DialogTitle>
               <DialogDescription>
-                Add a new health center to the system. Hoscode must be exactly 5 digits.
+                เพิ่มรายชื่อสถานบริการใหม่เข้าระบบ (รหัสสถานบริการต้องเป็นตัวเลข 5 หลัก)
               </DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
               <div className="grid gap-2">
-                <Label htmlFor="hoscode">Facility Code (Hoscode)</Label>
+                <Label htmlFor="hoscode">รหัสสถานบริการ (Hoscode 5 หลัก)</Label>
                 <Input
                   id="hoscode"
-                  placeholder="e.g. 06422"
+                  placeholder="เช่น 06422"
                   value={newHoscode}
                   onChange={(e) => setNewHoscode(e.target.value)}
                 />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="hosname">Facility Name</Label>
+                <Label htmlFor="hosname">ชื่อสถานบริการ</Label>
                 <Input
                   id="hosname"
-                  placeholder="e.g. รพ.สต.บ้านร้องกวาง"
+                  placeholder="เช่น รพ.สต.ทดสอบ"
                   value={newHosname}
                   onChange={(e) => setNewHosname(e.target.value)}
                 />
@@ -148,7 +148,7 @@ export function FacilitiesTab() {
             </div>
             <DialogFooter>
               <Button disabled={isSubmitting} onClick={handleAddFacility}>
-                {isSubmitting ? 'Saving...' : 'Save Facility'}
+                {isSubmitting ? 'กำลังบันทึก...' : 'บันทึกสถานบริการ'}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -167,7 +167,7 @@ export function FacilitiesTab() {
           data={facilities} 
           isLoading={isLoading} 
           searchKey="hosname"
-          searchPlaceholder="Search facilities by name..."
+          searchPlaceholder="ค้นหาชื่อสถานบริการ..."
           meta={{
             handleToggleActive
           }}

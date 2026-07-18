@@ -22,7 +22,7 @@ interface Facility {
 export const facilityColumns: ColumnDef<Facility>[] = [
   {
     accessorKey: 'hoscode',
-    header: 'Hoscode',
+    header: 'รหัส รพ.สต.',
     cell: ({ row }) => (
       <Badge variant="outline" className="font-mono text-xs">
         {row.getValue('hoscode')}
@@ -31,24 +31,24 @@ export const facilityColumns: ColumnDef<Facility>[] = [
   },
   {
     accessorKey: 'hosname',
-    header: 'Facility Name',
+    header: 'ชื่อสถานบริการ',
     cell: ({ row }) => <span className="font-medium text-slate-900">{row.getValue('hosname')}</span>,
   },
   {
     accessorKey: 'is_active',
-    header: 'Status',
+    header: 'สถานะการทำงาน',
     cell: ({ row }) => {
       const isActive = String(row.getValue('is_active')).toUpperCase() === 'TRUE';
       return isActive ? (
-        <Badge className="bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border-0">Active</Badge>
+        <Badge className="bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border-0">เปิดใช้งาน</Badge>
       ) : (
-        <Badge className="bg-slate-100 text-slate-600 hover:bg-slate-200 border-0">Inactive</Badge>
+        <Badge className="bg-slate-100 text-slate-600 hover:bg-slate-200 border-0">ปิดชั่วคราว</Badge>
       );
     },
   },
   {
     id: 'actions',
-    header: () => <div className="text-right">Toggle Active</div>,
+    header: () => <div className="text-right">เปิด/ปิด สถานะ</div>,
     cell: ({ row, table }) => {
       const fac = row.original;
       const meta = table.options.meta;
@@ -80,17 +80,17 @@ const FacilityCellActions = ({ fac, meta }: { fac: Facility; meta: any }) => {
       <AlertDialog open={isAlertOpen} onOpenChange={setIsAlertOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Change Facility Status</AlertDialogTitle>
+            <AlertDialogTitle>ยืนยันการเปลี่ยนแปลงสถานะ</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to {isActive ? 'deactivate' : 'activate'} <strong>{fac.hosname}</strong>?
-              {!isActive && ' They will regain access to the system.'}
-              {isActive && ' They will no longer be able to log in or submit data.'}
+              คุณแน่ใจหรือไม่ที่จะ {isActive ? 'ปิดการใช้งาน' : 'เปิดการใช้งาน'} <strong>{fac.hosname}</strong>?
+              {!isActive && ' ข้อมูลของ รพ.สต. นี้จะถูกนำกลับมาคำนวณในภาพรวมของอำเภออีกครั้ง'}
+              {isActive && ' ข้อมูลของ รพ.สต. นี้จะไม่ถูกนำมาคำนวณในผลงานภาพรวมอำเภอชั่วคราว'}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>ยกเลิก</AlertDialogCancel>
             <AlertDialogAction onClick={handleConfirm} className={isActive ? 'bg-amber-600 hover:bg-amber-700' : 'bg-emerald-600 hover:bg-emerald-700'}>
-              Yes, {isActive ? 'Deactivate' : 'Activate'}
+              ยืนยันการ{isActive ? 'ปิด' : 'เปิด'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
