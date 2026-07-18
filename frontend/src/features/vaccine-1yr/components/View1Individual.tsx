@@ -377,13 +377,13 @@ export function View1Individual({ fiscalYear, quarter, data, isLoading, error, a
 
           <div className="bg-zinc-50 p-4 rounded-lg border border-zinc-100">
             <p className="font-semibold text-zinc-800 mb-1">Q: ทำไมเด็กบางคน "ไม่ผ่าน" ในมุมมองที่ 1 (ขาดวัคซีนบางตัว) แต่กลับ "ผ่าน" ในมุมมองที่ 2 (Fully Immunized)?</p>
-            <p className="text-zinc-600">
+            <div className="text-zinc-600">
               <strong className="text-zinc-800">A:</strong> เพราะ 2 มุมมองนี้ใช้ <strong>เกณฑ์การประเมินที่ต่างกันครับ</strong>:
               <ul className="list-disc pl-5 mt-2 space-y-1">
                 <li><strong>มุมมองที่ 1:</strong> เป็นการตรวจสอบ "ความสมบูรณ์ของการบันทึกข้อมูลแบบรายเข็ม" (เข้มงวด 17 รายการ) เช็คแม้กระทั่ง HBV เข็ม 3 (PCV ไม่นำมารวมแล้ว)</li>
                 <li><strong>มุมมองที่ 2 (Fully Immunized):</strong> ประเมินเฉพาะ "วัคซีนพื้นฐาน 8 หมวด" ตามเกณฑ์ชี้วัดหลักระดับประเทศ หากได้วัคซีนหลักครบ ก็ถือว่าเด็กมีภูมิคุ้มกันที่เพียงพอและผ่านเกณฑ์ครับ</li>
               </ul>
-            </p>
+            </div>
           </div>
 
         </div>
