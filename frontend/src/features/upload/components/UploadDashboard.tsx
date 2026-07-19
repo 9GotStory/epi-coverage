@@ -9,6 +9,7 @@ import { SubNav } from '../../../widgets/layout/SubNav';
 import { fetchApi } from '../../../shared/lib/api';
 import { v4 as uuidv4 } from 'uuid';
 import { RefreshCw } from 'lucide-react';
+import { toast } from 'sonner';
 import { ConfirmModal } from '../../../shared/components/ui/confirm-modal';
 import { calcGroupSummary } from '../../../shared/utils/dashboardLogic';
 import { evaluateView1, evaluateView2 } from '../../vaccine-1yr/utils/vaccineLogic';
@@ -272,10 +273,10 @@ export function UploadDashboard() {
         const summary = calcGroupSummary(fullData, evalV1, evalV2, Number(fiscalYear));
         await fetchApi('saveDashboardSummary', { targetTable: t, fiscalYear: Number(fiscalYear), summaryData: JSON.stringify(summary) });
       }
-      alert('ประมวลผล Dashboard สำหรับทุกกลุ่มอายุเรียบร้อยแล้ว!');
+      toast.success('ประมวลผล Dashboard สำหรับทุกกลุ่มอายุเรียบร้อยแล้ว!');
     } catch (error: any) {
       console.error(error);
-      alert('เกิดข้อผิดพลาดในการประมวลผล: ' + (error.message || 'Unknown error'));
+      toast.error('เกิดข้อผิดพลาดในการประมวลผล: ' + (error.message || 'Unknown error'));
     } finally {
       setIsSyncing(false);
     }
