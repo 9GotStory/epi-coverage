@@ -1,286 +1,42 @@
-import { useState, useCallback } from 'react';
 import { useDropzone } from 'react-dropzone';
-import { read, utils } from 'xlsx';
-import { UploadCloud, FileSpreadsheet, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { UploadCloud, FileSpreadsheet, CheckCircle2, AlertTriangle, RefreshCw } from 'lucide-react';
 import { Button } from '../../../shared/components/ui/button';
 import { Progress } from '../../../shared/components/ui/progress';
 import { Alert, AlertDescription, AlertTitle } from '../../../shared/components/ui/alert';
 import { SubNav } from '../../../widgets/layout/SubNav';
-import { fetchApi } from '../../../shared/lib/api';
-import { v4 as uuidv4 } from 'uuid';
-import { RefreshCw } from 'lucide-react';
-import { toast } from 'sonner';
 import { ConfirmModal } from '../../../shared/components/ui/confirm-modal';
-import { calcGroupSummary } from '../../../shared/utils/dashboardLogic';
-import { evaluateView1, evaluateView2 } from '../../vaccine-1yr/utils/vaccineLogic';
-import { evaluateView1_2Yr, evaluateView2_2Yr } from '../../vaccine-2yr/utils/vaccineLogic';
-import { evaluateView1_3Yr, evaluateView2_3Yr } from '../../vaccine-3yr/utils/vaccineLogic';
-import { evaluateView1_5Yr, evaluateView2_5Yr } from '../../vaccine-5yr/utils/vaccineLogic5Yr';
-
-const CHUNK_SIZE = 500;
+import { getAgeString } from '../utils/uploadHelpers';
+import { useUploadManager } from '../hooks/useUploadManager';
 
 export function UploadDashboard() {
-  const [file, setFile] = useState<File | null>(null);
-  const [previewData, setPreviewData] = useState<any[]>([]);
-  const [totalRows, setTotalRows] = useState(0);
-  const [fiscalYear, setFiscalYear] = useState<string>(
-    String(new Date().getFullYear() + 543 + (new Date().getMonth() >= 9 ? 1 : 0))
-  );
-  const [targetTable, setTargetTable] = useState<'Epi_1_Year' | 'Epi_2_Year' | 'Epi_3_Year' | 'Epi_5_Year'>('Epi_1_Year');
-  
-  const [isUploading, setIsUploading] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [status, setStatus] = useState<'idle' | 'parsing' | 'uploading' | 'cleaning' | 'generating_summary' | 'success' | 'error'>('idle');
-  const [errorMsg, setErrorMsg] = useState('');
-  const [results, setResults] = useState<{inserted: number, updated: number, deactivated: number}>({inserted: 0, updated: 0, deactivated: 0});
-
-  // Date parser helper
-  const parseDate = (val: any) => {
-    if (!val) return null;
-    if (typeof val === 'string' && val.match(/^\d{4}-\d{2}-\d{2}$/)) return val;
-    
-    // Attempt to parse Excel date serial number or JS Date
-    try {
-      const d = new Date(val);
-      if (!isNaN(d.getTime())) {
-        return d.toISOString().split('T')[0];
-      }
-    } catch {
-      // Ignore parse error
-    }
-    
-    // If it's a serial number from Excel
-    if (typeof val === 'number') {
-      const d = new Date(Math.round((val - 25569) * 86400 * 1000));
-      if (!isNaN(d.getTime())) {
-        return d.toISOString().split('T')[0];
-      }
-    }
-    return String(val); // Fallback
-  };
-
-  const cleanData = (data: any[]) => {
-    return data.map(row => {
-      const cleanRow: any = {};
-      Object.keys(row).forEach(key => {
-        let val = row[key];
-        if (val === '<NA>' || val === 'NA' || val === '' || val === undefined) {
-          val = null;
-        }
-        
-        // Force string and pad for specific columns
-        if (val !== null && ['hoscode', 'pid', 'cid', 'check_vhid'].includes(key.toLowerCase())) {
-          val = String(val).trim();
-          
-          // Best Practice: Preserve leading zeros in case Excel parsed them as pure numbers
-          if (key.toLowerCase() === 'hoscode' || key.toLowerCase() === 'hosp') {
-            val = val.padStart(5, '0');
-          } else if (key.toLowerCase() === 'cid') {
-            val = val.padStart(13, '0');
-          }
-        }
-        
-        // Parse dates
-        if (val !== null && (key.toLowerCase().includes('date') || key.toLowerCase() === 'birth')) {
-          val = parseDate(val);
-        }
-        
-        cleanRow[key.toLowerCase()] = val;
-      });
-      return cleanRow;
-    });
-  };
-
-  const getAgeString = (birthDateString: string) => {
-    if (!birthDateString) return '';
-    const birth = new Date(birthDateString);
-    if (isNaN(birth.getTime())) return '';
-    const now = new Date();
-    
-    let months = (now.getFullYear() - birth.getFullYear()) * 12 + (now.getMonth() - birth.getMonth());
-    if (now.getDate() < birth.getDate()) {
-      months--;
-    }
-    
-    if (months < 0) return '0 เดือน';
-    
-    const y = Math.floor(months / 12);
-    const m = months % 12;
-    
-    if (y > 0 && m > 0) return `${y} ปี ${m} เดือน`;
-    if (y > 0) return `${y} ปี`;
-    return `${m} เดือน`;
-  };
-
-  const onDrop = useCallback(async (acceptedFiles: File[]) => {
-    if (acceptedFiles.length === 0) return;
-    const selected = acceptedFiles[0];
-    setFile(selected);
-    setStatus('parsing');
-    setErrorMsg('');
-
-    try {
-      const ab = await selected.arrayBuffer();
-      const wb = read(ab, { type: 'array', cellDates: true });
-      const wsname = wb.SheetNames[0];
-      const ws = wb.Sheets[wsname];
-      
-      const data = utils.sheet_to_json(ws);
-      
-      if (data.length === 0) {
-        throw new Error('ไฟล์ว่างเปล่า (ไม่พบข้อมูลในชีตแรก)');
-      }
-      
-      // Smart File Validation
-      const firstRow = data[0] as any;
-      const columns = Object.keys(firstRow).map(k => k.toLowerCase());
-      
-      if (!columns.includes('hoscode') && !columns.includes('hospcode') && !columns.includes('hosp')) {
-        throw new Error('ไม่พบคอลัมน์ "hoscode" ในไฟล์นี้ โปรดตรวจสอบรูปแบบไฟล์');
-      }
-      if (!columns.includes('cid')) {
-        throw new Error('ไม่พบคอลัมน์ "cid" (เลขบัตรประชาชน) ในไฟล์นี้');
-      }
-      if (!columns.some(col => col.includes('_date') || col === 'bcg' || col.includes('hbv'))) {
-         // This assumes EPI files will have columns ending in _date or specific vaccine names
-         // If HDC 1 year has 'bcg_date', this passes.
-         throw new Error('ไฟล์นี้ไม่ใช่ไฟล์รายงานความครอบคลุมวัคซีน (ไม่พบคอลัมน์วันที่รับบริการ)');
-      }
-
-      const cleaned = cleanData(data);
-      
-      setTotalRows(cleaned.length);
-      setPreviewData(cleaned.slice(0, 10)); // Show 10 rows
-      setStatus('idle');
-    } catch (err: any) {
-      console.error(err);
-      setStatus('error');
-      setFile(null); // Reset file if validation fails
-      setErrorMsg(err.message || 'ไม่สามารถอ่านไฟล์ Excel ได้ โปรดตรวจสอบรูปแบบไฟล์');
-    }
-  }, []);
+  const {
+    file,
+    previewData,
+    totalRows,
+    fiscalYear,
+    setFiscalYear,
+    targetTable,
+    setTargetTable,
+    isUploading,
+    progress,
+    status,
+    errorMsg,
+    results,
+    isSyncing,
+    handleDrop,
+    handleUpload,
+    handleReset,
+    handleSyncAll,
+  } = useUploadManager();
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    onDrop,
+    onDrop: handleDrop,
     accept: {
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
       'application/vnd.ms-excel': ['.xls']
     },
     maxFiles: 1
   });
-
-  const handleUpload = async () => {
-    if (!file) return;
-    setIsUploading(true);
-    setStatus('uploading');
-    setProgress(0);
-    setErrorMsg('');
-    setResults({inserted: 0, updated: 0, deactivated: 0});
-
-    try {
-      // Re-parse the whole file (or we could store it in state if memory allows, but re-parsing is safer for large files)
-      const ab = await file.arrayBuffer();
-      const wb = read(ab, { type: 'array', cellDates: true });
-      const data = utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
-      const allRows = cleanData(data);
-      
-      const batchId = uuidv4();
-      const touchedHoscodes = Array.from(new Set(allRows.map(r => r.hoscode).filter(Boolean)));
-      
-      let inserted = 0;
-      let updated = 0;
-
-      // Chunking
-      for (let i = 0; i < allRows.length; i += CHUNK_SIZE) {
-        const chunk = allRows.slice(i, i + CHUNK_SIZE);
-        
-        const res = await fetchApi('upsertEpiData', { chunk, batchId, fiscalYear, targetTable });
-        const payload = res.data;
-        
-        if (payload.error) throw new Error(payload.error);
-        inserted += payload.inserted || 0;
-        updated += payload.updated || 0;
-        
-        const currentProgress = Math.floor(((i + chunk.length) / allRows.length) * 80); // 80% for upload phase
-        setProgress(currentProgress);
-      }
-
-      // Cleanup Phase
-      setStatus('cleaning');
-      const cleanupRes = await fetchApi('cleanupEpiData', { batchId, touchedHoscodes, fiscalYear, targetTable });
-      const cleanupPayload = cleanupRes.data;
-      if (cleanupPayload.error) throw new Error(cleanupPayload.error);
-      
-      // ── Generate and Save Dashboard Summary ──
-      setStatus('generating_summary');
-      setProgress(90);
-      
-      const fullDataRes = await fetchApi('getEpiData', { targetTable, fiscalYear: Number(fiscalYear), hoscode: '00588' });
-      const fullData = fullDataRes.data.data || fullDataRes.data || [];
-      
-      let evalV1, evalV2;
-      switch (targetTable) {
-        case 'Epi_1_Year': evalV1 = evaluateView1; evalV2 = evaluateView2; break;
-        case 'Epi_2_Year': evalV1 = evaluateView1_2Yr; evalV2 = evaluateView2_2Yr; break;
-        case 'Epi_3_Year': evalV1 = evaluateView1_3Yr; evalV2 = evaluateView2_3Yr; break;
-        case 'Epi_5_Year': evalV1 = evaluateView1_5Yr; evalV2 = evaluateView2_5Yr; break;
-        default: throw new Error("Unknown target table for summary calculation.");
-      }
-      
-      const summary = calcGroupSummary(fullData, evalV1, evalV2, Number(fiscalYear));
-      await fetchApi('saveDashboardSummary', { targetTable, fiscalYear, summaryData: JSON.stringify(summary) });
-
-      setProgress(100);
-      setResults({ inserted, updated, deactivated: cleanupPayload.deactivated || 0 });
-      setStatus('success');
-      
-    } catch (err: any) {
-      console.error(err);
-      setStatus('error');
-      setErrorMsg(err.message || 'เกิดข้อผิดพลาดระหว่างการนำเข้าข้อมูล');
-    } finally {
-      setIsUploading(false);
-    }
-  };
-
-  const handleReset = () => {
-    setFile(null);
-    setPreviewData([]);
-    setTotalRows(0);
-    setStatus('idle');
-    setProgress(0);
-    setErrorMsg('');
-  };
-
-  const [isSyncing, setIsSyncing] = useState(false);
-  const handleSyncAll = async () => {
-    setIsSyncing(true);
-    try {
-      const tables = ['Epi_1_Year', 'Epi_2_Year', 'Epi_3_Year', 'Epi_5_Year'];
-      for (const t of tables) {
-        const fullDataRes = await fetchApi('getEpiData', { targetTable: t, fiscalYear: Number(fiscalYear), hoscode: '00588' });
-        const fullData = fullDataRes.data.data || fullDataRes.data || [];
-        
-        let evalV1, evalV2;
-        switch (t) {
-          case 'Epi_1_Year': evalV1 = evaluateView1; evalV2 = evaluateView2; break;
-          case 'Epi_2_Year': evalV1 = evaluateView1_2Yr; evalV2 = evaluateView2_2Yr; break;
-          case 'Epi_3_Year': evalV1 = evaluateView1_3Yr; evalV2 = evaluateView2_3Yr; break;
-          case 'Epi_5_Year': evalV1 = evaluateView1_5Yr; evalV2 = evaluateView2_5Yr; break;
-          default: continue;
-        }
-        
-        const summary = calcGroupSummary(fullData, evalV1, evalV2, Number(fiscalYear));
-        await fetchApi('saveDashboardSummary', { targetTable: t, fiscalYear: Number(fiscalYear), summaryData: JSON.stringify(summary) });
-      }
-      toast.success('ประมวลผล Dashboard สำหรับทุกกลุ่มอายุเรียบร้อยแล้ว!');
-    } catch (error: any) {
-      console.error(error);
-      toast.error('เกิดข้อผิดพลาดในการประมวลผล: ' + (error.message || 'Unknown error'));
-    } finally {
-      setIsSyncing(false);
-    }
-  };
 
   return (
     <>

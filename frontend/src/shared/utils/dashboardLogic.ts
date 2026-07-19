@@ -1,5 +1,5 @@
 import type { EpiRecord, VaccineStatus } from '../types';
-import type { View1Evaluation } from '../../features/vaccine-1yr/utils/vaccineLogic';
+import type { View1Evaluation } from './vaccine/vaccine-1yr';
 
 // We can define the return type for better type safety
 export interface GroupSummary {

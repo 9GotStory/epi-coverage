@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { InfoIcon, FileSpreadsheetIcon, FileTextIcon } from 'lucide-react';
 import type { ColumnDef } from '@tanstack/react-table';
-import { evaluateView2_2Yr } from '../utils/vaccineLogic';
+import { evaluateView2_2Yr } from '../../../shared/utils/vaccine/vaccine-2yr';
 import type { VaccineStatus } from '../../../shared/types';
 import { formatDateTimeStr, getBirthDateRangeForQuarter, getAgeInMonths } from '../../../shared/utils/dateUtils';
 import type { EpiRecord } from '../../../shared/types';
