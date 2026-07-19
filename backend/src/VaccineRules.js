@@ -1,0 +1,394 @@
+/**
+ * ──────────────────────────────────────────────────────────
+ * VaccineRules.js — Dynamic Vaccine Rule Engine (GAS Backend)
+ * จัดการเกณฑ์การประเมินวัคซีนแบบ Config-Driven
+ * แทนที่ Hardcoded Logic ใน vaccine-*.ts ฝั่ง Frontend
+ * ──────────────────────────────────────────────────────────
+ */
+
+const VACCINE_RULES_SHEET = 'vaccine_rules';
+
+/**
+ * ดึง Vaccine Rules สำหรับปีงบประมาณและกลุ่มอายุที่ระบุ
+ * @param {string|number} fiscalYear - ปีงบประมาณ เช่น 2568
+ * @param {string} ageGroup - กลุ่มอายุ ('1yr', '2yr', '3yr', '5yr')
+ * @returns {object[]} Array ของ Rules ที่ active
+ */
+function getVaccineRules(fiscalYear, ageGroup) {
+  const ss = getSpreadsheet();
+  const sheet = ss.getSheetByName(VACCINE_RULES_SHEET);
+  if (!sheet || sheet.getLastRow() <= 1) return [];
+
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0];
+
+  return data.slice(1)
+    .map(row => arrayToObj(headers, row))
+    .filter(r =>
+      String(r.fiscal_year) === String(fiscalYear) &&
+      r.age_group === ageGroup &&
+      (r.is_active === true || r.is_active === 'TRUE' || r.is_active === 'true')
+    )
+    .map(r => {
+      // Parse JSON fields
+      let requiredFields = [];
+      let branchAltFields = [];
+      try { requiredFields = JSON.parse(r.required_fields || '[]'); } catch (e) { /* ignore */ }
+      try { branchAltFields = JSON.parse(r.branch_alt_fields || '[]'); } catch (e) { /* ignore */ }
+      return {
+        ...r,
+        fiscal_year: Number(r.fiscal_year),
+        view_type: Number(r.view_type),
+        required_fields: requiredFields,
+        branch_alt_fields: branchAltFields,
+        is_active: true,
+        is_required_for_v2: r.is_required_for_v2 === true || r.is_required_for_v2 === 'TRUE' || r.is_required_for_v2 === 'true'
+      };
+    });
+}
+
+/**
+ * บันทึก Vaccine Rule (Insert หรือ Update)
+ * @param {object} rule - Rule object ที่ต้องการบันทึก
+ * @param {string} adminEmail - Email ของ Admin ที่แก้ไข
+ */
+function saveVaccineRule(rule, adminEmail) {
+  if (!rule || !rule.rule_id) {
+    return { success: false, error: 'rule and rule_id are required' };
+  }
+
+  const validLogicTypes = ['ALL', 'ANY', 'BRANCH'];
+  if (!validLogicTypes.includes(rule.logic_type)) {
+    return { success: false, error: `logic_type must be one of: ${validLogicTypes.join(', ')}` };
+  }
+
+  const ss = getSpreadsheet();
+  const sheet = ss.getSheetByName(VACCINE_RULES_SHEET);
+  if (!sheet) return { success: false, error: 'vaccine_rules sheet not found. Run setup first.' };
+
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0];
+  const idCol = headers.indexOf('rule_id');
+
+  // Serialize JSON fields
+  const requiredFieldsJson = JSON.stringify(Array.isArray(rule.required_fields) ? rule.required_fields : []);
+  const branchAltFieldsJson = JSON.stringify(Array.isArray(rule.branch_alt_fields) ? rule.branch_alt_fields : []);
+
+  const now = new Date();
+
+  // ค้นหา Row ที่มีอยู่แล้ว
+  let existingRowIndex = -1;
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][idCol] === rule.rule_id) {
+      existingRowIndex = i + 1; // 1-indexed
+      break;
+    }
+  }
+
+  const rowData = headers.map(header => {
+    switch (header) {
+      case 'rule_id': return rule.rule_id;
+      case 'fiscal_year': return rule.fiscal_year;
+      case 'age_group': return rule.age_group;
+      case 'view_type': return rule.view_type;
+      case 'vaccine_group': return rule.vaccine_group || '';
+      case 'display_name': return rule.display_name || '';
+      case 'hdc_code': return rule.hdc_code || '';
+      case 'required_fields': return requiredFieldsJson;
+      case 'logic_type': return rule.logic_type;
+      case 'branch_alt_fields': return branchAltFieldsJson;
+      case 'is_required_for_v2': return rule.is_required_for_v2 !== false;
+      case 'is_active': return rule.is_active !== false;
+      case 'note': return rule.note || '';
+      case 'updated_at': return now;
+      case 'updated_by': return adminEmail || '';
+      default: return '';
+    }
+  });
+
+  if (existingRowIndex > 0) {
+    sheet.getRange(existingRowIndex, 1, 1, headers.length).setValues([rowData]);
+  } else {
+    const nextRow = sheet.getLastRow() + 1;
+    sheet.getRange(nextRow, 1, 1, headers.length).setValues([rowData]);
+  }
+
+  logAction('SYSTEM', adminEmail, 'save_vaccine_rule',
+    `Saved rule ${rule.rule_id} for fiscal_year=${rule.fiscal_year}, age_group=${rule.age_group}`);
+
+  return { success: true, rule_id: rule.rule_id, action: existingRowIndex > 0 ? 'updated' : 'inserted' };
+}
+
+/**
+ * บันทึก Vaccine Rules ทั้งหมดสำหรับกลุ่มอายุและปีงบประมาณนั้นๆ
+ * โดยใช้วิธีลบของเดิมแล้ว Insert ใหม่ เพื่อความรวดเร็วและป้องกัน Rule ขยะ
+ */
+function batchSaveRules(fiscalYear, ageGroup, rules, adminEmail) {
+  if (!fiscalYear || !ageGroup || !rules || !Array.isArray(rules)) {
+    return { success: false, error: 'fiscalYear, ageGroup, and rules array are required' };
+  }
+
+  const ss = getSpreadsheet();
+  const sheet = ss.getSheetByName(VACCINE_RULES_SHEET);
+  if (!sheet) return { success: false, error: 'vaccine_rules sheet not found.' };
+
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0];
+
+  // 1. แยก row ที่ไม่เกี่ยวข้องเก็บไว้ (ปีอื่น หรือกลุ่มอายุอื่น)
+  const keptRows = [];
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    const obj = arrayToObj(headers, row);
+    // ถ้าไม่ใช่เป้าหมาย ให้เก็บไว้
+    if (String(obj.fiscal_year) !== String(fiscalYear) || obj.age_group !== ageGroup) {
+      keptRows.push(row);
+    }
+  }
+
+  // 2. แปลง new rules ให้เป็นรูปแบบ row
+  const now = new Date();
+  const newRows = rules.map(rule => {
+    return headers.map(header => {
+      switch (header) {
+        case 'rule_id': return rule.rule_id;
+        case 'fiscal_year': return fiscalYear;
+        case 'age_group': return ageGroup;
+        case 'view_type': return rule.view_type;
+        case 'vaccine_group': return rule.vaccine_group || '';
+        case 'display_name': return rule.display_name || '';
+        case 'hdc_code': return rule.hdc_code || '';
+        case 'required_fields': return JSON.stringify(rule.required_fields || []);
+        case 'logic_type': return rule.logic_type;
+        case 'branch_alt_fields': return JSON.stringify(rule.branch_alt_fields || []);
+        case 'is_required_for_v2': return rule.is_required_for_v2 !== false;
+        case 'is_active': return rule.is_active !== false;
+        case 'note': return rule.note || '';
+        case 'updated_at': return now;
+        case 'updated_by': return adminEmail || '';
+        default: return '';
+      }
+    });
+  });
+
+  // 3. Clear Sheet แล้วเขียนข้อมูลที่เก็บไว้ + ข้อมูลใหม่
+  // เพื่อหลีกเลี่ยง error "Cannot clear the last row", clear แบบเหลือ header
+  if (sheet.getLastRow() > 1) {
+    sheet.getRange(2, 1, sheet.getLastRow() - 1, headers.length).clearContent();
+  }
+  
+  const finalRows = [...keptRows, ...newRows];
+  if (finalRows.length > 0) {
+    sheet.getRange(2, 1, finalRows.length, headers.length).setValues(finalRows);
+  }
+
+  logAction('SYSTEM', adminEmail, 'batch_save_rules',
+    `Batch saved ${newRows.length} rules for fiscal_year=${fiscalYear}, age_group=${ageGroup}`);
+
+  return { success: true, saved_count: newRows.length };
+}
+
+/**
+ * คัดลอก Rules จากปีหนึ่งไปอีกปี (Clone)
+ * @param {string|number} fromYear - ปีต้นทาง
+ * @param {string|number} toYear - ปีปลายทาง
+ * @param {string} adminEmail - Email ของ Admin
+ */
+function cloneRulesFromYear(fromYear, toYear, adminEmail) {
+  if (!fromYear || !toYear) {
+    return { success: false, error: 'fromYear and toYear are required' };
+  }
+  if (String(fromYear) === String(toYear)) {
+    return { success: false, error: 'fromYear and toYear must be different' };
+  }
+
+  const ss = getSpreadsheet();
+  const sheet = ss.getSheetByName(VACCINE_RULES_SHEET);
+  if (!sheet) return { success: false, error: 'vaccine_rules sheet not found.' };
+
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0];
+
+  // ตรวจสอบว่าปีปลายทางมี Rules อยู่แล้วหรือไม่
+  const existingInTarget = data.slice(1).filter(row => {
+    const obj = arrayToObj(headers, row);
+    return String(obj.fiscal_year) === String(toYear);
+  });
+  if (existingInTarget.length > 0) {
+    return {
+      success: false,
+      error: `Target year ${toYear} already has ${existingInTarget.length} rules. Delete them first before cloning.`
+    };
+  }
+
+  // ดึง Rules ของปีต้นทาง
+  const sourceRules = data.slice(1).filter(row => {
+    const obj = arrayToObj(headers, row);
+    return String(obj.fiscal_year) === String(fromYear);
+  });
+
+  if (sourceRules.length === 0) {
+    return { success: false, error: `No rules found for year ${fromYear}` };
+  }
+
+  // สร้าง Row ใหม่สำหรับปีปลายทาง
+  const now = new Date();
+  const newRows = sourceRules.map(row => {
+    const obj = arrayToObj(headers, row);
+    return headers.map(header => {
+      if (header === 'rule_id') return Utilities.getUuid();
+      if (header === 'fiscal_year') return toYear;
+      if (header === 'updated_at') return now;
+      if (header === 'updated_by') return adminEmail || '';
+      return obj[header] !== undefined ? obj[header] : '';
+    });
+  });
+
+  // Batch insert
+  const startRow = sheet.getLastRow() + 1;
+  sheet.getRange(startRow, 1, newRows.length, headers.length).setValues(newRows);
+
+  logAction('SYSTEM', adminEmail, 'clone_vaccine_rules',
+    `Cloned ${newRows.length} rules from year ${fromYear} to ${toYear}`);
+
+  return { success: true, cloned: newRows.length, fromYear, toYear };
+}
+
+/**
+ * Seed Vaccine Rules เริ่มต้น จาก Hardcoded Logic ที่มีอยู่
+ * ใช้สำหรับตั้งค่าครั้งแรก หรือเมื่อต้องการ Reset กลับไปเป็นค่า Default
+ * @param {string|number} fiscalYear - ปีงบประมาณที่ต้องการ Seed
+ * @param {string} adminEmail
+ */
+function seedVaccineRules(fiscalYear, adminEmail) {
+  if (!fiscalYear) {
+    return { success: false, error: 'fiscalYear is required' };
+  }
+
+  const ss = getSpreadsheet();
+  const sheet = ss.getSheetByName(VACCINE_RULES_SHEET);
+  if (!sheet) return { success: false, error: 'vaccine_rules sheet not found. Run setup first.' };
+
+  // ตรวจสอบว่ามี Rules ของปีนั้นอยู่แล้วหรือไม่
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0];
+  const existing = data.slice(1).filter(row => {
+    const obj = arrayToObj(headers, row);
+    return String(obj.fiscal_year) === String(fiscalYear);
+  });
+  if (existing.length > 0) {
+    return { success: false, error: `Year ${fiscalYear} already has ${existing.length} rules. Use cloneVaccineRules or delete existing rules first.` };
+  }
+
+  // ──────────────────────────────────────────────────────────
+  // Default Rules — แปลงมาจาก vaccine-*.ts Hardcoded Logic
+  // ──────────────────────────────────────────────────────────
+  const rules = [
+    // ── 1yr — View 1 (รายเข็ม) ──
+    { age_group: '1yr', view_type: 1, vaccine_group: 'BCG', display_name: 'ขาด BCG (010)', hdc_code: '010', required_fields: ['bcg_date'], logic_type: 'ALL', is_required_for_v2: true },
+    { age_group: '1yr', view_type: 1, vaccine_group: 'HBV', display_name: 'ขาด HBV เข็ม 1 (041)', hdc_code: '041', required_fields: ['hbv1_date'], logic_type: 'ALL', is_required_for_v2: true },
+    { age_group: '1yr', view_type: 1, vaccine_group: 'HBV', display_name: 'ขาด HBV เข็ม 2 (042)', hdc_code: '042', required_fields: ['hbv2_date'], logic_type: 'ALL', is_required_for_v2: true },
+    { age_group: '1yr', view_type: 1, vaccine_group: 'HBV', display_name: 'ขาด HBV เข็ม 3 (043)', hdc_code: '043', required_fields: ['hbv3_date'], logic_type: 'ALL', is_required_for_v2: false },
+    { age_group: '1yr', view_type: 1, vaccine_group: 'HBV', display_name: 'ขาด HBV เข็ม 4 (043)', hdc_code: '043', required_fields: ['hbv4_date'], logic_type: 'ALL', is_required_for_v2: true },
+    { age_group: '1yr', view_type: 1, vaccine_group: 'DTP', display_name: 'ขาด DTP เข็ม 1 (031)', hdc_code: '031', required_fields: ['dtp1_date'], logic_type: 'ALL', is_required_for_v2: true },
+    { age_group: '1yr', view_type: 1, vaccine_group: 'DTP', display_name: 'ขาด DTP เข็ม 2 (032)', hdc_code: '032', required_fields: ['dtp2_date'], logic_type: 'ALL', is_required_for_v2: true },
+    { age_group: '1yr', view_type: 1, vaccine_group: 'DTP', display_name: 'ขาด DTP เข็ม 3 (033)', hdc_code: '033', required_fields: ['dtp3_date'], logic_type: 'ALL', is_required_for_v2: true },
+    { age_group: '1yr', view_type: 1, vaccine_group: 'Hib', display_name: 'ขาด Hib เข็ม 1 (H11)', hdc_code: 'H11', required_fields: ['hib1_date'], logic_type: 'ALL', is_required_for_v2: true },
+    { age_group: '1yr', view_type: 1, vaccine_group: 'Hib', display_name: 'ขาด Hib เข็ม 2 (H12)', hdc_code: 'H12', required_fields: ['hib2_date'], logic_type: 'ALL', is_required_for_v2: true },
+    { age_group: '1yr', view_type: 1, vaccine_group: 'Hib', display_name: 'ขาด Hib เข็ม 3 (H13)', hdc_code: 'H13', required_fields: ['hib3_date'], logic_type: 'ALL', is_required_for_v2: true },
+    { age_group: '1yr', view_type: 1, vaccine_group: 'IPV', display_name: 'ขาด IPV เข็ม 1 (091)', hdc_code: '091', required_fields: ['ipv1_date'], logic_type: 'ALL', is_required_for_v2: true },
+    { age_group: '1yr', view_type: 1, vaccine_group: 'IPV', display_name: 'ขาด IPV เข็ม 2 (092)', hdc_code: '092', required_fields: ['ipv2_date'], logic_type: 'ALL', is_required_for_v2: true },
+    { age_group: '1yr', view_type: 1, vaccine_group: 'OPV', display_name: 'ขาด OPV เข็ม 3 (083)', hdc_code: '083', required_fields: ['opv1_date'], logic_type: 'ALL', is_required_for_v2: true },
+    { age_group: '1yr', view_type: 1, vaccine_group: 'MMR', display_name: 'ขาด MMR เข็ม 1 (061)', hdc_code: '061', required_fields: ['mmr1_date'], logic_type: 'ALL', is_required_for_v2: true },
+    { age_group: '1yr', view_type: 1, vaccine_group: 'Rota', display_name: 'ขาด Rota เข็ม 1', hdc_code: 'R11/R21', required_fields: ['rv21_date'], branch_alt_fields: ['rv31_date'], logic_type: 'BRANCH', is_required_for_v2: true },
+    { age_group: '1yr', view_type: 1, vaccine_group: 'Rota', display_name: 'ขาด Rota (ครบถ้วน)', hdc_code: '', required_fields: ['rv21_date', 'rv22_date'], branch_alt_fields: ['rv31_date', 'rv32_date', 'rv33_date'], logic_type: 'BRANCH', is_required_for_v2: true },
+
+    // ── 1yr — View 2 (Fully Immunized) ──
+    { age_group: '1yr', view_type: 2, vaccine_group: 'BCG', display_name: 'BCG 1 เข็ม', hdc_code: '010', required_fields: ['bcg_date'], logic_type: 'ALL', is_required_for_v2: true },
+    { age_group: '1yr', view_type: 2, vaccine_group: 'HBV', display_name: 'HBV ครบ 3 เข็ม', hdc_code: '041-043', required_fields: ['hbv1_date', 'hbv2_date', 'hbv4_date'], logic_type: 'ALL', is_required_for_v2: true },
+    { age_group: '1yr', view_type: 2, vaccine_group: 'DTP', display_name: 'DTP ครบ 3 เข็ม', hdc_code: '031-033', required_fields: ['dtp1_date', 'dtp2_date', 'dtp3_date'], logic_type: 'ALL', is_required_for_v2: true },
+    { age_group: '1yr', view_type: 2, vaccine_group: 'Hib', display_name: 'Hib ครบ 3 เข็ม', hdc_code: 'H11-H13', required_fields: ['hib1_date', 'hib2_date', 'hib3_date'], logic_type: 'ALL', is_required_for_v2: true },
+    { age_group: '1yr', view_type: 2, vaccine_group: 'IPV', display_name: 'IPV ครบ 2 เข็ม', hdc_code: '091-092', required_fields: ['ipv1_date', 'ipv2_date'], logic_type: 'ALL', is_required_for_v2: true },
+    { age_group: '1yr', view_type: 2, vaccine_group: 'OPV', display_name: 'OPV 3', hdc_code: '083', required_fields: ['opv1_date'], logic_type: 'ALL', is_required_for_v2: true },
+    { age_group: '1yr', view_type: 2, vaccine_group: 'MMR', display_name: 'MMR 1 เข็ม', hdc_code: '061', required_fields: ['mmr1_date'], logic_type: 'ALL', is_required_for_v2: true },
+    { age_group: '1yr', view_type: 2, vaccine_group: 'Rota', display_name: 'Rota (ครบ)', hdc_code: '', required_fields: ['rv21_date', 'rv22_date'], branch_alt_fields: ['rv31_date', 'rv32_date', 'rv33_date'], logic_type: 'BRANCH', is_required_for_v2: true },
+
+    // ── 2yr — View 1 ──
+    { age_group: '2yr', view_type: 1, vaccine_group: 'JE/LAJE', display_name: 'ขาด LAJE เข็ม 1 (J11) / JE เข็ม 2 (052)', hdc_code: 'J11/052', required_fields: ['j11_date'], branch_alt_fields: ['je1_date', 'je2_date'], logic_type: 'BRANCH', is_required_for_v2: true },
+    { age_group: '2yr', view_type: 1, vaccine_group: 'DTP', display_name: 'ขาด DTP เข็ม 4 (034)', hdc_code: '034', required_fields: ['dtp4_date'], logic_type: 'ALL', is_required_for_v2: true },
+    { age_group: '2yr', view_type: 1, vaccine_group: 'OPV', display_name: 'ขาด OPV เข็ม 4 (084)', hdc_code: '084', required_fields: ['opv4_date'], logic_type: 'ALL', is_required_for_v2: true },
+    { age_group: '2yr', view_type: 1, vaccine_group: 'MMR', display_name: 'ขาด MMR เข็ม 1 (061)', hdc_code: '061', required_fields: ['mmr1_date'], logic_type: 'ALL', is_required_for_v2: true },
+    { age_group: '2yr', view_type: 1, vaccine_group: 'MMR', display_name: 'ขาด MMR เข็ม 2 (073)', hdc_code: '073', required_fields: ['mmr2_date'], logic_type: 'ALL', is_required_for_v2: true },
+
+    // ── 2yr — View 2 ──
+    { age_group: '2yr', view_type: 2, vaccine_group: 'BCG', display_name: 'BCG 1 เข็ม', hdc_code: '010', required_fields: ['bcg_date'], logic_type: 'ALL', is_required_for_v2: true },
+    { age_group: '2yr', view_type: 2, vaccine_group: 'HBV', display_name: 'HBV ครบ 3 เข็ม', hdc_code: '041-043', required_fields: ['hbv1_date', 'hbv2_date', 'hbv4_date'], logic_type: 'ALL', is_required_for_v2: true },
+    { age_group: '2yr', view_type: 2, vaccine_group: 'DTP', display_name: 'DTP ครบ 4 เข็ม', hdc_code: '031-034', required_fields: ['dtp1_date', 'dtp2_date', 'dtp3_date', 'dtp4_date'], logic_type: 'ALL', is_required_for_v2: true },
+    { age_group: '2yr', view_type: 2, vaccine_group: 'Hib', display_name: 'Hib ครบ 3 เข็ม', hdc_code: 'H11-H13', required_fields: ['hib1_date', 'hib2_date', 'hib3_date'], logic_type: 'ALL', is_required_for_v2: true },
+    { age_group: '2yr', view_type: 2, vaccine_group: 'IPV', display_name: 'IPV ครบ 2 เข็ม', hdc_code: '091-092', required_fields: ['ipv1_date', 'ipv2_date'], logic_type: 'ALL', is_required_for_v2: true },
+    { age_group: '2yr', view_type: 2, vaccine_group: 'OPV', display_name: 'OPV ครบ 4 เข็ม', hdc_code: '083-084', required_fields: ['opv1_date', 'opv4_date'], logic_type: 'ALL', is_required_for_v2: true },
+    { age_group: '2yr', view_type: 2, vaccine_group: 'MMR', display_name: 'MMR ครบ 2 เข็ม', hdc_code: '061-073', required_fields: ['mmr1_date', 'mmr2_date'], logic_type: 'ALL', is_required_for_v2: true },
+    { age_group: '2yr', view_type: 2, vaccine_group: 'Rota', display_name: 'Rota ครบถ้วน', hdc_code: '', required_fields: ['rv21_date', 'rv22_date'], branch_alt_fields: ['rv31_date', 'rv32_date', 'rv33_date'], logic_type: 'BRANCH', is_required_for_v2: true },
+    { age_group: '2yr', view_type: 2, vaccine_group: 'JE/LAJE', display_name: 'LAJE 1 เข็ม หรือ JE ครบ 2 เข็ม', hdc_code: 'J11/051-052', required_fields: ['j11_date'], branch_alt_fields: ['je1_date', 'je2_date'], logic_type: 'BRANCH', is_required_for_v2: true },
+
+    // ── 3yr — View 1 ──
+    { age_group: '3yr', view_type: 1, vaccine_group: 'JE/LAJE', display_name: 'ขาด LAJE เข็ม 2 / JE เข็ม 3', hdc_code: 'J12/053', required_fields: ['j12_date'], branch_alt_fields: ['je3_date'], logic_type: 'BRANCH', is_required_for_v2: true },
+
+    // ── 3yr — View 2 ──
+    { age_group: '3yr', view_type: 2, vaccine_group: 'BCG', display_name: 'BCG 1 เข็ม', hdc_code: '010', required_fields: ['bcg_date'], logic_type: 'ALL', is_required_for_v2: true },
+    { age_group: '3yr', view_type: 2, vaccine_group: 'HBV', display_name: 'HBV ครบ 3 เข็ม', hdc_code: '041-043', required_fields: ['hbv1_date', 'hbv2_date', 'hbv4_date'], logic_type: 'ALL', is_required_for_v2: true },
+    { age_group: '3yr', view_type: 2, vaccine_group: 'DTP', display_name: 'DTP ครบ 4 เข็ม', hdc_code: '031-034', required_fields: ['dtp1_date', 'dtp2_date', 'dtp3_date', 'dtp4_date'], logic_type: 'ALL', is_required_for_v2: true },
+    { age_group: '3yr', view_type: 2, vaccine_group: 'Hib', display_name: 'Hib ครบ 3 เข็ม', hdc_code: 'H11-H13', required_fields: ['hib1_date', 'hib2_date', 'hib3_date'], logic_type: 'ALL', is_required_for_v2: true },
+    { age_group: '3yr', view_type: 2, vaccine_group: 'IPV', display_name: 'IPV ครบ 2 เข็ม', hdc_code: '091-092', required_fields: ['ipv1_date', 'ipv2_date'], logic_type: 'ALL', is_required_for_v2: true },
+    { age_group: '3yr', view_type: 2, vaccine_group: 'OPV', display_name: 'OPV ครบ 4 เข็ม', hdc_code: '083-084', required_fields: ['opv1_date', 'opv4_date'], logic_type: 'ALL', is_required_for_v2: true },
+    { age_group: '3yr', view_type: 2, vaccine_group: 'MMR', display_name: 'MMR ครบ 2 เข็ม', hdc_code: '061-073', required_fields: ['mmr1_date', 'mmr2_date'], logic_type: 'ALL', is_required_for_v2: true },
+    { age_group: '3yr', view_type: 2, vaccine_group: 'Rota', display_name: 'Rota ครบถ้วน', hdc_code: '', required_fields: ['rv21_date', 'rv22_date'], branch_alt_fields: ['rv31_date', 'rv32_date', 'rv33_date'], logic_type: 'BRANCH', is_required_for_v2: true },
+    { age_group: '3yr', view_type: 2, vaccine_group: 'JE/LAJE', display_name: 'LAJE ครบ 2 เข็ม หรือ JE ครบ 3 เข็ม', hdc_code: 'J11-J12/051-053', required_fields: ['j11_date', 'j12_date'], branch_alt_fields: ['je1_date', 'je2_date', 'je3_date'], logic_type: 'BRANCH', is_required_for_v2: true },
+
+    // ── 5yr — View 1 ──
+    { age_group: '5yr', view_type: 1, vaccine_group: 'DTP', display_name: 'ขาด DTP เข็ม 5 (035)', hdc_code: '035', required_fields: ['dtp5_date'], logic_type: 'ALL', is_required_for_v2: true },
+    { age_group: '5yr', view_type: 1, vaccine_group: 'OPV', display_name: 'ขาด OPV เข็ม 5 (085)', hdc_code: '085', required_fields: ['opv5_date'], logic_type: 'ALL', is_required_for_v2: true },
+
+    // ── 5yr — View 2 ──
+    { age_group: '5yr', view_type: 2, vaccine_group: 'BCG', display_name: 'BCG 1 เข็ม', hdc_code: '010', required_fields: ['bcg_date'], logic_type: 'ALL', is_required_for_v2: true },
+    { age_group: '5yr', view_type: 2, vaccine_group: 'HBV', display_name: 'HBV ครบ 3 เข็ม', hdc_code: '041-043', required_fields: ['hbv1_date', 'hbv2_date', 'hbv4_date'], logic_type: 'ALL', is_required_for_v2: true },
+    { age_group: '5yr', view_type: 2, vaccine_group: 'DTP', display_name: 'DTP ครบ 5 เข็ม', hdc_code: '031-035', required_fields: ['dtp1_date', 'dtp2_date', 'dtp3_date', 'dtp4_date', 'dtp5_date'], logic_type: 'ALL', is_required_for_v2: true },
+    { age_group: '5yr', view_type: 2, vaccine_group: 'Hib', display_name: 'Hib ครบ 3 เข็ม', hdc_code: 'H11-H13', required_fields: ['hib1_date', 'hib2_date', 'hib3_date'], logic_type: 'ALL', is_required_for_v2: true },
+    { age_group: '5yr', view_type: 2, vaccine_group: 'IPV', display_name: 'IPV เข็ม 4 เดือน', hdc_code: '092', required_fields: ['ipv2_date'], logic_type: 'ALL', is_required_for_v2: true },
+    { age_group: '5yr', view_type: 2, vaccine_group: 'OPV', display_name: 'OPV ครบ 3 เข็ม', hdc_code: '083-085', required_fields: ['opv1_date', 'opv4_date', 'opv5_date'], logic_type: 'ALL', is_required_for_v2: true },
+    { age_group: '5yr', view_type: 2, vaccine_group: 'MMR', display_name: 'MMR ครบ 2 เข็ม', hdc_code: '061-073', required_fields: ['mmr1_date', 'mmr2_date'], logic_type: 'ALL', is_required_for_v2: true },
+    // Rota สำหรับเด็ก 5 ปี: is_required_for_v2 = false (เกิดก่อนนโยบายวัคซีนใหม่)
+    { age_group: '5yr', view_type: 2, vaccine_group: 'Rota', display_name: 'Rota (ไม่บังคับ)', hdc_code: '', required_fields: ['rv21_date', 'rv22_date'], branch_alt_fields: ['rv31_date', 'rv32_date', 'rv33_date'], logic_type: 'BRANCH', is_required_for_v2: false },
+    { age_group: '5yr', view_type: 2, vaccine_group: 'JE/LAJE', display_name: 'LAJE ครบ 2 เข็ม หรือ JE ครบ 3 เข็ม', hdc_code: 'J11-J12/051-053', required_fields: ['j11_date', 'j12_date'], branch_alt_fields: ['je1_date', 'je2_date', 'je3_date'], logic_type: 'BRANCH', is_required_for_v2: true }
+  ];
+
+  const now = new Date();
+  const rows = rules.map(r => headers.map(header => {
+    switch (header) {
+      case 'rule_id': return Utilities.getUuid();
+      case 'fiscal_year': return fiscalYear;
+      case 'age_group': return r.age_group;
+      case 'view_type': return r.view_type;
+      case 'vaccine_group': return r.vaccine_group || '';
+      case 'display_name': return r.display_name || '';
+      case 'hdc_code': return r.hdc_code || '';
+      case 'required_fields': return JSON.stringify(r.required_fields || []);
+      case 'logic_type': return r.logic_type;
+      case 'branch_alt_fields': return JSON.stringify(r.branch_alt_fields || []);
+      case 'is_required_for_v2': return r.is_required_for_v2 !== false;
+      case 'is_active': return true;
+      case 'note': return '';
+      case 'updated_at': return now;
+      case 'updated_by': return adminEmail || 'system';
+      default: return '';
+    }
+  }));
+
+  const startRow = sheet.getLastRow() + 1;
+  sheet.getRange(startRow, 1, rows.length, headers.length).setValues(rows);
+
+  logAction('SYSTEM', adminEmail || 'system', 'seed_vaccine_rules',
+    `Seeded ${rows.length} vaccine rules for fiscal_year=${fiscalYear}`);
+
+  return { success: true, seeded: rows.length, fiscalYear };
+}

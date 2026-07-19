@@ -18,6 +18,7 @@ export function GlobalNav() {
     { name: 'EPI Tracking (2 ปี)', path: '/dashboard/epi-2yr', roles: ['superadmin', 'admin', 'user'] },
     { name: 'EPI Tracking (3 ปี)', path: '/dashboard/epi-3yr', roles: ['superadmin', 'admin', 'user'] },
     { name: 'EPI Tracking (5 ปี)', path: '/dashboard/epi-5yr', roles: ['superadmin', 'admin', 'user'] },
+    { name: 'Year Comparison', path: '/dashboard/comparison', roles: ['superadmin', 'admin', 'user'] },
     { name: 'Upload Data', path: '/upload', roles: ['admin', 'superadmin'], hoscodes: ['00588'] },
     { name: 'Admin Panel', path: '/admin', roles: ['admin', 'superadmin'] }
   ];

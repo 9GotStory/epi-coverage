@@ -3,23 +3,34 @@ export const parseDate = (val: any): string | null => {
   if (!val) return null;
   if (typeof val === 'string' && val.match(/^\d{4}-\d{2}-\d{2}$/)) return val;
   
-  // Attempt to parse Excel date serial number or JS Date
-  try {
-    const d = new Date(val);
+  // If it's a serial number from Excel
+  if (typeof val === 'number') {
+    // Excel dates are days since Dec 30, 1899
+    const d = new Date(Math.round((val - 25569) * 86400 * 1000));
+    // When using UTC offsets, we should just extract UTC date because the math above produces UTC time
     if (!isNaN(d.getTime())) {
-      return d.toISOString().split('T')[0];
+      const year = d.getUTCFullYear();
+      const month = String(d.getUTCMonth() + 1).padStart(2, '0');
+      const day = String(d.getUTCDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
+  }
+
+  // Attempt to parse JS Date (from SheetJS cellDates)
+  try {
+    if (val instanceof Date || typeof val === 'string') {
+      const d = new Date(val);
+      if (!isNaN(d.getTime())) {
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+      }
     }
   } catch {
     // Ignore parse error
   }
   
-  // If it's a serial number from Excel
-  if (typeof val === 'number') {
-    const d = new Date(Math.round((val - 25569) * 86400 * 1000));
-    if (!isNaN(d.getTime())) {
-      return d.toISOString().split('T')[0];
-    }
-  }
   return String(val); // Fallback
 };
 
@@ -53,6 +64,16 @@ export const cleanData = (data: any[]): any[] => {
     });
     return cleanRow;
   });
+};
+
+export const getAgeGroupFromTable = (table: string): string => {
+  switch (table) {
+    case 'Epi_1_Year': return '1yr';
+    case 'Epi_2_Year': return '2yr';
+    case 'Epi_3_Year': return '3yr';
+    case 'Epi_5_Year': return '5yr';
+    default: return '1yr';
+  }
 };
 
 export const getAgeString = (birthDateString: string): string => {

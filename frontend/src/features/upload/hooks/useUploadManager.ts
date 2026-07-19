@@ -8,7 +8,10 @@ import { evaluateView1, evaluateView2 } from '../../../shared/utils/vaccine/vacc
 import { evaluateView1_2Yr, evaluateView2_2Yr } from '../../../shared/utils/vaccine/vaccine-2yr';
 import { evaluateView1_3Yr, evaluateView2_3Yr } from '../../../shared/utils/vaccine/vaccine-3yr';
 import { evaluateView1_5Yr, evaluateView2_5Yr } from '../../../shared/utils/vaccine/vaccine-5yr';
-import { cleanData } from '../utils/uploadHelpers';
+import { evaluateDynamicV1, evaluateDynamicV2 } from '../../../shared/utils/vaccine/ruleEngine';
+import type { VaccineRule } from '../../../shared/utils/vaccine/ruleEngine';
+import { cleanData, getAgeGroupFromTable } from '../utils/uploadHelpers';
+import type { EpiRecord } from '../../../shared/types';
 const CHUNK_SIZE = 500;
 
 export type TargetTable = 'Epi_1_Year' | 'Epi_2_Year' | 'Epi_3_Year' | 'Epi_5_Year';
@@ -125,12 +128,25 @@ export function useUploadManager() {
       const fullData = fullDataRes.data.data || fullDataRes.data || [];
       
       let evalV1, evalV2;
-      switch (targetTable) {
-        case 'Epi_1_Year': evalV1 = evaluateView1; evalV2 = evaluateView2; break;
-        case 'Epi_2_Year': evalV1 = evaluateView1_2Yr; evalV2 = evaluateView2_2Yr; break;
-        case 'Epi_3_Year': evalV1 = evaluateView1_3Yr; evalV2 = evaluateView2_3Yr; break;
-        case 'Epi_5_Year': evalV1 = evaluateView1_5Yr; evalV2 = evaluateView2_5Yr; break;
-        default: throw new Error("Unknown target table for summary calculation.");
+      
+      // ดึง Rules จาก Database สำหรับปีงบประมาณและกลุ่มอายุนี้
+      const ageGroup = getAgeGroupFromTable(targetTable);
+      const rulesRes = await fetchApi('getVaccineRules', { fiscalYear, ageGroup });
+      const rules: VaccineRule[] = rulesRes?.data?.data || rulesRes?.data || [];
+      
+      if (rules.length > 0) {
+        // ใช้ Dynamic Rule Engine
+        evalV1 = (r: EpiRecord) => evaluateDynamicV1(r, rules);
+        evalV2 = (r: EpiRecord) => evaluateDynamicV2(r, rules);
+      } else {
+        // Fallback: ใช้ Hardcoded Logic เดิม
+        switch (targetTable) {
+          case 'Epi_1_Year': evalV1 = evaluateView1; evalV2 = evaluateView2; break;
+          case 'Epi_2_Year': evalV1 = evaluateView1_2Yr; evalV2 = evaluateView2_2Yr; break;
+          case 'Epi_3_Year': evalV1 = evaluateView1_3Yr; evalV2 = evaluateView2_3Yr; break;
+          case 'Epi_5_Year': evalV1 = evaluateView1_5Yr; evalV2 = evaluateView2_5Yr; break;
+          default: throw new Error("Unknown target table for summary calculation.");
+        }
       }
       
       const summary = calcGroupSummary(fullData, evalV1, evalV2, Number(fiscalYear));
@@ -167,12 +183,22 @@ export function useUploadManager() {
         const fullData = fullDataRes.data.data || fullDataRes.data || [];
         
         let evalV1, evalV2;
-        switch (t) {
-          case 'Epi_1_Year': evalV1 = evaluateView1; evalV2 = evaluateView2; break;
-          case 'Epi_2_Year': evalV1 = evaluateView1_2Yr; evalV2 = evaluateView2_2Yr; break;
-          case 'Epi_3_Year': evalV1 = evaluateView1_3Yr; evalV2 = evaluateView2_3Yr; break;
-          case 'Epi_5_Year': evalV1 = evaluateView1_5Yr; evalV2 = evaluateView2_5Yr; break;
-          default: continue;
+        
+        const ageGroup = getAgeGroupFromTable(t);
+        const rulesRes = await fetchApi('getVaccineRules', { fiscalYear, ageGroup });
+        const rules: VaccineRule[] = rulesRes?.data?.data || rulesRes?.data || [];
+        
+        if (rules.length > 0) {
+          evalV1 = (r: EpiRecord) => evaluateDynamicV1(r, rules);
+          evalV2 = (r: EpiRecord) => evaluateDynamicV2(r, rules);
+        } else {
+          switch (t) {
+            case 'Epi_1_Year': evalV1 = evaluateView1; evalV2 = evaluateView2; break;
+            case 'Epi_2_Year': evalV1 = evaluateView1_2Yr; evalV2 = evaluateView2_2Yr; break;
+            case 'Epi_3_Year': evalV1 = evaluateView1_3Yr; evalV2 = evaluateView2_3Yr; break;
+            case 'Epi_5_Year': evalV1 = evaluateView1_5Yr; evalV2 = evaluateView2_5Yr; break;
+            default: continue;
+          }
         }
         
         const summary = calcGroupSummary(fullData, evalV1, evalV2, Number(fiscalYear));

@@ -10,6 +10,7 @@ import { EpiDashboard3Yr } from '../features/vaccine-3yr/components/EpiDashboard
 import { EpiDashboard5Yr } from '../features/vaccine-5yr/components/EpiDashboard5Yr';
 import { Dashboard } from '../pages/Dashboard';
 import { RouteErrorBoundary } from '../shared/components/GlobalErrorBoundary';
+import { YearComparison } from '../pages/YearComparison';
 
 // Lazy loading components
 const AppRoot = lazy(() => import('../App'));
@@ -73,6 +74,10 @@ export const router = createBrowserRouter([
                   {
                     path: 'dashboard/epi-5yr',
                     element: <EpiDashboard5Yr />
+                  },
+                  {
+                    path: 'dashboard/comparison',
+                    element: <YearComparison />
                   }
                 ]
               },

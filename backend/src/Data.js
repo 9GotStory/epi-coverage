@@ -61,14 +61,22 @@ function upsertFacility(hoscode, hosname, isActive, adminEmail) {
 
 /**
  * ดึงข้อมูลวัคซีนเด็ก 1 ปี (filter ตาม hoscode และ is_active)
+ * @param {string} hoscode - รหัสสถานบริการ ('00588' = สสอ. เห็นทุก รหัส)
+ * @param {string} targetTable - ชื่อตาราง Base (e.g. 'Epi_1_Year')
+ * @param {string|number|null} fiscalYear - ปีงบประมาณ (e.g. 2568) ถ้ามีจะใช้ Sheet แบบแยกปี
  */
-function getEpiData(hoscode, targetTable = 'Epi_1_Year') {
+function getEpiData(hoscode, targetTable = 'Epi_1_Year', fiscalYear = null) {
   const ss = getSpreadsheet();
-  let sheet = ss.getSheetByName(targetTable);
+  // ถ้าระบุ fiscalYear → ใช้ Sheet แบบแยกปี (Epi_1_Year_2568)
+  // ถ้าไม่ระบุ → ใช้ targetTable ตรงๆ (Backward Compatible)
+  const sheetName = fiscalYear ? `${targetTable}_${fiscalYear}` : targetTable;
+  let sheet = ss.getSheetByName(sheetName);
   
   if (!sheet) {
-    setupDatabase();
-    sheet = ss.getSheetByName(targetTable);
+    // ถ้าไม่มี Sheet สำหรับปีนั้น → return เปล่า ไม่ Fallback ไปใช้ Sheet เก่า
+    // (เพราะ Sheet เก่าอาจเป็นปีอื่น การ Fallback จะทำให้ข้อมูลปนเปื้อนกัน)
+    console.warn(`Sheet not found: ${sheetName}`);
+    return [];
   }
   
   const data = sheet.getDataRange().getValues();

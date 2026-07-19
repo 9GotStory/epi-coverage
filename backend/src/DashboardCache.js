@@ -102,3 +102,48 @@ function getDashboardSummaries(fiscalYear) {
     return { success: false, error: error.toString() };
   }
 }
+
+/**
+ * ดึงข้อมูลสรุปหลายปีพร้อมกัน (สำหรับหน้าเปรียบเทียบปีงบประมาณ)
+ * @param {number[]|string} fiscalYears - Array ของปีที่ต้องการ เช่น [2566, 2567, 2568]
+ */
+function getDashboardSummariesMultiYear(fiscalYears) {
+  try {
+    // รองรับทั้ง Array และ string ที่คั่นด้วย comma
+    let years = fiscalYears;
+    if (typeof fiscalYears === 'string') {
+      years = fiscalYears.split(',').map(y => y.trim());
+    }
+    if (!Array.isArray(years) || years.length === 0) {
+      return { success: false, error: 'fiscalYears must be a non-empty array' };
+    }
+
+    const yearsStr = years.map(String);
+    const sheet = ensureSummarySheet();
+    const data = sheet.getDataRange().getValues();
+    const summaries = [];
+
+    for (let i = 1; i < data.length; i++) {
+      const row = data[i];
+      const rowFiscalYear = String(row[2]);
+
+      if (yearsStr.includes(rowFiscalYear)) {
+        try {
+          summaries.push({
+            id: row[0],
+            targetTable: row[1],
+            fiscalYear: row[2],
+            summaryData: JSON.parse(row[3]),
+            updated_at: row[4]
+          });
+        } catch (e) {
+          // Ignore invalid JSON
+        }
+      }
+    }
+
+    return { success: true, summaries };
+  } catch (error) {
+    return { success: false, error: error.toString() };
+  }
+}

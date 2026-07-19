@@ -1,30 +1,22 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { SubNav } from '../../../widgets/layout/SubNav';
 import { View1Individual3Yr } from './View1Individual3Yr';
 import { View2FullyImmunized3Yr } from './View2FullyImmunized3Yr';
 import { OpenDataDashboard } from '../../opendata/components/OpenDataDashboard';
 import { useEpiData } from '../../../shared/hooks/useEpiData';
+import { useAvailableYears } from '../../../shared/hooks/useAvailableYears';
+import { getCurrentFiscalYear } from '../../../shared/utils/dateUtils';
 
 export function EpiDashboard3Yr() {
   const [activeTab, setActiveTab] = useState<'view1' | 'view2' | 'view3'>('view1');
   
   // Global Filters for Cohort
-  const currentYear = new Date().getFullYear() + 543;
+  const currentYear = getCurrentFiscalYear();
   const [fiscalYear, setFiscalYear] = useState<number>(currentYear);
   const [quarter, setQuarter] = useState<number>(1);
 
-  const { data, isLoading, error, asOfDate } = useEpiData('Epi_3_Year');
-
-  const availableFiscalYears = useMemo(() => {
-    const years = new Set<number>();
-    data.forEach(record => {
-      if (record.fiscal_year) {
-        years.add(Number(record.fiscal_year));
-      }
-    });
-    const sorted = Array.from(years).sort((a, b) => b - a);
-    return sorted.length > 0 ? sorted : [currentYear];
-  }, [data, currentYear]);
+  const { data, isLoading, error, asOfDate } = useEpiData('Epi_3_Year', fiscalYear);
+  const { years: availableFiscalYears } = useAvailableYears();
 
   useEffect(() => {
     if (availableFiscalYears.length > 0 && !availableFiscalYears.includes(fiscalYear)) {

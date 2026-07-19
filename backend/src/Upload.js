@@ -5,11 +5,17 @@
  */
 function upsertEpiData(chunk, batchId, adminEmail, fiscalYear, targetTable = 'Epi_1_Year') {
   const ss = getSpreadsheet();
-  let sheet = ss.getSheetByName(targetTable);
+  // ใช้ Sheet แบบแยกปี (Epi_1_Year_2568) เสมอ ถ้าไม่มีให้สร้างอัตโนมัติ
+  const sheetName = fiscalYear ? `${targetTable}_${fiscalYear}` : targetTable;
+  let sheet = ss.getSheetByName(sheetName);
   
   if (!sheet) {
-    setupDatabase();
-    sheet = ss.getSheetByName(targetTable);
+    // สร้าง Sheet ใหม่อัตโนมัติพร้อม Headers ที่ถูกต้อง
+    const setupResult = setupEpiSheetForYear(fiscalYear);
+    if (!setupResult.success) {
+      return { success: false, error: `Failed to create sheet: ${sheetName}` };
+    }
+    sheet = ss.getSheetByName(sheetName);
   }
   
   const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
@@ -90,15 +96,16 @@ function upsertEpiData(chunk, batchId, adminEmail, fiscalYear, targetTable = 'Ep
  */
 function cleanupEpiData(batchId, touchedHoscodes, adminEmail, fiscalYear, targetTable = 'Epi_1_Year') {
   if (!touchedHoscodes || touchedHoscodes.length === 0) {
-    return { success: false, error: "No touched hoscodes provided." };
+    return { success: false, error: 'No touched hoscodes provided.' };
   }
 
   const ss = getSpreadsheet();
-  let sheet = ss.getSheetByName(targetTable);
+  // ใช้ Sheet แบบแยกปี เหมือนกันกับ upsertEpiData
+  const sheetName = fiscalYear ? `${targetTable}_${fiscalYear}` : targetTable;
+  let sheet = ss.getSheetByName(sheetName);
   
   if (!sheet) {
-    setupDatabase();
-    sheet = ss.getSheetByName(targetTable);
+    return { success: false, error: `Sheet not found: ${sheetName}` };
   }
   
   const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];

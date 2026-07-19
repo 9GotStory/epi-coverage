@@ -5,8 +5,9 @@ import { DataTable } from './data-table';
 import { columns } from './columns';
 import { FacilitiesTab } from './FacilitiesTab';
 import { AuditLogsTab } from './AuditLogsTab';
+import { VaccineRuleManager } from './VaccineRuleManager';
 import type { User, UserRole, UserStatus } from '../../../shared/types';
-import { Users, Building2, ScrollText } from 'lucide-react';
+import { Users, Building2, ScrollText, ShieldAlert } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../../shared/components/ui/tabs';
 import { SubNav } from '../../../widgets/layout/SubNav';
 import { toast } from 'sonner';
@@ -102,6 +103,10 @@ export function AdminDashboard() {
               <ScrollText className="w-4 h-4 mr-2" />
               ประวัติการใช้งาน
             </TabsTrigger>
+            <TabsTrigger value="vaccine-rules" className="data-[state=active]:bg-slate-100 font-medium">
+              <ShieldAlert className="w-4 h-4 mr-2" />
+              จัดการเกณฑ์วัคซีน
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="users" className="space-y-6">
@@ -139,12 +144,16 @@ export function AdminDashboard() {
             </div>
           </TabsContent>
           
-          <TabsContent value="facilities">
+          <TabsContent value="facilities" className="mt-6">
             <FacilitiesTab />
           </TabsContent>
-          
-          <TabsContent value="audit-logs">
+
+          <TabsContent value="audit-logs" className="mt-6">
             <AuditLogsTab />
+          </TabsContent>
+
+          <TabsContent value="vaccine-rules" className="mt-6">
+            <VaccineRuleManager />
           </TabsContent>
         </Tabs>
         

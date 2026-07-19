@@ -1,5 +1,11 @@
 import { differenceInMonths, isValid } from 'date-fns';
 
+export function getCurrentFiscalYear(): number {
+  const date = new Date();
+  // Thai fiscal year starts in October (month 9 in 0-indexed Date)
+  return date.getFullYear() + 543 + (date.getMonth() >= 9 ? 1 : 0);
+}
+
 export function getAgeInMonths(birthDate: Date | string | null | undefined): number {
   if (!birthDate) return 0;
   const date = new Date(birthDate);
@@ -81,9 +87,18 @@ export function getBirthDateRangeForQuarter(fiscalYear: number, quarter: number 
  * เด็กเกิดไตรมาสไหน จะประเมินผลเมื่อสิ้นสุดไตรมาสนั้นในปีถัดไป
  */
 export function getEvaluationDeadline(birthDate: string | Date, targetAge: number = 1): Date {
-  const bDate = new Date(birthDate);
-  const year = bDate.getFullYear();
-  const month = bDate.getMonth() + 1; // 1-12
+  let year: number;
+  let month: number;
+
+  if (typeof birthDate === 'string' && birthDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
+    const parts = birthDate.split('-');
+    year = parseInt(parts[0], 10);
+    month = parseInt(parts[1], 10);
+  } else {
+    const bDate = new Date(birthDate);
+    year = bDate.getFullYear();
+    month = bDate.getMonth() + 1; // 1-12
+  }
   
   // เด็ก 1 ขวบ จะถูกประเมินใน 1 ปีถัดไป, เด็ก 2 ขวบ ประเมินใน 2 ปีถัดไป
   const endYear = year + targetAge;

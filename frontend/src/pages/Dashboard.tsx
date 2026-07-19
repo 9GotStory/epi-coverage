@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useDashboardSummaries } from '../shared/hooks/useDashboardSummaries';
 import { useTargetSettings } from '../shared/hooks/useTargetSettings';
 import { SubNav } from '../widgets/layout/SubNav';
+import { getCurrentFiscalYear } from '../shared/utils/dateUtils';
 import {
   ChevronRightIcon,
   ActivityIcon,
@@ -172,7 +173,7 @@ const AgeGroupSection = memo(function AgeGroupSection({
 // Main Dashboard Page
 // ──────────────────────────────────────────────
 export function Dashboard() {
-  const currentYear = new Date().getFullYear() + 543;
+  const currentYear = getCurrentFiscalYear();
   const { getTarget } = useTargetSettings();
 
   // โหลดข้อมูลผลสรุป (JSON Cache) จาก API แทนการโหลดข้อมูลดิบ

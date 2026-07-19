@@ -24,7 +24,10 @@ function handleRequest(method, e) {
     const authToken = e.parameter.auth_token || body.auth_token;
     
     // 4. Public Actions (ไม่ใช้ Token)
-    const publicActions = ['setup', 'verifyToken', 'createUser', 'createSession', 'getUser', 'updateLastLogin', 'getTargetConfig', 'getDashboardSummaries'];
+    const publicActions = [
+      'setup', 'verifyToken', 'createUser', 'createSession', 'getUser', 'updateLastLogin',
+      'getTargetConfig', 'getDashboardSummaries', 'getDashboardSummariesMultiYear', 'getVaccineRules', 'getAvailableYears'
+    ];
     if (publicActions.includes(action)) {
       switch (action) {
         case 'setup': return responseJson(setupDatabase());
@@ -35,6 +38,9 @@ function handleRequest(method, e) {
         case 'updateLastLogin': return responseJson(updateLastLogin(body.googleId));
         case 'getTargetConfig': return responseJson(getTargetConfig());
         case 'getDashboardSummaries': return responseJson(getDashboardSummaries(e.parameter.fiscalYear || body.fiscalYear));
+        case 'getDashboardSummariesMultiYear': return responseJson(getDashboardSummariesMultiYear(body.fiscalYears));
+        case 'getVaccineRules': return responseJson(getVaccineRules(body.fiscalYear || e.parameter.fiscalYear, body.ageGroup || e.parameter.ageGroup));
+        case 'getAvailableYears': return responseJson(getAvailableYears());
       }
     }
 
@@ -46,9 +52,10 @@ function handleRequest(method, e) {
     
     // 6. Admin Actions (ต้องเป็น Admin เท่านั้น)
     const adminActions = [
-      'getAllUsers', 'getUsers', 'updateUserStatus', 'updateUserFacility', 
+      'getAllUsers', 'getUsers', 'updateUserStatus', 'updateUserFacility',
       'upsertFacility', 'upsertEpiData', 'cleanupEpiData', 'getAuditLogs',
-      'saveDashboardSummary'
+      'saveDashboardSummary', 'migrateEpiSheets', 'setupEpiSheetForYear',
+      'seedVaccineRules', 'saveVaccineRule', 'cloneVaccineRules', 'batchSaveRules'
     ];
     if (adminActions.includes(action) && authResult.role !== 'admin') {
       return responseJson({ error: 'Forbidden: Admin access required' }, 403);
@@ -64,11 +71,18 @@ function handleRequest(method, e) {
       case 'getFacilities': return responseJson(getFacilities());
       case 'getAuditLogs': return responseJson(getAuditLogs(e.parameter.email, e.parameter.actionType));
       case 'upsertFacility': return responseJson(upsertFacility(body.hoscode, body.hosname, body.isActive, body.adminEmail));
-      case 'getEpiData': return responseJson(getEpiData(e.parameter.hoscode || body.hoscode, e.parameter.targetTable || body.targetTable));
+      case 'getEpiData': return responseJson(getEpiData(e.parameter.hoscode || body.hoscode, e.parameter.targetTable || body.targetTable, body.fiscalYear || e.parameter.fiscalYear));
       case 'updateUserStatus': return responseJson(updateUserStatus(body.googleId, body.status, body.role));
       case 'updateUserFacility': return responseJson(updateUserFacility(body.googleId, body.hoscode));
       case 'deleteSession': return responseJson(deleteSession(body.token));
       case 'saveDashboardSummary': return responseJson(saveDashboardSummary(body.targetTable, body.fiscalYear, body.summaryData));
+      // A1: Migration + Dynamic Sheet
+      case 'migrateEpiSheets': return responseJson(migrateSheetNames(body.fromFiscalYear));
+      case 'setupEpiSheetForYear': return responseJson(setupEpiSheetForYear(body.fiscalYear));
+      // B2: Vaccine Rules CRUD
+      case 'seedVaccineRules': return responseJson(seedVaccineRules(body.fiscalYear, body.adminEmail));
+      case 'saveVaccineRule': return responseJson(saveVaccineRule(body.rule, body.adminEmail));
+      case 'cloneVaccineRules': return responseJson(cloneRulesFromYear(body.fromYear, body.toYear, body.adminEmail));
       default:
         return responseJson({ error: 'Unknown action: ' + action }, 400);
     }

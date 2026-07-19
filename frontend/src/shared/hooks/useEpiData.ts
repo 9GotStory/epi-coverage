@@ -11,7 +11,7 @@ interface UseEpiDataResult {
   refetch: () => Promise<void>;
 }
 
-export function useEpiData(targetTable: 'Epi_1_Year' | 'Epi_2_Year' | 'Epi_3_Year' | 'Epi_5_Year' = 'Epi_1_Year'): UseEpiDataResult {
+export function useEpiData(targetTable: 'Epi_1_Year' | 'Epi_2_Year' | 'Epi_3_Year' | 'Epi_5_Year' = 'Epi_1_Year', fiscalYear?: number): UseEpiDataResult {
   const { user } = useAuth();
   const [data, setData] = useState<EpiRecord[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -29,7 +29,7 @@ export function useEpiData(targetTable: 'Epi_1_Year' | 'Epi_2_Year' | 'Epi_3_Yea
       setError(null);
       try {
         // API call to 'getEpiData'
-        const response = await fetchApi('getEpiData', { hoscode: user.hoscode, targetTable });
+        const response = await fetchApi('getEpiData', { hoscode: user.hoscode, targetTable, fiscalYear });
         if (ignore) return;
 
         if (response.success === false) {
@@ -72,7 +72,7 @@ export function useEpiData(targetTable: 'Epi_1_Year' | 'Epi_2_Year' | 'Epi_3_Yea
     return () => {
       ignore = true;
     };
-  }, [user, targetTable, refreshCount]);
+  }, [user, targetTable, fiscalYear, refreshCount]);
 
   const refetch = useCallback(async () => {
     setRefreshCount(c => c + 1);
