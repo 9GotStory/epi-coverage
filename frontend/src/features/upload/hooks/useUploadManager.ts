@@ -76,7 +76,7 @@ export function useUploadManager() {
     }
   }, []);
 
-  const handleUpload = async () => {
+  const handleUpload = useCallback(async () => {
     if (!file) return;
     setIsUploading(true);
     setStatus('uploading');
@@ -147,18 +147,18 @@ export function useUploadManager() {
     } finally {
       setIsUploading(false);
     }
-  };
+  }, [file, fiscalYear, targetTable]);
 
-  const handleReset = () => {
+  const handleReset = useCallback(() => {
     setFile(null);
     setPreviewData([]);
     setTotalRows(0);
     setStatus('idle');
     setProgress(0);
     setErrorMsg('');
-  };
+  }, []);
 
-  const handleSyncAll = async () => {
+  const handleSyncAll = useCallback(async () => {
     setIsSyncing(true);
     try {
       const tables: TargetTable[] = ['Epi_1_Year', 'Epi_2_Year', 'Epi_3_Year', 'Epi_5_Year'];
@@ -185,7 +185,7 @@ export function useUploadManager() {
     } finally {
       setIsSyncing(false);
     }
-  };
+  }, [fiscalYear]);
 
   return {
     file,
