@@ -226,8 +226,12 @@ export function View2FullyImmunized2Yr({ fiscalYear, quarter, data, isLoading, e
             onChange={(e) => setFilterFacility(e.target.value)}
             className="px-3 py-2 bg-white border border-zinc-200 rounded-lg text-sm shadow-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
           >
-            <option value="all">ทุกสถานบริการ</option>
-            {uniqueFacilities.map((fac) => {
+            {uniqueFacilities.length === 1 ? (
+              <option value="all">{uniqueFacilities[0]}</option>
+            ) : (
+              <option value="all">ทุกสถานบริการ</option>
+            )}
+            {uniqueFacilities.length > 1 && uniqueFacilities.map((fac) => {
               const code = fac.split(' - ')[0];
               return <option key={code} value={code}>{fac}</option>;
             })}
