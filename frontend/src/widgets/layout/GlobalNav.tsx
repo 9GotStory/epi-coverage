@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { NavLink, Link } from 'react-router-dom';
 import { useAuth } from '../../shared/contexts/AuthContext';
 import { LogOut, ShieldAlert, Menu, X } from 'lucide-react';
+import { ConfirmModal } from '../../shared/components/ui/confirm-modal';
 
 export function GlobalNav() {
   const { user, logout } = useAuth();
@@ -68,14 +69,20 @@ export function GlobalNav() {
             </span>
             
             {user ? (
-              <button 
-                onClick={handleLogout}
-                className="opacity-80 hover:opacity-100 transition-opacity flex items-center"
-                title="Sign Out"
+              <ConfirmModal
+                title="ยืนยันการออกจากระบบ"
+                description="คุณต้องการออกจากระบบใช่หรือไม่?"
+                onConfirm={handleLogout}
+                confirmText="ออกจากระบบ"
               >
-                <LogOut className="w-4 h-4 md:mr-1" />
-                <span className="hidden md:inline">Sign Out</span>
-              </button>
+                <button 
+                  className="opacity-80 hover:opacity-100 transition-opacity flex items-center"
+                  title="Sign Out"
+                >
+                  <LogOut className="w-4 h-4 md:mr-1" />
+                  <span className="hidden md:inline">Sign Out</span>
+                </button>
+              </ConfirmModal>
             ) : (
               <Link 
                 to="/login"

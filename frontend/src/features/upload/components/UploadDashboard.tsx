@@ -9,6 +9,7 @@ import { SubNav } from '../../../widgets/layout/SubNav';
 import { fetchApi } from '../../../shared/lib/api';
 import { v4 as uuidv4 } from 'uuid';
 import { RefreshCw } from 'lucide-react';
+import { ConfirmModal } from '../../../shared/components/ui/confirm-modal';
 import { calcGroupSummary } from '../../../shared/utils/dashboardLogic';
 import { evaluateView1, evaluateView2 } from '../../vaccine-1yr/utils/vaccineLogic';
 import { evaluateView1_2Yr, evaluateView2_2Yr } from '../../vaccine-2yr/utils/vaccineLogic';
@@ -252,7 +253,6 @@ export function UploadDashboard() {
 
   const [isSyncing, setIsSyncing] = useState(false);
   const handleSyncAll = async () => {
-    if (!confirm('การประมวลผลใหม่อาจใช้เวลาสักครู่ ต้องการดำเนินการต่อหรือไม่?')) return;
     setIsSyncing(true);
     try {
       const tables = ['Epi_1_Year', 'Epi_2_Year', 'Epi_3_Year', 'Epi_5_Year'];
@@ -435,9 +435,17 @@ export function UploadDashboard() {
               </div>
             </div>
             {!isUploading && (
-              <Button variant="outline" onClick={handleReset} className="font-medium">
-                ยกเลิก
-              </Button>
+              <ConfirmModal
+                title="ยกเลิกการนำเข้าข้อมูล"
+                description="คุณต้องการยกเลิกการนำเข้าข้อมูลและรีเซ็ตค่าทั้งหมดใช่หรือไม่?"
+                onConfirm={handleReset}
+                confirmText="ยืนยัน"
+                cancelText="ปิด"
+              >
+                <Button variant="outline" className="font-medium">
+                  ยกเลิก
+                </Button>
+              </ConfirmModal>
             )}
           </div>
 
@@ -502,10 +510,17 @@ export function UploadDashboard() {
                 </div>
                 
                 <div className="mt-6 flex justify-end">
-                  <Button onClick={handleUpload} size="lg" className="w-full sm:w-auto shadow-sm" disabled={!fiscalYear}>
-                    <UploadCloud className="mr-2 h-5 w-5" />
-                    เริ่มนำเข้า {totalRows.toLocaleString()} รายการ
-                  </Button>
+                  <ConfirmModal
+                    title="ยืนยันการนำเข้าข้อมูล"
+                    description={`คุณกำลังจะนำเข้าข้อมูลจำนวน ${totalRows.toLocaleString()} รายการ ข้อมูลเก่าในปีงบประมาณเดียวกันจะถูกอัปเดต ต้องการดำเนินการต่อหรือไม่?`}
+                    onConfirm={handleUpload}
+                    confirmText="เริ่มนำเข้า"
+                  >
+                    <Button size="lg" className="w-full sm:w-auto shadow-sm" disabled={!fiscalYear}>
+                      <UploadCloud className="mr-2 h-5 w-5" />
+                      เริ่มนำเข้า {totalRows.toLocaleString()} รายการ
+                    </Button>
+                  </ConfirmModal>
                 </div>
               </div>
             )}
@@ -522,21 +537,27 @@ export function UploadDashboard() {
             ใช้ปุ่มนี้เพื่อคำนวณและสร้าง Cache สำหรับหน้า Dashboard ใหม่ทั้งหมด (ทั้ง 4 กลุ่มอายุ) สำหรับปีงบประมาณ {fiscalYear} 
             โดยดึงข้อมูลล่าสุดจากฐานข้อมูล (ใช้ในกรณีที่ข้อมูลหน้า Dashboard ไม่ตรงกับฐานข้อมูล)
           </p>
-          <Button 
-            variant="outline" 
-            onClick={handleSyncAll} 
-            disabled={isSyncing || isUploading}
-            className="font-medium"
+          <ConfirmModal
+            title="ยืนยันการประมวลผลใหม่"
+            description="การประมวลผลใหม่อาจใช้เวลาสักครู่ ระบบจะสร้าง Cache ขึ้นมาใหม่เพื่อแสดงผลในหน้า Dashboard ต้องการดำเนินการต่อหรือไม่?"
+            onConfirm={handleSyncAll}
+            confirmText="ประมวลผล"
           >
-            {isSyncing ? (
-              <>
-                <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                กำลังประมวลผล...
-              </>
-            ) : (
-              'ประมวลผล Dashboard ใหม่ทั้งหมด'
-            )}
-          </Button>
+            <Button 
+              variant="outline" 
+              disabled={isSyncing || isUploading}
+              className="font-medium"
+            >
+              {isSyncing ? (
+                <>
+                  <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                  กำลังประมวลผล...
+                </>
+              ) : (
+                'ประมวลผล Dashboard ใหม่ทั้งหมด'
+              )}
+            </Button>
+          </ConfirmModal>
         </div>
       </div>
     </>

@@ -1,14 +1,12 @@
-import { useMemo, memo, useState } from 'react';
+import { memo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDashboardSummaries } from '../shared/hooks/useDashboardSummaries';
 import { useTargetSettings } from '../shared/hooks/useTargetSettings';
 import { SubNav } from '../widgets/layout/SubNav';
-import type { EpiRecord } from '../shared/types';
 import {
   ChevronRightIcon,
   ActivityIcon,
   TargetIcon,
-  DatabaseIcon,
   ChevronDownIcon,
   ChevronUpIcon,
 } from 'lucide-react';
@@ -166,7 +164,6 @@ const AgeGroupSection = memo(function AgeGroupSection({
 // Main Dashboard Page
 // ──────────────────────────────────────────────
 export function Dashboard() {
-  const navigate = useNavigate();
   const currentYear = new Date().getFullYear() + 543;
   const { getTarget } = useTargetSettings();
 
