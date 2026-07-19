@@ -13,6 +13,7 @@ import {
 
 import { AgeGroupExpandedView } from '../shared/components/AgeGroupExpandedView';
 import { calcGroupSummary } from '../shared/utils/dashboardLogic';
+import { formatDateTimeStr } from '../shared/utils/dateUtils';
 
 // ──────────────────────────────────────────────
 // AgeGroupSection Component
@@ -20,6 +21,7 @@ import { calcGroupSummary } from '../shared/utils/dashboardLogic';
 const AgeGroupSection = memo(function AgeGroupSection({
   age,
   summary,
+  updatedAt,
   targetView1,
   targetView2,
   isLoading,
@@ -27,6 +29,7 @@ const AgeGroupSection = memo(function AgeGroupSection({
 }: {
   age: string;
   summary: ReturnType<typeof calcGroupSummary>;
+  updatedAt?: string | null;
   targetView1: number;
   targetView2: number;
   isLoading: boolean;
@@ -54,7 +57,12 @@ const AgeGroupSection = memo(function AgeGroupSection({
       <div className="flex justify-between items-center mb-5">
         <div>
           <h2 className="text-xl font-bold text-zinc-900">ภาพรวมเด็กอายุครบ {age}</h2>
-          <p className="text-sm text-zinc-500 mt-1">เด็กเป้าหมายทั้งหมดในระบบ: <strong className="text-zinc-800">{summary.total.toLocaleString()}</strong> คน</p>
+          <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4 mt-1">
+            <p className="text-sm text-zinc-500">เด็กเป้าหมายทั้งหมดในระบบ: <strong className="text-zinc-800">{summary.total.toLocaleString()}</strong> คน</p>
+            {updatedAt && (
+              <p className="text-xs text-zinc-400 bg-zinc-100 px-2 py-0.5 rounded-full w-fit">ข้อมูล ณ วันที่: {formatDateTimeStr(updatedAt)}</p>
+            )}
+          </div>
         </div>
         <button 
           onClick={() => navigate(path)}
@@ -178,15 +186,18 @@ export function Dashboard() {
   const getSummary = (table: string) => {
     const found = summaries.find(s => s.targetTable === table);
     if (found && found.summaryData) {
-      return found.summaryData;
+      return { data: found.summaryData, updatedAt: found.updated_at };
     }
     // ส่งค่า Default กลับไปถ้ายังไม่มีข้อมูล Cache
     return {
-      total: 0,
-      view1Coverage: 0, view1PassedDoses: 0, view1TotalDoses: 0, view1Breakdown: {},
-      view2Coverage: 0, view2Passed: 0, view2Failed: 0, view2Breakdown: {},
-      facilityBreakdownV1: [],
-      facilityBreakdownV2: []
+      data: {
+        total: 0,
+        view1Coverage: 0, view1PassedDoses: 0, view1TotalDoses: 0, view1Breakdown: {},
+        view2Coverage: 0, view2Passed: 0, view2Failed: 0, view2Breakdown: {},
+        facilityBreakdownV1: [],
+        facilityBreakdownV2: []
+      },
+      updatedAt: null
     };
   };
 
@@ -205,7 +216,8 @@ export function Dashboard() {
         {/* ── Age Group Sections ── */}
         <AgeGroupSection
           age="1 ปี"
-          summary={summary1yr}
+          summary={summary1yr.data}
+          updatedAt={summary1yr.updatedAt}
           targetView1={targetView1}
           targetView2={targetView2}
           isLoading={isLoading}
@@ -214,7 +226,8 @@ export function Dashboard() {
         
         <AgeGroupSection
           age="2 ปี"
-          summary={summary2yr}
+          summary={summary2yr.data}
+          updatedAt={summary2yr.updatedAt}
           targetView1={targetView1}
           targetView2={targetView2}
           isLoading={isLoading}
@@ -223,7 +236,8 @@ export function Dashboard() {
 
         <AgeGroupSection
           age="3 ปี"
-          summary={summary3yr}
+          summary={summary3yr.data}
+          updatedAt={summary3yr.updatedAt}
           targetView1={targetView1}
           targetView2={targetView2}
           isLoading={isLoading}
@@ -232,7 +246,8 @@ export function Dashboard() {
 
         <AgeGroupSection
           age="5 ปี"
-          summary={summary5yr}
+          summary={summary5yr.data}
+          updatedAt={summary5yr.updatedAt}
           targetView1={targetView1}
           targetView2={targetView2}
           isLoading={isLoading}
