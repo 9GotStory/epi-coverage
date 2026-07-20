@@ -66,8 +66,9 @@ export function View2FullyImmunized({ fiscalYear, quarter, data, isLoading, erro
       // 1. Facility filter
       if (filterFacility !== 'all' && row.hoscode !== filterFacility) return false;
       // 2. Status filter
-      if (filterStatus === 'passed' && !row.evaluation.isFullyImmunized) return false;
-      if (filterStatus === 'failed' && row.evaluation.isFullyImmunized) return false;
+      if (filterStatus === 'passed' && row.evaluation.status !== 'PASS') return false;
+      if (filterStatus === 'pending' && row.evaluation.status !== 'PENDING') return false;
+      if (filterStatus === 'failed' && row.evaluation.status !== 'FAIL') return false;
       return true;
     });
   }, [processedData, filterFacility, filterStatus]);
@@ -124,8 +125,10 @@ export function View2FullyImmunized({ fiscalYear, quarter, data, isLoading, erro
       id: 'status',
       size: 500,
       cell: ({ row }) => {
-        const evaluation = row.original.evaluation;
-        if (evaluation.isFullyImmunized) {
+        const evaluation = row.evaluation; // For some reason it is accessed via row.original.evaluation usually, let me check the target content carefully
+        // Wait, the target content says: const evaluation = row.original.evaluation;
+        const ev = row.original.evaluation;
+        if (ev.status === 'PASS') {
           return (
             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 border border-green-200">
               <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
@@ -135,13 +138,26 @@ export function View2FullyImmunized({ fiscalYear, quarter, data, isLoading, erro
         }
         return (
           <div className="flex flex-col gap-1 items-start">
-            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 border border-red-200">
-              <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" /></svg>
-              ไม่ผ่านเกณฑ์ (ตกหล่น)
-            </span>
+            {ev.status === 'FAIL' ? (
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 border border-red-200">
+                <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" /></svg>
+                ไม่ผ่านเกณฑ์ (ตกหล่น)
+              </span>
+            ) : (
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800 border border-amber-200">
+                <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                ยังไม่ถึงเกณฑ์
+              </span>
+            )}
             <div className="flex flex-wrap gap-1 mt-1">
-              {evaluation.missingVaccines.map((v, i) => (
-                <span key={i} className="inline-flex px-1.5 py-0.5 rounded bg-red-50 text-red-600 text-[10px] font-medium border border-red-100 shadow-sm">
+              {ev.missingVaccines.map((v, i) => (
+                <span key={`m-${i}`} className="inline-flex px-1.5 py-0.5 rounded bg-red-50 text-red-600 text-[10px] font-medium border border-red-100 shadow-sm">
+                  {v}
+                </span>
+              ))}
+              {(ev.pendingVaccines || []).map((v, i) => (
+                <span key={`p-${i}`} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-zinc-100 text-zinc-600 text-[10px] font-medium border border-zinc-200 shadow-sm">
+                  <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                   {v}
                 </span>
               ))}
@@ -184,7 +200,11 @@ export function View2FullyImmunized({ fiscalYear, quarter, data, isLoading, erro
         'ชื่อ': row.name,
         'นามสกุล': row.lname,
         'วันเกิด': birthStr ? `${birthStr}\n(อายุ ${ageStr})` : '',
-        'ผลการประเมิน (Fully Immunized)': row.evaluation.isFullyImmunized ? 'ผ่านเกณฑ์' : `ตกหล่น: ${missingStr}`
+        'ผลการประเมิน (Fully Immunized)': row.evaluation.status === 'PASS' 
+          ? 'ผ่านเกณฑ์' 
+          : (row.evaluation.status === 'FAIL' 
+            ? `ตกหล่น: ${row.evaluation.missingVaccines.join(', ')}` 
+            : `ยังไม่ถึงเกณฑ์: ${(row.evaluation.pendingVaccines || []).join(', ')}`)
       };
     });
     exportToExcel(exportData, `EPI_View2_FullyImmunized1Yr_${new Date().getTime()}`);
@@ -202,7 +222,11 @@ export function View2FullyImmunized({ fiscalYear, quarter, data, isLoading, erro
         'CID': row.cid,
         'ชื่อ-สกุล': `${row.name} ${row.lname}`,
         'วันเกิด': birthStr ? `${birthStr}\n(อายุ ${ageStr})` : '',
-        'ผลการประเมิน': row.evaluation.isFullyImmunized ? 'ผ่านเกณฑ์' : `ตกหล่น: ${missingStr}`
+        'ผลการประเมิน': row.evaluation.status === 'PASS' 
+          ? 'ผ่านเกณฑ์' 
+          : (row.evaluation.status === 'FAIL' 
+            ? `ตกหล่น: ${row.evaluation.missingVaccines.join(', ')}` 
+            : `ยังไม่ถึงเกณฑ์: ${(row.evaluation.pendingVaccines || []).join(', ')}`)
       };
     });
     const quarterLabel = quarter === 'all' ? `ภาพรวมทั้งปีงบประมาณ ${fiscalYear}` : `ไตรมาส ${quarter}/${fiscalYear}`;
@@ -251,8 +275,9 @@ export function View2FullyImmunized({ fiscalYear, quarter, data, isLoading, erro
             className="px-3 py-2 bg-white border border-zinc-200 rounded-lg text-sm shadow-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
           >
             <option value="all">ผลการประเมินทั้งหมด</option>
-            <option value="passed">ผ่านเกณฑ์ (Fully Immunized)</option>
-            <option value="failed">ยังไม่ผ่านเกณฑ์ (ตกหล่น)</option>
+            <option value="passed">ผ่านเกณฑ์ Fully Immunized</option>
+            <option value="pending">ยังไม่ถึงเกณฑ์ (รอรับบริการ)</option>
+            <option value="failed">ไม่ผ่านเกณฑ์ (ตกหล่น)</option>
           </select>
 
           {/* Export Buttons */}

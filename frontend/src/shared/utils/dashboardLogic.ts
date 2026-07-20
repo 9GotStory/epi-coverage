@@ -32,83 +32,108 @@ export function calcGroupSummary(
   let view1PassedDoses = 0;
   let view1TotalDoses = 0;
   let view2Passed = 0;
+  let view2Total = 0; // NEW: track applicable total for view 2
   
   const view1Details: Record<string, number> = {};
+  const view1TargetDetails: Record<string, number> = {}; // NEW: track applicable target per vaccine
   const view2Details: Record<string, number> = {};
+  const view2TargetDetails: Record<string, number> = {}; // NEW: track applicable target per vaccine
   const facilityMap: Record<string, { hosname: string; totalV2: number; passedV2: number; totalV1: number; passedV1: number }> = {};
 
   for (const r of filtered) {
     const v1 = evalView1Fn(r);
-    // ถ้ามี passedCount ให้ใช้คำนวณแบบโดสรวม, ถ้าไม่มีให้ถือว่า 1 คน = 1 โดส
+    const hoscode = r.hoscode || 'unknown';
+    if (!facilityMap[hoscode]) {
+      facilityMap[hoscode] = { hosname: r.hosname || hoscode, totalV2: 0, passedV2: 0, totalV1: 0, passedV1: 0 };
+    }
+
     if (v1.passedCount !== undefined && v1.results) {
       view1PassedDoses += v1.passedCount;
-      view1TotalDoses += Object.keys(v1.results).length;
+      const applicableCount = Object.keys(v1.results).length - (v1.pendingVaccines?.length || 0);
+      view1TotalDoses += applicableCount;
+      facilityMap[hoscode].passedV1 += v1.passedCount;
+      facilityMap[hoscode].totalV1 += applicableCount;
       
       // Aggregate each individual vaccine in View 1
       for (const [vac, passed] of Object.entries(v1.results)) {
         if (!view1Details[vac]) view1Details[vac] = 0;
+        if (!view1TargetDetails[vac]) view1TargetDetails[vac] = 0;
+        
+        // ถ้าเป็น pending จะไม่เอามาคิดเป็นตัวหาร
+        if (v1.pendingVaccines?.includes(vac)) continue;
+        
+        view1TargetDetails[vac]++;
         if (passed) view1Details[vac]++;
       }
     } else {
       view1PassedDoses += v1.missingVaccines.length === 0 ? 1 : 0;
       view1TotalDoses += 1;
+      facilityMap[hoscode].passedV1 += v1.missingVaccines.length === 0 ? 1 : 0;
+      facilityMap[hoscode].totalV1 += 1;
     }
 
     const v2 = evalView2Fn(r);
-    if (v2.isFullyImmunized) view2Passed++;
     
-    // Initialize all view 2 vaccines
-    if (v2.passedVaccines) {
-      for (const vac of v2.passedVaccines) {
-        if (view2Details[vac] === undefined) view2Details[vac] = 0;
+    // ถ้ามี pendingVaccines ใน View 2 แปลว่าอายุยังไม่ถึงเกณฑ์การประเมินภาพรวม ให้ข้ามการประเมิน (ไม่นับเป็นตัวหาร)
+    const v2Applicable = !(v2.pendingVaccines && v2.pendingVaccines.length > 0);
+    
+    if (v2Applicable) {
+      view2Total++;
+      if (v2.isFullyImmunized) view2Passed++;
+      facilityMap[hoscode].totalV2 += 1;
+      if (v2.isFullyImmunized) facilityMap[hoscode].passedV2 += 1;
+      
+      // Initialize all view 2 vaccines
+      if (v2.passedVaccines) {
+        for (const vac of v2.passedVaccines) {
+          if (view2Details[vac] === undefined) view2Details[vac] = 0;
+          if (view2TargetDetails[vac] === undefined) view2TargetDetails[vac] = 0;
+        }
       }
-    }
-    if (v2.missingVaccines) {
-      for (const vac of v2.missingVaccines) {
-        if (view2Details[vac] === undefined) view2Details[vac] = 0;
+      if (v2.missingVaccines) {
+        for (const vac of v2.missingVaccines) {
+          if (view2Details[vac] === undefined) view2Details[vac] = 0;
+          if (view2TargetDetails[vac] === undefined) view2TargetDetails[vac] = 0;
+        }
       }
-    }
 
-    // Aggregate each group in View 2
-    if (v2.passedVaccines) {
-      for (const vac of v2.passedVaccines) {
-        view2Details[vac]++;
+      // Aggregate each group in View 2
+      if (v2.passedVaccines) {
+        for (const vac of v2.passedVaccines) {
+          view2Details[vac]++;
+          view2TargetDetails[vac]++;
+        }
       }
-    }
-    
-    // Aggregate by Facility
-    const hoscode = r.hoscode || 'unknown';
-    if (!facilityMap[hoscode]) {
-      facilityMap[hoscode] = { hosname: r.hosname || hoscode, totalV2: 0, passedV2: 0, totalV1: 0, passedV1: 0 };
-    }
-    facilityMap[hoscode].totalV2 += 1;
-    if (v2.isFullyImmunized) facilityMap[hoscode].passedV2 += 1;
-    
-    if (v1.passedCount !== undefined && v1.results) {
-      facilityMap[hoscode].passedV1 += v1.passedCount;
-      facilityMap[hoscode].totalV1 += Object.keys(v1.results).length;
-    } else {
-      facilityMap[hoscode].passedV1 += v1.missingVaccines.length === 0 ? 1 : 0;
-      facilityMap[hoscode].totalV1 += 1;
+      if (v2.missingVaccines) {
+        for (const vac of v2.missingVaccines) {
+          view2TargetDetails[vac]++;
+        }
+      }
     }
   }
 
   const view1Coverage = view1TotalDoses > 0 ? (view1PassedDoses / view1TotalDoses) * 100 : 0;
-  const view2Coverage = total > 0 ? (view2Passed / total) * 100 : 0;
+  const view2Coverage = view2Total > 0 ? (view2Passed / view2Total) * 100 : 0;
   
-  const view1Breakdown = Object.entries(view1Details).map(([name, passed]) => ({
-    name,
-    passed,
-    total,
-    coverage: total > 0 ? (passed / total) * 100 : 0
-  })).sort((a, b) => b.coverage - a.coverage);
+  const view1Breakdown = Object.entries(view1Details).map(([name, passed]) => {
+    const targetTotal = view1TargetDetails[name] || 0;
+    return {
+      name,
+      passed,
+      total: targetTotal,
+      coverage: targetTotal > 0 ? (passed / targetTotal) * 100 : 0
+    };
+  }).sort((a, b) => b.coverage - a.coverage);
 
-  const view2Breakdown = Object.entries(view2Details).map(([name, passed]) => ({
-    name,
-    passed,
-    total,
-    coverage: total > 0 ? (passed / total) * 100 : 0
-  })).sort((a, b) => b.coverage - a.coverage);
+  const view2Breakdown = Object.entries(view2Details).map(([name, passed]) => {
+    const targetTotal = view2TargetDetails[name] || 0;
+    return {
+      name,
+      passed,
+      total: targetTotal,
+      coverage: targetTotal > 0 ? (passed / targetTotal) * 100 : 0
+    };
+  }).sort((a, b) => b.coverage - a.coverage);
   
   const facilityBreakdownV1 = Object.entries(facilityMap).map(([hoscode, fac]) => ({
     hoscode,

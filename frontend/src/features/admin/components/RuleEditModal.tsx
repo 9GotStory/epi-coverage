@@ -46,6 +46,7 @@ const ruleSchema = z.object({
   branch_alt_fields: z.array(z.object({ value: z.string().min(1, "ห้ามเว้นว่าง") })).optional(),
   is_active: z.boolean(),
   is_required_for_v2: z.boolean(),
+  target_age_months: z.number().nullable().optional(),
   note: z.string().optional(),
 }).refine(
   (data) => {
@@ -85,6 +86,7 @@ export function RuleEditModal({ rule, isOpen, onClose, onSave, fiscalYear, ageGr
       branch_alt_fields: [],
       is_active: true,
       is_required_for_v2: true,
+      target_age_months: null,
       note: "",
     },
   });
@@ -122,6 +124,7 @@ export function RuleEditModal({ rule, isOpen, onClose, onSave, fiscalYear, ageGr
           branch_alt_fields: rule.branch_alt_fields?.map((f) => ({ value: f })) || [],
           is_active: rule.is_active ?? true,
           is_required_for_v2: rule.is_required_for_v2 ?? true,
+          target_age_months: rule.target_age_months ?? null,
           note: rule.note || "",
         });
       } else {
@@ -188,6 +191,7 @@ export function RuleEditModal({ rule, isOpen, onClose, onSave, fiscalYear, ageGr
       branch_alt_fields: data.branch_alt_fields?.map((f) => f.value.trim()) || [],
       is_active: data.is_active,
       is_required_for_v2: data.is_required_for_v2,
+      target_age_months: data.target_age_months ?? undefined,
       note: data.note,
     };
 
@@ -233,7 +237,7 @@ export function RuleEditModal({ rule, isOpen, onClose, onSave, fiscalYear, ageGr
               )}
             />
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <FormField
                 control={form.control}
                 name="vaccine_group"
@@ -254,8 +258,29 @@ export function RuleEditModal({ rule, isOpen, onClose, onSave, fiscalYear, ageGr
                   <FormItem>
                     <FormLabel>รหัส HDC (ถ้ามี)</FormLabel>
                     <FormControl>
-                      <Input placeholder="เช่น 061, 093" {...field} />
+                      <Input placeholder="เช่น 041, 091" {...field} />
                     </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="target_age_months"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>อายุเป้าหมาย (เดือน)</FormLabel>
+                    <FormControl>
+                      <Input 
+                        type="number" 
+                        placeholder="เช่น 2, 6, 9" 
+                        value={field.value ?? ""} 
+                        onChange={e => field.onChange(e.target.value ? parseInt(e.target.value) : null)}
+                      />
+                    </FormControl>
+                    <FormDescription className="text-xs">
+                      (ปล่อยว่างใช้ค่าตั้งต้น)
+                    </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}

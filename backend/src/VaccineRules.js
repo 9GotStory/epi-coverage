@@ -99,6 +99,7 @@ function saveVaccineRule(rule, adminEmail) {
       case 'branch_alt_fields': return branchAltFieldsJson;
       case 'is_required_for_v2': return rule.is_required_for_v2 !== false;
       case 'is_active': return rule.is_active !== false;
+      case 'target_age_months': return rule.target_age_months !== undefined ? rule.target_age_months : '';
       case 'note': return rule.note || '';
       case 'updated_at': return now;
       case 'updated_by': return adminEmail || '';
@@ -163,6 +164,7 @@ function batchSaveRules(fiscalYear, ageGroup, rules, adminEmail) {
         case 'branch_alt_fields': return JSON.stringify(rule.branch_alt_fields || []);
         case 'is_required_for_v2': return rule.is_required_for_v2 !== false;
         case 'is_active': return rule.is_active !== false;
+        case 'target_age_months': return rule.target_age_months !== undefined ? rule.target_age_months : '';
         case 'note': return rule.note || '';
         case 'updated_at': return now;
         case 'updated_by': return adminEmail || '';

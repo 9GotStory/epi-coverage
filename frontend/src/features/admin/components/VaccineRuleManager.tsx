@@ -6,8 +6,9 @@ import { useVaccineRules } from '../../../shared/hooks/useVaccineRules';
 import { fetchApi } from '../../../shared/lib/api';
 import { toast } from 'sonner';
 import { RuleEditModal } from './RuleEditModal';
-import { Pencil, ArrowRight, ArrowDown } from 'lucide-react';
+import { Pencil, ArrowRight, ArrowDown, Wand2 } from 'lucide-react';
 import type { VaccineRule } from '../../../shared/utils/vaccine/ruleEngine';
+import { TARGET_AGE_MONTHS_MAP } from '../../../shared/utils/vaccine/ruleEngine';
 import { getCurrentFiscalYear } from '../../../shared/utils/dateUtils';
 import { useAvailableYears } from '../../../shared/hooks/useAvailableYears';
 import { useQueryClient } from '@tanstack/react-query';
@@ -123,6 +124,40 @@ export const VaccineRuleManager = ({ onDirtyChange }: VaccineRuleManagerProps) =
     setDraftRules(newRules);
     setHasUnsavedChanges(true);
     setEditingRule(null);
+  };
+
+  const handleAutoSetTargetAge = () => {
+    const currentRules = draftRules || rules;
+    let hasChanges = false;
+    const newRules = currentRules.map(rule => {
+      // Safely convert to string before splitting, as some APIs might return numbers
+      const hdcCodeStr = rule.hdc_code ? String(rule.hdc_code) : '';
+      const codes = hdcCodeStr.split(/[-,\/\s]+/).map(c => c.trim().padStart(3, '0')).filter(Boolean);
+      
+      let maxAge = -1;
+      for (const code of codes) {
+        if (TARGET_AGE_MONTHS_MAP[code] !== undefined) {
+          maxAge = Math.max(maxAge, TARGET_AGE_MONTHS_MAP[code]);
+        }
+      }
+      
+      if (maxAge === -1) return rule;
+      const targetAge = maxAge;
+      
+      if (rule.target_age_months !== targetAge) {
+        hasChanges = true;
+        return { ...rule, target_age_months: targetAge };
+      }
+      return rule;
+    });
+
+    if (hasChanges) {
+      setDraftRules(newRules);
+      setHasUnsavedChanges(true);
+      toast.success('อัปเดตอายุเป้าหมายจากค่าเริ่มต้นสำเร็จ! โปรดกดยืนยันบันทึกเพื่อบันทึกลงฐานข้อมูล');
+    } else {
+      toast.info('อายุเป้าหมายทุกเกณฑ์ถูกตั้งค่าไว้ตรงกับค่าเริ่มต้นอยู่แล้ว');
+    }
   };
 
   const handleBatchSaveClick = () => {
@@ -244,6 +279,20 @@ export const VaccineRuleManager = ({ onDirtyChange }: VaccineRuleManagerProps) =
               </SelectContent>
             </Select>
           </div>
+          
+          {displayRules.length > 0 && (
+            <div className="flex items-end mb-1">
+              <Button 
+                variant="outline" 
+                onClick={handleAutoSetTargetAge}
+                className="bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100 hover:text-purple-800"
+                disabled={isProcessing}
+              >
+                <Wand2 className="w-4 h-4 mr-2" />
+                อัปเดตอายุเป้าหมาย (Auto)
+              </Button>
+            </div>
+          )}
         </div>
 
         {isLoading ? (
@@ -439,6 +488,7 @@ export const VaccineRuleManager = ({ onDirtyChange }: VaccineRuleManagerProps) =
                           {hasNameChange && renderStringDiff("ชื่อเกณฑ์", original.display_name, draft.display_name)}
                           {original.vaccine_group !== draft.vaccine_group && renderStringDiff("กลุ่มวัคซีน", original.vaccine_group || '-', draft.vaccine_group || '-')}
                           {original.hdc_code !== draft.hdc_code && renderStringDiff("รหัส HDC", original.hdc_code || '-', draft.hdc_code || '-')}
+                          {original.target_age_months !== draft.target_age_months && renderStringDiff("อายุเป้าหมาย (เดือน)", original.target_age_months?.toString() || 'ค่าตั้งต้น', draft.target_age_months?.toString() || 'ค่าตั้งต้น')}
                           {original.logic_type !== draft.logic_type && renderStringDiff("เงื่อนไข (Logic)", original.logic_type, draft.logic_type)}
                           {original.view_type !== draft.view_type && renderStringDiff("มุมมอง (View)", `View ${original.view_type}`, `View ${draft.view_type}`)}
                           {original.is_active !== draft.is_active && renderStringDiff("สถานะ", original.is_active ? 'Active' : 'Inactive', draft.is_active ? 'Active' : 'Inactive')}

@@ -94,7 +94,9 @@ export interface EpiRecord {
 }
 
 export interface VaccineStatus {
-  isFullyImmunized: boolean;
+  isFullyImmunized: boolean; // Keep for backward compatibility initially, though status replaces it
+  status?: 'PASS' | 'FAIL' | 'PENDING';
   missingVaccines: string[];
+  pendingVaccines?: string[];
   passedVaccines: string[];
 }

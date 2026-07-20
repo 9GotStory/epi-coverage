@@ -5,6 +5,7 @@ import { isValidVaccineDate } from '../../../shared/utils/dateUtils';
 export interface View1Evaluation {
   passedCount: number;
   missingVaccines: string[];
+  pendingVaccines?: string[]; // วัคซีนที่อายุยังไม่ถึงเกณฑ์
   results: Record<string, boolean>; // key เป็นชื่อวัคซีน, value เป็น boolean ว่าผ่านหรือไม่
 }
 

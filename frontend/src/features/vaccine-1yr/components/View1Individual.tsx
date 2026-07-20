@@ -26,7 +26,8 @@ function shortenFacilityName(name: string) {
 
 type ProcessedView1Record = EpiRecord & {
   missingVaccines: string[];
-  isPassedAll: boolean;
+  pendingVaccines: string[];
+  status: 'PASS' | 'FAIL' | 'PENDING';
 };
 
 interface View1Props {
@@ -59,10 +60,17 @@ export function View1Individual({ fiscalYear, quarter, data, isLoading, error, a
 
     return cohort.map(record => {
       const evaluation = evalFn(record);
+      const pending = evaluation.pendingVaccines || [];
+      const missing = evaluation.missingVaccines || [];
+      let status: 'PASS' | 'FAIL' | 'PENDING' = 'PASS';
+      if (missing.length > 0) status = 'FAIL';
+      else if (pending.length > 0) status = 'PENDING';
+      
       return {
         ...record,
-        missingVaccines: evaluation.missingVaccines,
-        isPassedAll: evaluation.missingVaccines.length === 0
+        missingVaccines: missing,
+        pendingVaccines: pending,
+        status: status
       };
     });
   }, [data, fiscalYear, quarter, rules]);
@@ -72,8 +80,9 @@ export function View1Individual({ fiscalYear, quarter, data, isLoading, error, a
       // 1. Facility filter
       if (filterFacility !== 'all' && row.hoscode !== filterFacility) return false;
       // 2. Status filter
-      if (filterStatus === 'passed' && !row.isPassedAll) return false;
-      if (filterStatus === 'failed' && row.isPassedAll) return false;
+      if (filterStatus === 'passed' && row.status !== 'PASS') return false;
+      if (filterStatus === 'pending' && row.status !== 'PENDING') return false;
+      if (filterStatus === 'failed' && row.status !== 'FAIL') return false;
       return true;
     });
   }, [processedData, filterFacility, filterStatus]);
@@ -127,7 +136,7 @@ export function View1Individual({ fiscalYear, quarter, data, isLoading, error, a
       id: 'status',
       size: 500,
       cell: ({ row }) => {
-        if (row.original.isPassedAll) {
+        if (row.original.status === 'PASS') {
           return (
             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 border border-green-200">
               <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
@@ -137,13 +146,26 @@ export function View1Individual({ fiscalYear, quarter, data, isLoading, error, a
         }
         return (
           <div className="flex flex-col gap-1 items-start">
-            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 border border-red-200">
-              <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" /></svg>
-              ไม่ผ่านเกณฑ์ (ตกหล่น)
-            </span>
+            {row.original.status === 'FAIL' ? (
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 border border-red-200">
+                <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" /></svg>
+                ไม่ผ่านเกณฑ์ (ตกหล่น)
+              </span>
+            ) : (
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800 border border-amber-200">
+                <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                ยังไม่ถึงเกณฑ์
+              </span>
+            )}
             <div className="flex flex-wrap gap-1 mt-1">
               {row.original.missingVaccines.map((v, i) => (
-                <span key={i} className="inline-flex px-1.5 py-0.5 rounded bg-red-50 text-red-600 text-[10px] font-medium border border-red-100 shadow-sm">
+                <span key={`m-${i}`} className="inline-flex px-1.5 py-0.5 rounded bg-red-50 text-red-600 text-[10px] font-medium border border-red-100 shadow-sm">
+                  {v}
+                </span>
+              ))}
+              {row.original.pendingVaccines.map((v, i) => (
+                <span key={`p-${i}`} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-zinc-100 text-zinc-600 text-[10px] font-medium border border-zinc-200 shadow-sm">
+                  <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                   {v}
                 </span>
               ))}
@@ -186,7 +208,11 @@ export function View1Individual({ fiscalYear, quarter, data, isLoading, error, a
         'ชื่อ': row.name,
         'นามสกุล': row.lname,
         'วันเกิด': birthStr ? `${birthStr}\n(อายุ ${ageStr})` : '',
-        'ผลการประเมิน': missingStr.length === 0 ? `ได้รับวัคซีนครบถ้วน (${v1RulesCount} รายการ)` : `ตกหล่น: ${missingStr}`
+        'ผลการประเมิน': row.status === 'PASS' 
+          ? `ได้รับวัคซีนครบถ้วน (${v1RulesCount} รายการ)` 
+          : (row.status === 'FAIL' 
+            ? `ตกหล่น: ${row.missingVaccines.join(', ')}` 
+            : `ยังไม่ถึงเกณฑ์: ${row.pendingVaccines.join(', ')}`)
       };
     });
     exportToExcel(exportData, `EPI_View1_Tracking_${new Date().getTime()}`);
@@ -204,7 +230,11 @@ export function View1Individual({ fiscalYear, quarter, data, isLoading, error, a
         'CID': row.cid,
         'ชื่อ-สกุล': `${row.name} ${row.lname}`,
         'วันเกิด': birthStr ? `${birthStr}\n(อายุ ${ageStr})` : '',
-        'ผลการประเมิน': missingStr.length === 0 ? 'ครบถ้วน' : `ตกหล่น: ${missingStr}`
+        'ผลการประเมิน': row.status === 'PASS' 
+          ? `ได้รับวัคซีนครบถ้วน (${v1RulesCount} รายการ)` 
+          : (row.status === 'FAIL' 
+            ? `ตกหล่น: ${row.missingVaccines.join(', ')}` 
+            : `ยังไม่ถึงเกณฑ์: ${row.pendingVaccines.join(', ')}`)
       };
     });
     const quarterLabel = quarter === 'all' ? `ภาพรวมทั้งปีงบประมาณ ${fiscalYear}` : `ไตรมาส ${quarter}/${fiscalYear}`;
@@ -254,6 +284,7 @@ export function View1Individual({ fiscalYear, quarter, data, isLoading, error, a
           >
             <option value="all">สถานะการรับวัคซีนทั้งหมด</option>
             <option value="passed">ได้รับวัคซีนครบถ้วน ({v1RulesCount} รายการ)</option>
+            <option value="pending">ยังไม่ถึงเกณฑ์ (รอรับบริการ)</option>
             <option value="failed">ยังได้รับวัคซีนไม่ครบถ้วน (ตกหล่น)</option>
           </select>
 
