@@ -3,10 +3,14 @@ import { InfoIcon, FileSpreadsheetIcon, FileTextIcon } from 'lucide-react';
 import type { ColumnDef } from '@tanstack/react-table';
 
 import { evaluateView1_3Yr } from '../../../shared/utils/vaccine/vaccine-3yr';
+import { evaluateDynamicV1 } from '../../../shared/utils/vaccine/ruleEngine';
+import type { VaccineStatus } from '../../../shared/types';
 import { formatDateTimeStr, getBirthDateRangeForQuarter, getAgeInMonths } from '../../../shared/utils/dateUtils';
 import type { EpiRecord } from '../../../shared/types';
 import { EpiDataTable } from '../../../shared/components/EpiDataTable';
 import { exportToExcel, exportToPdf } from '../../../shared/exportUtils';
+import { useVaccineRules } from '../../../shared/hooks/useVaccineRules';
+import { DynamicVaccineGuide } from '../../../shared/components/DynamicVaccineGuide';
 
 // Helper for abbreviation
 function shortenFacilityName(name: string) {
@@ -38,6 +42,7 @@ interface View1Props {
 export function View1Individual3Yr({ fiscalYear, quarter, data, isLoading, error, asOfDate }: View1Props) {
   const [filterFacility, setFilterFacility] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
+  const { rules } = useVaccineRules(fiscalYear, '3yr');
 
   const processedData = useMemo(() => {
     // 1. Filter cohort by Fiscal Year and Quarter
@@ -48,16 +53,18 @@ export function View1Individual3Yr({ fiscalYear, quarter, data, isLoading, error
       return bDate >= start && bDate <= end;
     });
 
-    // 2. Evaluate 20 criteria
+    // 2. Evaluate criteria
+    const evalFn = rules && rules.length > 0 ? (r: EpiRecord) => evaluateDynamicV1(r, rules) : evaluateView1_3Yr;
+
     return cohort.map(record => {
-      const evaluation = evaluateView1_3Yr(record);
+      const evaluation = evalFn(record);
       return {
         ...record,
         missingVaccines: evaluation.missingVaccines,
         isPassedAll: evaluation.missingVaccines.length === 0
       };
     });
-  }, [data, fiscalYear, quarter]);
+  }, [data, fiscalYear, quarter, rules]);
 
   const filteredData = useMemo(() => {
     return processedData.filter((row) => {
@@ -167,7 +174,7 @@ export function View1Individual3Yr({ fiscalYear, quarter, data, isLoading, error
   // Handle Export
   const handleExportExcel = () => {
     const exportData = filteredData.map(row => {
-      const missingStr = evaluateView1_3Yr(row).missingVaccines.join(', ');
+      const missingStr = row.missingVaccines.join(', ');
       const age = getAgeInMonths(row.birth);
       const ageStr = age >= 12 ? `${Math.floor(age / 12)} ปี ${age % 12} เดือน` : `${age} เดือน`;
       const birthStr = row.birth ? new Date(row.birth as string).toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric' }) : '';
@@ -186,7 +193,7 @@ export function View1Individual3Yr({ fiscalYear, quarter, data, isLoading, error
 
   const handleExportPdf = () => {
     const exportData = filteredData.map(row => {
-      const missingStr = evaluateView1_3Yr(row).missingVaccines.join(', ');
+      const missingStr = row.missingVaccines.join(', ');
       const age = getAgeInMonths(row.birth);
       const ageStr = age >= 12 ? `${Math.floor(age / 12)} ปี ${age % 12} เดือน` : `${age} เดือน`;
       const birthStr = row.birth ? new Date(row.birth as string).toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric' }) : '';
@@ -279,21 +286,28 @@ export function View1Individual3Yr({ fiscalYear, quarter, data, isLoading, error
             เพื่อสนับสนุนการปฏิบัติงานของเจ้าหน้าที่ในการ <strong>ติดตามเด็กอายุครบ 3 ปีที่ยังไม่ได้รับวัคซีนสมองอักเสบเจอี</strong> ได้อย่างแม่นยำ 
             (หมายเหตุ: เด็ก 1 รายอาจขาดวัคซีนในมุมมองนี้ แต่หากเคยได้รับวัคซีนตัวอื่นๆ ตอนอายุ 1-2 ปีไม่ครบ ก็อาจจะไม่ผ่านเกณฑ์ตัวชี้วัด Fully Immunized ในภาพรวมได้เช่นกัน)
           </p>
-          <div className="bg-white/70 p-4 rounded-lg border border-blue-100/50 mt-3 text-xs shadow-sm">
-            <p className="font-semibold mb-3 text-blue-900 border-b border-blue-100 pb-2">
-              คู่มือและเกณฑ์ประเมินรหัสวัคซีนรวม HDC (ปรับปรุงปี 2569) สำหรับเด็ก 3 ปี
-            </p>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-3 text-blue-800">
-              <div className="flex flex-col gap-0.5">
-                <span className="font-medium text-blue-900">LAJE (สมองอักเสบเจอี ชนิดเชื้อเป็น)</span>
-                <span className="text-[11px] text-blue-700">วิธีบันทึกใน HIS: เลือกลงเป็น <strong>LAJE เข็ม 2</strong> (รหัส 43 แฟ้ม: <code className="bg-blue-100 px-1 py-0.5 rounded font-mono text-[10px]">J12 หรือ 053</code>)</span>
+          <DynamicVaccineGuide 
+            rules={rules} 
+            viewType={1} 
+            title="คู่มือและเกณฑ์ประเมินรหัสวัคซีนรวม HDC (ปรับปรุงปี 2569) สำหรับเด็ก 3 ปี"
+            fallbackContent={
+              <div className="bg-white/70 p-4 rounded-lg border border-blue-100/50 mt-3 text-xs shadow-sm">
+                <p className="font-semibold mb-3 text-blue-900 border-b border-blue-100 pb-2">
+                  คู่มือและเกณฑ์ประเมินรหัสวัคซีนรวม HDC (ปรับปรุงปี 2569) สำหรับเด็ก 3 ปี
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-3 text-blue-800">
+                  <div className="flex flex-col gap-0.5">
+                    <span className="font-medium text-blue-900">LAJE (สมองอักเสบเจอี ชนิดเชื้อเป็น)</span>
+                    <span className="text-[11px] text-blue-700">วิธีบันทึกใน HIS: เลือกลงเป็น <strong>LAJE เข็ม 2</strong> (รหัส 43 แฟ้ม: <code className="bg-blue-100 px-1 py-0.5 rounded font-mono text-[10px]">J12 หรือ 053</code>)</span>
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    <span className="font-medium text-blue-900">JE (สมองอักเสบเจอี ชนิดเชื้อตาย)</span>
+                    <span className="text-[11px] text-blue-700">วิธีบันทึกใน HIS: เลือกลงเป็น <strong>JE เข็ม 3</strong> (รหัส 43 แฟ้ม: <code className="bg-blue-100 px-1 py-0.5 rounded font-mono text-[10px]">JE3</code>)</span>
+                  </div>
+                </div>
               </div>
-              <div className="flex flex-col gap-0.5">
-                <span className="font-medium text-blue-900">JE (สมองอักเสบเจอี ชนิดเชื้อตาย)</span>
-                <span className="text-[11px] text-blue-700">วิธีบันทึกใน HIS: เลือกลงเป็น <strong>JE เข็ม 3</strong> (รหัส 43 แฟ้ม: <code className="bg-blue-100 px-1 py-0.5 rounded font-mono text-[10px]">JE3</code>)</span>
-              </div>
-            </div>
-          </div>
+            }
+          />
         </div>
       </div>
 

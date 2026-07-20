@@ -5,21 +5,33 @@
  */
 function upsertEpiData(chunk, batchId, adminEmail, fiscalYear, targetTable = 'Epi_1_Year') {
   const ss = getSpreadsheet();
-  // ใช้ Sheet แบบแยกปี (Epi_1_Year_2568) เสมอ ถ้าไม่มีให้สร้างอัตโนมัติ
-  const sheetName = fiscalYear ? `${targetTable}_${fiscalYear}` : targetTable;
+  // ใช้ Sheet หลักตามที่ตกลงกันไว้ ไม่แยก Sheet ตามปี
+  const sheetName = targetTable;
   let sheet = ss.getSheetByName(sheetName);
   
   if (!sheet) {
     // สร้าง Sheet ใหม่อัตโนมัติพร้อม Headers ที่ถูกต้อง
-    const setupResult = setupEpiSheetForYear(fiscalYear);
-    if (!setupResult.success) {
-      return { success: false, error: `Failed to create sheet: ${sheetName}` };
+    const schemas = getEpiSchemas();
+    if (!schemas[sheetName]) {
+      return { success: false, error: `Unknown target table: ${sheetName}` };
     }
-    sheet = ss.getSheetByName(sheetName);
+    sheet = setupSheetWithHeaders(ss, sheetName, schemas[sheetName], true);
   }
+  let headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
   
-  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
-  
+  // Auto-migrate schema (Append missing columns to legacy sheets)
+  const schemas = getEpiSchemas();
+  const expectedHeaders = schemas[sheetName];
+  if (expectedHeaders) {
+    const missingHeaders = expectedHeaders.filter(h => !headers.includes(h));
+    if (missingHeaders.length > 0) {
+      const newHeaders = [...headers, ...missingHeaders];
+      sheet.getRange(1, 1, 1, newHeaders.length).setValues([newHeaders]);
+      sheet.getRange(1, 1, 1, newHeaders.length).setFontWeight('bold').setBackground('#f3f3f3');
+      headers = newHeaders;
+    }
+  }
+
   // Find indices for composite key
   const iHoscode = headers.indexOf('hoscode');
   const iPid = headers.indexOf('pid');
@@ -100,8 +112,8 @@ function cleanupEpiData(batchId, touchedHoscodes, adminEmail, fiscalYear, target
   }
 
   const ss = getSpreadsheet();
-  // ใช้ Sheet แบบแยกปี เหมือนกันกับ upsertEpiData
-  const sheetName = fiscalYear ? `${targetTable}_${fiscalYear}` : targetTable;
+  // ใช้ Sheet หลักตามที่ตกลงกันไว้ ไม่แยก Sheet ตามปี
+  const sheetName = targetTable;
   let sheet = ss.getSheetByName(sheetName);
   
   if (!sheet) {

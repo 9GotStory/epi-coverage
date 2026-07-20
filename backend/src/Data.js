@@ -67,9 +67,8 @@ function upsertFacility(hoscode, hosname, isActive, adminEmail) {
  */
 function getEpiData(hoscode, targetTable = 'Epi_1_Year', fiscalYear = null) {
   const ss = getSpreadsheet();
-  // ถ้าระบุ fiscalYear → ใช้ Sheet แบบแยกปี (Epi_1_Year_2568)
-  // ถ้าไม่ระบุ → ใช้ targetTable ตรงๆ (Backward Compatible)
-  const sheetName = fiscalYear ? `${targetTable}_${fiscalYear}` : targetTable;
+  // ใช้ตาราง Base ตรงๆ (เช่น Epi_1_Year) ตามที่ตกลงกันไว้ ไม่แยก Sheet ตามปี
+  const sheetName = targetTable;
   let sheet = ss.getSheetByName(sheetName);
   
   if (!sheet) {
@@ -87,8 +86,14 @@ function getEpiData(hoscode, targetTable = 'Epi_1_Year', fiscalYear = null) {
     const row = data[i];
     const obj = arrayToObj(headers, row);
     
-    // สสอ. (00588) เห็นข้อมูลทั้งหมด | รพ.สต. อื่นเห็นเฉพาะของตนเอง | เฉพาะบรรทัดที่ Active
-    if ((hoscode === '00588' || obj.hoscode === hoscode) && String(obj.is_active).toUpperCase() !== 'FALSE') {
+    // 1. สสอ. (00588) เห็นข้อมูลทั้งหมด | รพ.สต. อื่นเห็นเฉพาะของตนเอง
+    // 2. เฉพาะบรรทัดที่ Active
+    // 3. กรองตามปีงบประมาณ (fiscalYear) ถ้ามีการระบุ
+    const isHoscodeMatch = hoscode === '00588' || obj.hoscode === hoscode;
+    const isActiveMatch = String(obj.is_active).toUpperCase() !== 'FALSE';
+    const isFiscalYearMatch = !fiscalYear || !obj.fiscal_year || String(obj.fiscal_year) === String(fiscalYear);
+
+    if (isHoscodeMatch && isActiveMatch && isFiscalYearMatch) {
       records.push(obj);
     }
   }
@@ -160,4 +165,55 @@ function logAction(userId, email, action, details) {
   const logId = Utilities.getUuid();
   
   sheet.appendRow([logId, userId, email, action, details, timestamp]);
+}
+
+/**
+ * ดึงรายการปีงบประมาณที่มีอยู่ในระบบทั้งหมด
+ */
+function getAvailableYears() {
+  const ss = getSpreadsheet();
+  const sheets = ss.getSheets();
+  const years = new Set();
+  
+  // เพิ่มปีปัจจุบันไว้เป็นพื้นฐานเสมอ
+  const d = new Date();
+  const currentYear = d.getFullYear() + 543 + (d.getMonth() >= 9 ? 1 : 0);
+  years.add(currentYear);
+  
+  // หาปีจากชื่อ Sheet (เช่น Epi_1_Year_2568)
+  for (const sheet of sheets) {
+    const name = sheet.getName();
+    const match = name.match(/_(\d{4})$/);
+    if (match) {
+      years.add(Number(match[1]));
+    }
+  }
+  
+  // หาปีจาก Dashboard Cache
+  const cacheSheet = ss.getSheetByName('dashboard_cache');
+  if (cacheSheet && cacheSheet.getLastRow() > 1) {
+    const data = cacheSheet.getDataRange().getValues();
+    const headers = data[0];
+    const yearIdx = headers.indexOf('fiscal_year');
+    if (yearIdx >= 0) {
+      for (let i = 1; i < data.length; i++) {
+        if (data[i][yearIdx]) years.add(Number(data[i][yearIdx]));
+      }
+    }
+  }
+
+  // หาปีจาก Vaccine Rules
+  const ruleSheet = ss.getSheetByName('vaccine_rules');
+  if (ruleSheet && ruleSheet.getLastRow() > 1) {
+    const data = ruleSheet.getDataRange().getValues();
+    const headers = data[0];
+    const yearIdx = headers.indexOf('fiscal_year');
+    if (yearIdx >= 0) {
+      for (let i = 1; i < data.length; i++) {
+        if (data[i][yearIdx]) years.add(Number(data[i][yearIdx]));
+      }
+    }
+  }
+  
+  return Array.from(years).sort((a, b) => a - b);
 }

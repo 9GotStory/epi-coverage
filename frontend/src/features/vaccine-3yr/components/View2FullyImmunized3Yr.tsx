@@ -2,11 +2,14 @@ import { useMemo, useState } from 'react';
 import { InfoIcon, FileSpreadsheetIcon, FileTextIcon } from 'lucide-react';
 import type { ColumnDef } from '@tanstack/react-table';
 import { evaluateView2_3Yr } from '../../../shared/utils/vaccine/vaccine-3yr';
+import { evaluateDynamicV2 } from '../../../shared/utils/vaccine/ruleEngine';
 import type { VaccineStatus } from '../../../shared/types';
 import { formatDateTimeStr, getBirthDateRangeForQuarter, getAgeInMonths } from '../../../shared/utils/dateUtils';
 import type { EpiRecord } from '../../../shared/types';
 import { EpiDataTable } from '../../../shared/components/EpiDataTable';
 import { exportToExcel, exportToPdf } from '../../../shared/exportUtils';
+import { useVaccineRules } from '../../../shared/hooks/useVaccineRules';
+import { DynamicVaccineGuide } from '../../../shared/components/DynamicVaccineGuide';
 
 // Helper for abbreviation
 function shortenFacilityName(name: string) {
@@ -37,6 +40,8 @@ interface View2Props {
 export function View2FullyImmunized3Yr({ fiscalYear, quarter, data, isLoading, error, asOfDate }: View2Props) {
   const [filterFacility, setFilterFacility] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
+  const { rules } = useVaccineRules(fiscalYear, '3yr');
+  const v2RulesCount = rules && rules.length > 0 ? rules.filter(r => r.view_type === 2 && r.is_active && r.is_required_for_v2).length : 9;
 
   const processedData = useMemo(() => {
     // 1. Filter cohort by Fiscal Year and Quarter
@@ -47,12 +52,14 @@ export function View2FullyImmunized3Yr({ fiscalYear, quarter, data, isLoading, e
       return bDate >= start && bDate <= end;
     });
 
-    // 2. Evaluate criteria for fully immunized 2 years
+    // 2. Evaluate criteria for fully immunized
+    const evalFn = rules && rules.length > 0 ? (r: EpiRecord) => evaluateDynamicV2(r, rules) : evaluateView2_3Yr;
+    
     return cohort.map(record => ({
       ...record,
-      evaluation: evaluateView2_3Yr(record),
+      evaluation: evalFn(record),
     }));
-  }, [data, fiscalYear, quarter]);
+  }, [data, fiscalYear, quarter, rules]);
 
   const filteredData = useMemo(() => {
     return processedData.filter((row) => {
@@ -279,49 +286,57 @@ export function View2FullyImmunized3Yr({ fiscalYear, quarter, data, isLoading, e
             มุมมองนี้แสดงผลการประเมิน <strong>ภาพรวมการได้รับวัคซีนของเด็กรายบุคคล</strong> ตามเกณฑ์ตัวชี้วัดความครอบคลุม (Fully Immunized) 
             การประเมินผลจะใช้เงื่อนไขแบบองค์รวม (Strict AND Condition) หากขาดวัคซีนในหมวดใดหมวดหนึ่ง จะถือว่า <strong>"ไม่ผ่านเกณฑ์"</strong> ทันที
           </p>
-          <div className="bg-white/60 p-4 rounded-lg border border-indigo-100/50 text-xs">
-            <p className="font-semibold mb-3 text-indigo-900 border-b border-indigo-100 pb-2">
-              คู่มือและเกณฑ์ประเมินรหัสวัคซีน HDC (ปรับปรุงปี 2569) สำหรับเด็กอายุ 3 ปี
-            </p>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-3 text-indigo-800">
-              <div className="flex flex-col gap-0.5">
-                <span className="font-medium text-indigo-900">BCG (ป้องกันวัณโรค) - 1 เข็ม</span>
-                <span className="text-[11px] text-indigo-700">วิธีบันทึกใน HIS: เลือกลงเป็น <strong>BCG</strong> (รหัส 43 แฟ้ม: <code className="bg-indigo-100 px-1 py-0.5 rounded font-mono text-[10px]">011</code>)</span>
+          <DynamicVaccineGuide 
+            rules={rules} 
+            viewType={2} 
+            theme="indigo"
+            title="คู่มือและเกณฑ์ประเมินรหัสวัคซีน HDC (ปรับปรุงปี 2569) สำหรับเด็กอายุ 3 ปี"
+            fallbackContent={
+              <div className="bg-white/60 p-4 rounded-lg border border-indigo-100/50 text-xs">
+                <p className="font-semibold mb-3 text-indigo-900 border-b border-indigo-100 pb-2">
+                  คู่มือและเกณฑ์ประเมินรหัสวัคซีน HDC (ปรับปรุงปี 2569) สำหรับเด็กอายุ 3 ปี
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-3 text-indigo-800">
+                  <div className="flex flex-col gap-0.5">
+                    <span className="font-medium text-indigo-900">BCG (ป้องกันวัณโรค) - 1 เข็ม</span>
+                    <span className="text-[11px] text-indigo-700">วิธีบันทึกใน HIS: เลือกลงเป็น <strong>BCG</strong> (รหัส 43 แฟ้ม: <code className="bg-indigo-100 px-1 py-0.5 rounded font-mono text-[10px]">011</code>)</span>
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    <span className="font-medium text-indigo-900">HBV (ไวรัสตับอักเสบบี) - ครบ 3 เข็ม</span>
+                    <span className="text-[11px] text-indigo-700">วิธีบันทึกใน HIS: เลือกลงเป็น <strong>HBV เข็ม 1-3 (แรกเกิด, 2 ด., 6 ด.)</strong> ตามช่วงอายุ (รหัส 43 แฟ้ม: <code className="bg-indigo-100 px-1 py-0.5 rounded font-mono text-[10px]">041, 042, 043</code>)</span>
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    <span className="font-medium text-indigo-900">DTP (คอตีบ บาดทะยัก ไอกรน) - ครบ 4 เข็ม</span>
+                    <span className="text-[11px] text-indigo-700">วิธีบันทึกใน HIS: เลือกลงเป็น <strong>DTP เข็ม 1-4</strong> (รหัส 43 แฟ้ม: <code className="bg-indigo-100 px-1 py-0.5 rounded font-mono text-[10px]">031, 032, 033, D54, D14</code>)</span>
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    <span className="font-medium text-indigo-900">Hib (ฮิบ) - ครบ 3 เข็ม</span>
+                    <span className="text-[11px] text-indigo-700">วิธีบันทึกใน HIS: เลือกลงเป็น <strong>วัคซีนรวม (Pentavalent)</strong> (รหัส 43 แฟ้ม: <code className="bg-indigo-100 px-1 py-0.5 rounded font-mono text-[10px]">H11, H12, H13</code>)</span>
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    <span className="font-medium text-indigo-900">IPV (โปลิโอชนิดฉีด) - ครบ 2 เข็ม</span>
+                    <span className="text-[11px] text-indigo-700">วิธีบันทึกใน HIS: เลือกลงเป็น <strong>IPV เข็ม 1-2</strong> (รหัส 43 แฟ้ม: <code className="bg-indigo-100 px-1 py-0.5 rounded font-mono text-[10px]">091, 092</code>)</span>
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    <span className="font-medium text-indigo-900">OPV (โปลิโอชนิดหยอด) - ครบ 2 เข็ม</span>
+                    <span className="text-[11px] text-indigo-700">วิธีบันทึกใน HIS: เลือกลงเป็น <strong>OPV ครั้งที่ 1-2 ตามเกณฑ์ใหม่</strong> (รหัส 43 แฟ้ม: <code className="bg-indigo-100 px-1 py-0.5 rounded font-mono text-[10px]">083, 084</code>)</span>
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    <span className="font-medium text-indigo-900">MMR (หัด หัดเยอรมัน คางทูม) - ครบ 2 เข็ม</span>
+                    <span className="text-[11px] text-indigo-700">วิธีบันทึกใน HIS: เลือกลงเป็น <strong>MMR เข็ม 1-2</strong> (รหัส 43 แฟ้ม: <code className="bg-indigo-100 px-1 py-0.5 rounded font-mono text-[10px]">061, 062</code>)</span>
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    <span className="font-medium text-indigo-900">Rota (ไวรัสโรต้า) - ครบ 2 หรือ 3 เข็ม</span>
+                    <span className="text-[11px] text-indigo-700">วิธีบันทึกใน HIS: เลือกลงเป็น <strong>Rota เข็ม 1-3</strong> (รหัส 43 แฟ้ม: <code className="bg-indigo-100 px-1 py-0.5 rounded font-mono text-[10px]">R11, R12, R13</code>)</span>
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    <span className="font-medium text-indigo-900">LAJE / JE (ไข้สมองอักเสบเจอี) - ครบตามเกณฑ์</span>
+                    <span className="text-[11px] text-indigo-700">วิธีบันทึกใน HIS: เลือกลงเป็น <strong>LAJE เข็ม 1-2</strong> หรือ <strong>JE เข็ม 1-3</strong> (รหัส 43 แฟ้ม: <code className="bg-indigo-100 px-1 py-0.5 rounded font-mono text-[10px]">J11, J12</code> หรือ <code className="bg-indigo-100 px-1 py-0.5 rounded font-mono text-[10px]">051, 052, 053</code>)</span>
+                  </div>
+                </div>
               </div>
-              <div className="flex flex-col gap-0.5">
-                <span className="font-medium text-indigo-900">HBV (ไวรัสตับอักเสบบี) - ครบ 3 เข็ม</span>
-                <span className="text-[11px] text-indigo-700">วิธีบันทึกใน HIS: เลือกลงเป็น <strong>HBV เข็ม 1-3 (แรกเกิด, 2 ด., 6 ด.)</strong> ตามช่วงอายุ (รหัส 43 แฟ้ม: <code className="bg-indigo-100 px-1 py-0.5 rounded font-mono text-[10px]">041, 042, 043</code>)</span>
-              </div>
-              <div className="flex flex-col gap-0.5">
-                <span className="font-medium text-indigo-900">DTP (คอตีบ บาดทะยัก ไอกรน) - ครบ 4 เข็ม</span>
-                <span className="text-[11px] text-indigo-700">วิธีบันทึกใน HIS: เลือกลงเป็น <strong>DTP เข็ม 1-4</strong> (รหัส 43 แฟ้ม: <code className="bg-indigo-100 px-1 py-0.5 rounded font-mono text-[10px]">031, 032, 033, D54, D14</code>)</span>
-              </div>
-              <div className="flex flex-col gap-0.5">
-                <span className="font-medium text-indigo-900">Hib (ฮิบ) - ครบ 3 เข็ม</span>
-                <span className="text-[11px] text-indigo-700">วิธีบันทึกใน HIS: เลือกลงเป็น <strong>วัคซีนรวม (Pentavalent)</strong> (รหัส 43 แฟ้ม: <code className="bg-indigo-100 px-1 py-0.5 rounded font-mono text-[10px]">H11, H12, H13</code>)</span>
-              </div>
-              <div className="flex flex-col gap-0.5">
-                <span className="font-medium text-indigo-900">IPV (โปลิโอชนิดฉีด) - ครบ 2 เข็ม</span>
-                <span className="text-[11px] text-indigo-700">วิธีบันทึกใน HIS: เลือกลงเป็น <strong>IPV เข็ม 1-2</strong> (รหัส 43 แฟ้ม: <code className="bg-indigo-100 px-1 py-0.5 rounded font-mono text-[10px]">091, 092</code>)</span>
-              </div>
-              <div className="flex flex-col gap-0.5">
-                <span className="font-medium text-indigo-900">OPV (โปลิโอชนิดหยอด) - ครบ 2 เข็ม</span>
-                <span className="text-[11px] text-indigo-700">วิธีบันทึกใน HIS: เลือกลงเป็น <strong>OPV ครั้งที่ 1-2 ตามเกณฑ์ใหม่</strong> (รหัส 43 แฟ้ม: <code className="bg-indigo-100 px-1 py-0.5 rounded font-mono text-[10px]">083, 084</code>)</span>
-              </div>
-              <div className="flex flex-col gap-0.5">
-                <span className="font-medium text-indigo-900">MMR (หัด หัดเยอรมัน คางทูม) - ครบ 2 เข็ม</span>
-                <span className="text-[11px] text-indigo-700">วิธีบันทึกใน HIS: เลือกลงเป็น <strong>MMR เข็ม 1-2</strong> (รหัส 43 แฟ้ม: <code className="bg-indigo-100 px-1 py-0.5 rounded font-mono text-[10px]">061, 062</code>)</span>
-              </div>
-              <div className="flex flex-col gap-0.5">
-                <span className="font-medium text-indigo-900">Rota (ไวรัสโรต้า) - ครบ 2 หรือ 3 เข็ม</span>
-                <span className="text-[11px] text-indigo-700">วิธีบันทึกใน HIS: เลือกลงเป็น <strong>Rota เข็ม 1-3</strong> (รหัส 43 แฟ้ม: <code className="bg-indigo-100 px-1 py-0.5 rounded font-mono text-[10px]">R11, R12, R13</code>)</span>
-              </div>
-              <div className="flex flex-col gap-0.5">
-                <span className="font-medium text-indigo-900">LAJE / JE (ไข้สมองอักเสบเจอี) - ครบตามเกณฑ์</span>
-                <span className="text-[11px] text-indigo-700">วิธีบันทึกใน HIS: เลือกลงเป็น <strong>LAJE เข็ม 1-2</strong> หรือ <strong>JE เข็ม 1-3</strong> (รหัส 43 แฟ้ม: <code className="bg-indigo-100 px-1 py-0.5 rounded font-mono text-[10px]">J11, J12</code> หรือ <code className="bg-indigo-100 px-1 py-0.5 rounded font-mono text-[10px]">051, 052, 053</code>)</span>
-              </div>
-            </div>
-          </div>
+            }
+          />
         </div>
       </div>
 
@@ -359,7 +374,7 @@ export function View2FullyImmunized3Yr({ fiscalYear, quarter, data, isLoading, e
             <p className="font-semibold text-blue-900 mb-1">Q: มุมมอง Fully Immunized ของเด็กอายุ 3 ปี ประเมินวัคซีนหมวดไหนเป็นพิเศษครับ?</p>
             <p className="text-blue-800">
               <strong className="text-blue-900">A:</strong> ในเด็กอายุ 3 ปีบริบูรณ์ ถือเป็นอีกหนึ่งจุดประเมินสำคัญของ Fully Immunized ตามเกณฑ์กระทรวงฯ ครับ 
-              ระบบจะตรวจสอบความครบถ้วนสะสมตั้งแต่วัยทารก รวม 9 หมวด (BCG, HBV, DTP, Hib, OPV, IPV, MMR, Rota และที่สำคัญคือ <strong>LAJE เข็มที่ 2</strong> ที่ต้องได้รับช่วงอายุ 2.5 ขวบ) ถือเป็นการสรุปผลประเมินรวบยอดก่อนเด็กเข้าวัยเรียนครับ
+              ระบบจะตรวจสอบความครบถ้วนสะสมตั้งแต่วัยทารก รวม {v2RulesCount} หมวด (BCG, HBV, DTP, Hib, OPV, IPV, MMR, Rota และที่สำคัญคือ <strong>LAJE เข็มที่ 2</strong> ที่ต้องได้รับช่วงอายุ 2.5 ขวบ) ถือเป็นการสรุปผลประเมินรวบยอดก่อนเด็กเข้าวัยเรียนครับ
             </p>
           </div>
 

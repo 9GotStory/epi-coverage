@@ -7,8 +7,10 @@ import { FacilitiesTab } from './FacilitiesTab';
 import { AuditLogsTab } from './AuditLogsTab';
 import { VaccineRuleManager } from './VaccineRuleManager';
 import type { User, UserRole, UserStatus } from '../../../shared/types';
-import { Users, Building2, ScrollText, ShieldAlert } from 'lucide-react';
+import { Users, Building2, ScrollText, ShieldAlert, AlertCircle } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../../shared/components/ui/tabs';
+import { Button } from '../../../shared/components/ui/button';
+import { useQueryClient } from '@tanstack/react-query';
 import { SubNav } from '../../../widgets/layout/SubNav';
 import { toast } from 'sonner';
 
@@ -19,6 +21,11 @@ export function AdminDashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isUpdating, setIsUpdating] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState("users");
+  const [isRuleManagerDirty, setIsRuleManagerDirty] = useState(false);
+  const [pendingTab, setPendingTab] = useState<string | null>(null);
+  
+  const queryClient = useQueryClient();
 
   const handleUpdateStatus = async (googleId: string, newStatus: UserStatus, newRole?: UserRole) => {
     setIsUpdating(googleId);
@@ -89,7 +96,17 @@ export function AdminDashboard() {
       
       <main className="max-w-[1440px] mx-auto w-full px-4 md:px-8 py-8">
         
-        <Tabs defaultValue="users" className="space-y-6">
+        <Tabs 
+          value={activeTab} 
+          onValueChange={(val) => {
+            if (isRuleManagerDirty) {
+              setPendingTab(val);
+              return;
+            }
+            setActiveTab(val);
+          }} 
+          className="space-y-6"
+        >
           <TabsList className="bg-white border border-slate-200">
             <TabsTrigger value="users" className="data-[state=active]:bg-slate-100 font-medium">
               <Users className="w-4 h-4 mr-2" />
@@ -153,10 +170,39 @@ export function AdminDashboard() {
           </TabsContent>
 
           <TabsContent value="vaccine-rules" className="mt-6">
-            <VaccineRuleManager />
+            <VaccineRuleManager onDirtyChange={setIsRuleManagerDirty} />
           </TabsContent>
         </Tabs>
         
+        {/* Custom Confirmation Modal for Tab Switching */}
+        {pendingTab && (
+          <div className="fixed inset-0 z-[9999] bg-black/60 flex items-center justify-center p-4 backdrop-blur-sm">
+            <div className="bg-white rounded-xl p-6 max-w-md w-full shadow-2xl border border-red-100 animate-in fade-in zoom-in-95 duration-200">
+              <div className="flex items-center gap-3 mb-4 text-red-600">
+                <AlertCircle className="w-7 h-7" />
+                <h3 className="text-xl font-bold">ยังไม่ได้บันทึกข้อมูล!</h3>
+              </div>
+              <p className="text-slate-600 mb-6 text-base">
+                คุณมีการเปลี่ยนแปลงฉบับร่างในแถบ <strong>จัดการเกณฑ์วัคซีน</strong> ที่ยังไม่ได้บันทึก<br/>
+                หากเปลี่ยนแท็บตอนนี้ข้อมูลที่แก้ไว้จะหายไปทั้งหมด ต้องการดำเนินการต่อหรือไม่?
+              </p>
+              <div className="flex justify-end gap-3 mt-2">
+                <Button variant="outline" size="lg" onClick={() => setPendingTab(null)} className="font-medium">
+                  ยกเลิก (อยู่หน้านี้ต่อ)
+                </Button>
+                <Button size="lg" className="bg-red-600 hover:bg-red-700 text-white font-medium" onClick={() => {
+                  queryClient.resetQueries({ queryKey: ['vaccineRules'] }); // Clear the optimistic cache
+                  setIsRuleManagerDirty(false); // Reset the dirty flag
+                  setActiveTab(pendingTab);     // Switch to the pending tab
+                  setPendingTab(null);          // Close the modal
+                }}>
+                  ยืนยันที่จะทิ้งการเปลี่ยนแปลง
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
       </main>
     </>
   );

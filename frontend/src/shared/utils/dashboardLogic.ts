@@ -57,10 +57,21 @@ export function calcGroupSummary(
     const v2 = evalView2Fn(r);
     if (v2.isFullyImmunized) view2Passed++;
     
+    // Initialize all view 2 vaccines
+    if (v2.passedVaccines) {
+      for (const vac of v2.passedVaccines) {
+        if (view2Details[vac] === undefined) view2Details[vac] = 0;
+      }
+    }
+    if (v2.missingVaccines) {
+      for (const vac of v2.missingVaccines) {
+        if (view2Details[vac] === undefined) view2Details[vac] = 0;
+      }
+    }
+
     // Aggregate each group in View 2
     if (v2.passedVaccines) {
       for (const vac of v2.passedVaccines) {
-        if (!view2Details[vac]) view2Details[vac] = 0;
         view2Details[vac]++;
       }
     }

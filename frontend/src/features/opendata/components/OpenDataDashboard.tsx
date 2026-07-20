@@ -8,7 +8,8 @@ import { VaccineRadarChart } from './VaccineRadarChart';
 import { RefreshCwIcon, AlertCircleIcon, DatabaseIcon } from 'lucide-react';
 import { useAuth } from '../../../shared/contexts/AuthContext';
 import { useTargetSettings } from '../../../shared/hooks/useTargetSettings';
-
+import { ExportButtonGroup } from '../../../shared/components/ExportButtonGroup';
+import { exportToExcel, exportToPdf } from '../../../shared/exportUtils';
 function getCurrentFiscalYear() {
   const today = new Date();
   const year = today.getFullYear() + 543;
@@ -139,6 +140,30 @@ export function OpenDataDashboard({ targetTable = 's_epi1' }: OpenDataDashboardP
   // เป้าหมายสำหรับ Radar (ใช้ค่าพื้นฐานของไตรมาส ไม่แยกวัคซีน)
   const radarTarget = getTarget(quarter, 1);
 
+  // Handle Export
+  const handleExportExcel = () => {
+    const exportData = chartData.map((row: any) => ({
+      'สถานบริการ': row.hospname,
+      'เป้าหมาย (คน)': row.target,
+      'ผลงาน (คน)': row.result,
+      'ความครอบคลุม (%)': row.coverage.toFixed(2)
+    }));
+    const quarterLabel = quarter === 'all' ? `ภาพรวมทั้งปีงบประมาณ ${year}` : `ไตรมาส ${quarter}/${year}`;
+    exportToExcel(exportData, `OpenData_Dashboard_${vaccine}_${new Date().getTime()}`);
+  };
+
+  const handleExportPdf = () => {
+    const exportData = chartData.map((row: any) => ({
+      'สถานบริการ': row.hospname,
+      'เป้าหมาย (คน)': row.target,
+      'ผลงาน (คน)': row.result,
+      'ความครอบคลุม (%)': row.coverage.toFixed(2)
+    }));
+    const quarterLabel = quarter === 'all' ? `ภาพรวมทั้งปีงบประมาณ ${year}` : `ไตรมาส ${quarter}/${year}`;
+    const title = `รายงาน OpenData วัคซีน ${selectedVaccineLabel} - ${quarterLabel}`;
+    exportToPdf(exportData, `OpenData_Dashboard_${vaccine}_${new Date().getTime()}`, title);
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -219,6 +244,9 @@ export function OpenDataDashboard({ targetTable = 's_epi1' }: OpenDataDashboardP
               </button>
             </>
           )}
+
+          <div className="h-8 w-px bg-zinc-200 mx-2"></div>
+          <ExportButtonGroup onExportExcel={handleExportExcel} onExportPdf={handleExportPdf} />
         </div>
       </div>
 

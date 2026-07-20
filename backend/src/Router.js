@@ -83,6 +83,7 @@ function handleRequest(method, e) {
       case 'seedVaccineRules': return responseJson(seedVaccineRules(body.fiscalYear, body.adminEmail));
       case 'saveVaccineRule': return responseJson(saveVaccineRule(body.rule, body.adminEmail));
       case 'cloneVaccineRules': return responseJson(cloneRulesFromYear(body.fromYear, body.toYear, body.adminEmail));
+      case 'batchSaveRules': return responseJson(batchSaveRules(body.fiscalYear, body.ageGroup, body.rules, body.adminEmail));
       default:
         return responseJson({ error: 'Unknown action: ' + action }, 400);
     }

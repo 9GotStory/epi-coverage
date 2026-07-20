@@ -5,6 +5,7 @@ import { View2FullyImmunized3Yr } from './View2FullyImmunized3Yr';
 import { OpenDataDashboard } from '../../opendata/components/OpenDataDashboard';
 import { useEpiData } from '../../../shared/hooks/useEpiData';
 import { useAvailableYears } from '../../../shared/hooks/useAvailableYears';
+import { useVaccineRules } from '../../../shared/hooks/useVaccineRules';
 import { getCurrentFiscalYear } from '../../../shared/utils/dateUtils';
 
 export function EpiDashboard3Yr() {
@@ -17,6 +18,8 @@ export function EpiDashboard3Yr() {
 
   const { data, isLoading, error, asOfDate } = useEpiData('Epi_3_Year', fiscalYear);
   const { years: availableFiscalYears } = useAvailableYears();
+  const { rules } = useVaccineRules(fiscalYear, '3yr');
+  const v1RulesCount = rules && rules.length > 0 ? rules.filter(r => r.view_type === 1 && r.is_active).length : 1;
 
   useEffect(() => {
     if (availableFiscalYears.length > 0 && !availableFiscalYears.includes(fiscalYear)) {
@@ -41,7 +44,7 @@ export function EpiDashboard3Yr() {
                   : 'text-zinc-500 hover:text-zinc-700'
               }`}
             >
-              มุมมองที่ 1: ความครอบคลุมรายชนิด (1 รายการ)
+              มุมมองที่ 1: ความครอบคลุมรายชนิด ({v1RulesCount} รายการ)
             </button>
             <button
               onClick={() => setActiveTab('view2')}

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { fetchApi } from '../lib/api';
 
 export interface DashboardSummaryData {
@@ -10,36 +10,21 @@ export interface DashboardSummaryData {
 }
 
 export function useDashboardSummaries(fiscalYear: number) {
-  const [data, setData] = useState<DashboardSummaryData[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let isMounted = true;
-    
-    async function fetchSummaries() {
-      setIsLoading(true);
-      setError(null);
-      try {
-        const response = await fetchApi('getDashboardSummaries', { fiscalYear });
-        if (response.data && response.data.success) {
-          if (isMounted) setData(response.data.summaries || []);
-        } else {
-          if (isMounted) setError(response.data?.error || 'Failed to fetch summaries');
-        }
-      } catch (err: any) {
-        if (isMounted) setError(err.message || 'An error occurred');
-      } finally {
-        if (isMounted) setIsLoading(false);
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['dashboardSummaries', fiscalYear],
+    queryFn: async () => {
+      const response = await fetchApi('getDashboardSummaries', { fiscalYear });
+      if (response.data && response.data.success) {
+        return response.data.summaries as DashboardSummaryData[];
       }
-    }
+      throw new Error(response.data?.error || 'Failed to fetch summaries');
+    },
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+  });
 
-    fetchSummaries();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [fiscalYear]);
-
-  return { data, isLoading, error };
+  return { 
+    data: data || [], 
+    isLoading, 
+    error: error ? error.message : null 
+  };
 }

@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { read, utils } from 'xlsx';
 import { v4 as uuidv4 } from 'uuid';
 import { toast } from 'sonner';
@@ -18,6 +19,7 @@ export type TargetTable = 'Epi_1_Year' | 'Epi_2_Year' | 'Epi_3_Year' | 'Epi_5_Ye
 export type UploadStatus = 'idle' | 'parsing' | 'uploading' | 'cleaning' | 'generating_summary' | 'success' | 'error';
 
 export function useUploadManager() {
+  const queryClient = useQueryClient();
   const [file, setFile] = useState<File | null>(null);
   const [previewData, setPreviewData] = useState<any[]>([]);
   const [totalRows, setTotalRows] = useState(0);
@@ -156,6 +158,11 @@ export function useUploadManager() {
       setResults({ inserted, updated, deactivated: cleanupPayload.deactivated || 0 });
       setStatus('success');
       
+      // Invalidate relevant queries to force dashboard and rules refresh
+      queryClient.invalidateQueries({ queryKey: ['dashboardSummaries'] });
+      queryClient.invalidateQueries({ queryKey: ['vaccineRules'] });
+      queryClient.invalidateQueries({ queryKey: ['epiData'] });
+      
     } catch (err: any) {
       console.error(err);
       setStatus('error');
@@ -204,6 +211,12 @@ export function useUploadManager() {
         const summary = calcGroupSummary(fullData, evalV1, evalV2, Number(fiscalYear));
         await fetchApi('saveDashboardSummary', { targetTable: t, fiscalYear: Number(fiscalYear), summaryData: JSON.stringify(summary) });
       }
+      
+      // Invalidate relevant queries to force dashboard and rules refresh
+      queryClient.invalidateQueries({ queryKey: ['dashboardSummaries'] });
+      queryClient.invalidateQueries({ queryKey: ['vaccineRules'] });
+      queryClient.invalidateQueries({ queryKey: ['epiData'] });
+      
       toast.success('ประมวลผล Dashboard สำหรับทุกกลุ่มอายุเรียบร้อยแล้ว!');
     } catch (error: any) {
       console.error(error);

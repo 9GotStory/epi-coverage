@@ -3,10 +3,14 @@ import { InfoIcon, FileSpreadsheetIcon, FileTextIcon } from 'lucide-react';
 import type { ColumnDef } from '@tanstack/react-table';
 
 import { evaluateView1_5Yr } from '../../../shared/utils/vaccine/vaccine-5yr';
+import { evaluateDynamicV1 } from '../../../shared/utils/vaccine/ruleEngine';
+import type { VaccineStatus } from '../../../shared/types';
 import { formatDateTimeStr, getBirthDateRangeForQuarter, getAgeInMonths } from '../../../shared/utils/dateUtils';
 import type { EpiRecord } from '../../../shared/types';
 import { EpiDataTable } from '../../../shared/components/EpiDataTable';
 import { exportToExcel, exportToPdf } from '../../../shared/exportUtils';
+import { useVaccineRules } from '../../../shared/hooks/useVaccineRules';
+import { DynamicVaccineGuide } from '../../../shared/components/DynamicVaccineGuide';
 
 // Helper for abbreviation
 function shortenFacilityName(name: string) {
@@ -38,6 +42,8 @@ interface View1Props {
 export function View1Individual5Yr({ fiscalYear, quarter, data, isLoading, error, asOfDate }: View1Props) {
   const [filterFacility, setFilterFacility] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
+  const { rules } = useVaccineRules(fiscalYear, '5yr');
+  const v1RulesCount = rules && rules.length > 0 ? rules.filter(r => r.view_type === 1 && r.is_active).length : 2;
 
   const processedData = useMemo(() => {
     // 1. Filter cohort by Fiscal Year and Quarter
@@ -48,16 +54,18 @@ export function View1Individual5Yr({ fiscalYear, quarter, data, isLoading, error
       return bDate >= start && bDate <= end;
     });
 
-    // 2. Evaluate criteria for 2-year cohort (1 parameter)
+    // 2. Evaluate criteria
+    const evalFn = rules && rules.length > 0 ? (r: EpiRecord) => evaluateDynamicV1(r, rules) : evaluateView1_5Yr;
+
     return cohort.map(record => {
-      const evaluation = evaluateView1_5Yr(record);
+      const evaluation = evalFn(record);
       return {
         ...record,
         missingVaccines: evaluation.missingVaccines,
         isPassedAll: evaluation.missingVaccines.length === 0
       };
     });
-  }, [data, fiscalYear, quarter]);
+  }, [data, fiscalYear, quarter, rules]);
 
   const filteredData = useMemo(() => {
     return processedData.filter((row) => {
@@ -122,7 +130,7 @@ export function View1Individual5Yr({ fiscalYear, quarter, data, isLoading, error
           return (
             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 border border-green-200">
               <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
-              ได้รับวัคซีนครบถ้วน (2 รายการ)
+              ได้รับวัคซีนครบถ้วน ({v1RulesCount} รายการ)
             </span>
           );
         }
@@ -166,7 +174,7 @@ export function View1Individual5Yr({ fiscalYear, quarter, data, isLoading, error
   // Handle Export
   const handleExportExcel = () => {
     const exportData = filteredData.map(row => {
-      const missingStr = evaluateView1_5Yr(row).missingVaccines.join(', ');
+      const missingStr = row.missingVaccines.join(', ');
       const age = getAgeInMonths(row.birth);
       const ageStr = age >= 12 ? `${Math.floor(age / 12)} ปี ${age % 12} เดือน` : `${age} เดือน`;
       const birthStr = row.birth ? new Date(row.birth as string).toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric' }) : '';
@@ -177,7 +185,7 @@ export function View1Individual5Yr({ fiscalYear, quarter, data, isLoading, error
         'ชื่อ': row.name,
         'นามสกุล': row.lname,
         'วันเกิด': birthStr ? `${birthStr}\n(อายุ ${ageStr})` : '',
-        'ผลการประเมิน (2 รายการ)': missingStr.length === 0 ? 'ได้รับวัคซีนครบถ้วน' : `ตกหล่น: ${missingStr}`
+        'ผลการประเมิน': missingStr.length === 0 ? `ได้รับวัคซีนครบถ้วน (${v1RulesCount} รายการ)` : `ตกหล่น: ${missingStr}`
       };
     });
     exportToExcel(exportData, `EPI_View1_Tracking_${new Date().getTime()}`);
@@ -185,7 +193,7 @@ export function View1Individual5Yr({ fiscalYear, quarter, data, isLoading, error
 
   const handleExportPdf = () => {
     const exportData = filteredData.map(row => {
-      const missingStr = evaluateView1_5Yr(row).missingVaccines.join(', ');
+      const missingStr = row.missingVaccines.join(', ');
       const age = getAgeInMonths(row.birth);
       const ageStr = age >= 12 ? `${Math.floor(age / 12)} ปี ${age % 12} เดือน` : `${age} เดือน`;
       const birthStr = row.birth ? new Date(row.birth as string).toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric' }) : '';
@@ -198,7 +206,7 @@ export function View1Individual5Yr({ fiscalYear, quarter, data, isLoading, error
         'ผลการประเมิน': missingStr.length === 0 ? 'ครบถ้วน' : `ตกหล่น: ${missingStr}`
       };
     });
-    const title = `ทะเบียนติดตามเด็กรายบุคคล เด็ก 5 ปี (ความครอบคลุม 2 รายการ) - ไตรมาส ${quarter}/${fiscalYear}`;
+    const title = `ทะเบียนติดตามเด็กรายบุคคล เด็ก 5 ปี (ความครอบคลุม ${v1RulesCount} รายการ) - ไตรมาส ${quarter}/${fiscalYear}`;
     exportToPdf(exportData, `EPI_View1_Tracking_${new Date().getTime()}`, title);
   };
 
@@ -213,7 +221,7 @@ export function View1Individual5Yr({ fiscalYear, quarter, data, isLoading, error
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
           <h2 className="text-lg font-semibold text-zinc-900">
-            ทะเบียนติดตามเด็กรายบุคคล (เด็กอายุ 5 ปี): ความครอบคลุมการได้รับวัคซีนรายชนิด (2 รายการ)
+            ทะเบียนติดตามเด็กรายบุคคล (เด็กอายุ 5 ปี): ความครอบคลุมการได้รับวัคซีนรายชนิด ({v1RulesCount} รายการ)
           </h2>
           <p className="text-sm text-zinc-500 mt-1">
             ข้อมูลอัปเดตล่าสุด: <span className="font-medium text-blue-600">{asOfDateText}</span>
@@ -243,7 +251,7 @@ export function View1Individual5Yr({ fiscalYear, quarter, data, isLoading, error
             className="px-3 py-2 bg-white border border-zinc-200 rounded-lg text-sm shadow-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
           >
             <option value="all">สถานะการรับวัคซีนทั้งหมด</option>
-            <option value="passed">ได้รับวัคซีนครบถ้วน (2 รายการ)</option>
+            <option value="passed">ได้รับวัคซีนครบถ้วน ({v1RulesCount} รายการ)</option>
             <option value="failed">ยังได้รับวัคซีนไม่ครบถ้วน (ตกหล่น)</option>
           </select>
 
@@ -276,24 +284,31 @@ export function View1Individual5Yr({ fiscalYear, quarter, data, isLoading, error
         <div>
           <p className="font-semibold mb-1">เกี่ยวกับมุมมองที่ 1 (ความครอบคลุมวัคซีนเข็มกระตุ้น สำหรับเด็ก 5 ปี)</p>
           <p className="mb-2 text-blue-800 leading-relaxed">
-            มุมมองนี้แสดงประวัติการได้รับวัคซีนแบบ <strong>แยกตามชนิดและเข็ม (รวม 2 รายการ)</strong> 
+            มุมมองนี้แสดงประวัติการได้รับวัคซีนแบบ <strong>แยกตามชนิดและเข็ม (รวม {v1RulesCount} รายการ)</strong> 
             เพื่อสนับสนุนการปฏิบัติงานของเจ้าหน้าที่ในการ <strong>ติดตามเด็ก 5 ปีที่ได้รับวัคซีนเข็มกระตุ้นไม่ครบถ้วน</strong> ได้อย่างแม่นยำ 
           </p>
-          <div className="bg-white/70 p-4 rounded-lg border border-blue-100/50 mt-3 text-xs shadow-sm">
-            <p className="font-semibold mb-3 text-blue-900 border-b border-blue-100 pb-2">
-              คู่มือและเกณฑ์ประเมินรหัสวัคซีน HDC (ปรับปรุงปี 2569) สำหรับเด็ก 5 ปี
-            </p>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-3 text-blue-800">
-              <div className="flex flex-col gap-0.5">
-                <span className="font-medium text-blue-900">DTP (คอตีบ บาดทะยัก ไอกรน) เข็มกระตุ้น 4 ปี</span>
-                <span className="text-[11px] text-blue-700">วิธีบันทึกใน HIS: เลือกลงเป็น <strong>DTP เข็ม 5</strong> (รหัส 43 แฟ้ม: <code className="bg-blue-100 px-1 py-0.5 rounded font-mono text-[10px]">035</code> หรือ <code className="bg-blue-100 px-1 py-0.5 rounded font-mono text-[10px]">D35, D45, D55, T11</code>)</span>
+          <DynamicVaccineGuide 
+            rules={rules} 
+            viewType={1} 
+            title="คู่มือและเกณฑ์ประเมินรหัสวัคซีน HDC (ปรับปรุงปี 2569) สำหรับเด็ก 5 ปี"
+            fallbackContent={
+              <div className="bg-white/70 p-4 rounded-lg border border-blue-100/50 mt-3 text-xs shadow-sm">
+                <p className="font-semibold mb-3 text-blue-900 border-b border-blue-100 pb-2">
+                  คู่มือและเกณฑ์ประเมินรหัสวัคซีน HDC (ปรับปรุงปี 2569) สำหรับเด็ก 5 ปี
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-3 text-blue-800">
+                  <div className="flex flex-col gap-0.5">
+                    <span className="font-medium text-blue-900">DTP (คอตีบ บาดทะยัก ไอกรน) เข็มกระตุ้น 4 ปี</span>
+                    <span className="text-[11px] text-blue-700">วิธีบันทึกใน HIS: เลือกลงเป็น <strong>DTP เข็ม 5</strong> (รหัส 43 แฟ้ม: <code className="bg-blue-100 px-1 py-0.5 rounded font-mono text-[10px]">035</code> หรือ <code className="bg-blue-100 px-1 py-0.5 rounded font-mono text-[10px]">D35, D45, D55, T11</code>)</span>
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    <span className="font-medium text-blue-900">OPV (โปลิโอชนิดหยอด) เข็มกระตุ้น 4 ปี</span>
+                    <span className="text-[11px] text-blue-700">วิธีบันทึกใน HIS: เลือกลงเป็น <strong>OPV เข็ม 5 (ครั้งที่ 3)</strong> (รหัส 43 แฟ้ม: <code className="bg-blue-100 px-1 py-0.5 rounded font-mono text-[10px]">085</code> หรือ <code className="bg-blue-100 px-1 py-0.5 rounded font-mono text-[10px]">D35, D45, D55, I15</code>)</span>
+                  </div>
+                </div>
               </div>
-              <div className="flex flex-col gap-0.5">
-                <span className="font-medium text-blue-900">OPV (โปลิโอชนิดหยอด) เข็มกระตุ้น 4 ปี</span>
-                <span className="text-[11px] text-blue-700">วิธีบันทึกใน HIS: เลือกลงเป็น <strong>OPV เข็ม 5 (ครั้งที่ 3)</strong> (รหัส 43 แฟ้ม: <code className="bg-blue-100 px-1 py-0.5 rounded font-mono text-[10px]">085</code> หรือ <code className="bg-blue-100 px-1 py-0.5 rounded font-mono text-[10px]">D35, D45, D55, I15</code>)</span>
-              </div>
-            </div>
-          </div>
+            }
+          />
         </div>
       </div>
 
