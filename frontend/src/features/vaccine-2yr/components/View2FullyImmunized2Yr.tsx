@@ -313,8 +313,8 @@ export function View2FullyImmunized2Yr({ fiscalYear, quarter, data, isLoading, e
                     <span className="text-[11px] text-indigo-700">วิธีบันทึกใน HIS: เลือกลงเป็น <strong>วัคซีนรวม (Pentavalent)</strong> (รหัส 43 แฟ้ม: <code className="bg-indigo-100 px-1 py-0.5 rounded font-mono text-[10px]">D21, D22, D23</code>)</span>
                   </div>
                   <div className="flex flex-col gap-0.5">
-                    <span className="font-medium text-indigo-900">IPV (โปลิโอชนิดฉีด) - ครบ 2 เข็ม</span>
-                    <span className="text-[11px] text-indigo-700">วิธีบันทึกใน HIS: เลือกลงเป็น <strong>IPV เข็ม 1-2</strong> (รหัส 43 แฟ้ม: <code className="bg-indigo-100 px-1 py-0.5 rounded font-mono text-[10px]">I11, I12</code>)</span>
+                    <span className="font-medium text-indigo-900">IPV (โปลิโอชนิดฉีด) - เข็ม 1 และ 2</span>
+                    <span className="text-[11px] text-indigo-700">วิธีบันทึกใน HIS: เลือกลงเป็น <strong>IPV เข็ม 1, 2</strong> (รหัส 43 แฟ้ม: <code className="bg-indigo-100 px-1 py-0.5 rounded font-mono text-[10px]">I11, I12</code>)</span>
                   </div>
                   <div className="flex flex-col gap-0.5">
                     <span className="font-medium text-indigo-900">OPV (โปลิโอชนิดหยอด) - ครบ 2 เข็ม</span>

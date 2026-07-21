@@ -197,7 +197,6 @@ export function View1Individual({ fiscalYear, quarter, data, isLoading, error, a
   // Handle Export
   const handleExportExcel = () => {
     const exportData = filteredData.map(row => {
-      const missingStr = row.missingVaccines.join(', ');
       const age = getAgeInMonths(row.birth);
       const ageStr = age >= 12 ? `${Math.floor(age / 12)} ปี ${age % 12} เดือน` : `${age} เดือน`;
       const birthStr = row.birth ? new Date(row.birth as string).toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric' }) : '';
@@ -220,7 +219,6 @@ export function View1Individual({ fiscalYear, quarter, data, isLoading, error, a
 
   const handleExportPdf = () => {
     const exportData = filteredData.map(row => {
-      const missingStr = row.missingVaccines.join(', ');
       const age = getAgeInMonths(row.birth);
       const ageStr = age >= 12 ? `${Math.floor(age / 12)} ปี ${age % 12} เดือน` : `${age} เดือน`;
       const birthStr = row.birth ? new Date(row.birth as string).toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric' }) : '';

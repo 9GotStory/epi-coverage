@@ -6,7 +6,7 @@ import { useVaccineRules } from '../../../shared/hooks/useVaccineRules';
 import { fetchApi } from '../../../shared/lib/api';
 import { toast } from 'sonner';
 import { RuleEditModal } from './RuleEditModal';
-import { Pencil, ArrowRight, ArrowDown, Wand2 } from 'lucide-react';
+import { Pencil, ArrowRight, Wand2 } from 'lucide-react';
 import type { VaccineRule } from '../../../shared/utils/vaccine/ruleEngine';
 import { TARGET_AGE_MONTHS_MAP } from '../../../shared/utils/vaccine/ruleEngine';
 import { getCurrentFiscalYear } from '../../../shared/utils/dateUtils';

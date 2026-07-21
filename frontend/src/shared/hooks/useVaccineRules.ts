@@ -1,9 +1,9 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { fetchApi } from '../lib/api';
 import type { VaccineRule } from '../utils/vaccine/ruleEngine';
 
 export const useVaccineRules = (fiscalYear: number, ageGroup: string) => {
-  const queryClient = useQueryClient();
+  
   const queryKey = ['vaccineRules', fiscalYear, ageGroup];
 
   const { data: rules, isLoading, error } = useQuery({

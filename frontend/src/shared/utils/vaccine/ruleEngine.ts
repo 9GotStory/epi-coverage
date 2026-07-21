@@ -80,11 +80,22 @@ export const hasDose = (record: EpiRecord, field: keyof EpiRecord, birthDate?: s
   const cleanVal = val.split('T')[0].trim();
   if (cleanVal === '' || cleanVal === '-') return false;
   
-  // บางครั้งข้อมูลลงผิดเป็นวันเกิด
+  // บางครั้งข้อมูลลงผิดเป็นวันเกิด แต่สำหรับ BCG และ HBV เข็ม 1 ฉีดแรกเกิดได้
   if (birthDate) {
     const birthStr = typeof birthDate === 'string' ? birthDate : birthDate.toISOString();
     const cleanBirth = birthStr.split('T')[0].trim();
-    if (cleanVal === cleanBirth) return false;
+    
+    // ข้อมูลผิดพลาด: วันที่ฉีดก่อนวันเกิด
+    if (cleanVal < cleanBirth) {
+      return false;
+    }
+
+    // ข้อมูลผิดพลาด: ลงผิดเป็นวันเกิด (ยกเว้น BCG และ HBV1)
+    if (cleanVal === cleanBirth) {
+      if (field !== 'bcg_date' && field !== 'hbv1_date') {
+        return false;
+      }
+    }
   }
   
   return true;
@@ -126,8 +137,8 @@ export const evaluateDynamicV1 = (record: EpiRecord, rules: VaccineRule[]): View
 
     results[rule.display_name] = passed;
     if (!passed) {
-      let targetAge = rule.target_age_months;
-      if (targetAge === undefined || targetAge === null || targetAge === '') {
+      let targetAge: number | undefined = rule.target_age_months;
+      if (targetAge === undefined || targetAge === null) {
         const hdcCodeStr = rule.hdc_code ? String(rule.hdc_code) : '';
         const codes = hdcCodeStr.split(/[-,\/\s]+/).map(c => c.trim().padStart(3, '0')).filter(Boolean);
         
@@ -140,7 +151,7 @@ export const evaluateDynamicV1 = (record: EpiRecord, rules: VaccineRule[]): View
         targetAge = maxAge !== -1 ? maxAge : undefined;
       }
 
-      if (targetAge !== undefined && targetAge !== '' && currentAgeMonths < Number(targetAge)) {
+      if (targetAge !== undefined && currentAgeMonths < targetAge) {
         pendingVaccines.push(rule.display_name);
       } else {
         missingVaccines.push(rule.display_name);
@@ -181,8 +192,8 @@ export const evaluateDynamicV2 = (record: EpiRecord, rules: VaccineRule[]): Vacc
     }
 
     if (!passed) {
-      let targetAge = rule.target_age_months;
-      if (targetAge === undefined || targetAge === null || targetAge === '') {
+      let targetAge: number | undefined = rule.target_age_months;
+      if (targetAge === undefined || targetAge === null) {
         const hdcCodeStr = rule.hdc_code ? String(rule.hdc_code) : '';
         const codes = hdcCodeStr.split(/[-,\/\s]+/).map(c => c.trim().padStart(3, '0')).filter(Boolean);
         
@@ -195,7 +206,7 @@ export const evaluateDynamicV2 = (record: EpiRecord, rules: VaccineRule[]): Vacc
         targetAge = maxAge !== -1 ? maxAge : undefined;
       }
 
-      if (targetAge !== undefined && targetAge !== '' && currentAgeMonths < Number(targetAge)) {
+      if (targetAge !== undefined && currentAgeMonths < targetAge) {
         pendingVaccines.push(rule.display_name);
       } else {
         missingVaccines.push(rule.display_name);

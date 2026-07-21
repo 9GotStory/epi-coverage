@@ -71,64 +71,61 @@ export const evaluateView2_5Yr = (r: EpiRecord): VaccineStatus => {
   
   // 2. HBV 3 ครั้ง (แรกเกิด, 2 เดือน, 6 เดือน)
   let hbvPass = true;
-  if (!has(r.hbv1_date)) { missingVaccines.push('ขาด HBV เข็ม 1 (041)'); hbvPass = false; }
-  if (!has(r.hbv2_date)) { missingVaccines.push('ขาด HBV เข็ม 2 (042)'); hbvPass = false; }
-  if (!has(r.hbv4_date)) { missingVaccines.push('ขาด HBV เข็ม 4 (043)'); hbvPass = false; }
-  if (hbvPass) passedVaccines.push('HBV ครบ 3 เข็ม');
+  if (!has(r.hbv1_date)) { missingVaccines.push('HBV เข็ม 1'); hbvPass = false; }
+  if (!has(r.hbv2_date)) { missingVaccines.push('HBV เข็ม 2'); hbvPass = false; }
+  if (!has(r.hbv4_date)) { missingVaccines.push('HBV เข็ม 3 (6 ด.)'); hbvPass = false; }
+  if (hbvPass) passedVaccines.push('HBV เข็ม 1, 2, 3');
   
   // 3. DTP 5 ครั้ง (2 เดือน, 4 เดือน, 6 เดือน, 1 ปี 6 เดือน, 4 ปี)
   let dtpPass = true;
-  if (!has(r.dtp1_date)) { missingVaccines.push('ขาด DTP เข็ม 1 (031)'); dtpPass = false; }
-  if (!has(r.dtp2_date)) { missingVaccines.push('ขาด DTP เข็ม 2 (032)'); dtpPass = false; }
-  if (!has(r.dtp3_date)) { missingVaccines.push('ขาด DTP เข็ม 3 (033)'); dtpPass = false; }
-  if (!has(r.dtp4_date)) { missingVaccines.push('ขาด DTP เข็ม 4 (034)'); dtpPass = false; }
-  if (!has(r.dtp5_date)) { missingVaccines.push('ขาด DTP เข็ม 5 (035)'); dtpPass = false; }
-  if (dtpPass) passedVaccines.push('DTP ครบ 5 เข็ม');
+  if (!has(r.dtp1_date)) { missingVaccines.push('DTP เข็ม 1'); dtpPass = false; }
+  if (!has(r.dtp2_date)) { missingVaccines.push('DTP เข็ม 2'); dtpPass = false; }
+  if (!has(r.dtp3_date)) { missingVaccines.push('DTP เข็ม 3'); dtpPass = false; }
+  if (!has(r.dtp4_date)) { missingVaccines.push('DTP เข็ม 4'); dtpPass = false; }
+  if (!has(r.dtp5_date)) { missingVaccines.push('DTP เข็ม 5 (4 ปี)'); dtpPass = false; }
+  if (dtpPass) passedVaccines.push('DTP เข็ม 1, 2, 3, 4, 5');
   
   // 4. Hib 3 ครั้ง (2 เดือน, 4 เดือน, 6 เดือน)
   let hibPass = true;
-  if (!has(r.hib1_date)) { missingVaccines.push('ขาด Hib เข็ม 1 (H11)'); hibPass = false; }
-  if (!has(r.hib2_date)) { missingVaccines.push('ขาด Hib เข็ม 2 (H12)'); hibPass = false; }
-  if (!has(r.hib3_date)) { missingVaccines.push('ขาด Hib เข็ม 3 (H13)'); hibPass = false; }
-  if (hibPass) passedVaccines.push('Hib ครบ 3 เข็ม');
+  if (!has(r.hib1_date)) { missingVaccines.push('Hib เข็ม 1'); hibPass = false; }
+  if (!has(r.hib2_date)) { missingVaccines.push('Hib เข็ม 2'); hibPass = false; }
+  if (!has(r.hib3_date)) { missingVaccines.push('Hib เข็ม 3'); hibPass = false; }
+  if (hibPass) passedVaccines.push('Hib เข็ม 1, 2, 3');
   
   // 5. IPV 1 ครั้ง (4 เดือน) 
   // *จากการวิเคราะห์ไฟล์ HDC เด็ก 5 ปี วัคซีน IPV 4 เดือนจะถูกบันทึกใน ipv2_date (I12)
-  if (!has(r.ipv2_date)) missingVaccines.push('ขาด IPV เข็ม 4 เดือน (I12)'); else passedVaccines.push('IPV 1 เข็ม');
+  if (!has(r.ipv2_date)) missingVaccines.push('IPV เข็ม 4 เดือน'); else passedVaccines.push('IPV เข็ม 4 เดือน');
   
   // 6. OPV 3 ครั้ง (6 เดือน, 1 ปี 6 เดือน, 4 ปี)
   let opvPass = true;
-  if (!has(r.opv1_date)) { missingVaccines.push('ขาด OPV เข็ม 3 (083)'); opvPass = false; }
-  if (!has(r.opv4_date)) { missingVaccines.push('ขาด OPV เข็ม 4 (084)'); opvPass = false; }
-  if (!has(r.opv5_date)) { missingVaccines.push('ขาด OPV เข็ม 5 (085)'); opvPass = false; }
-  if (opvPass) passedVaccines.push('OPV ครบ 3 เข็ม');
+  if (!has(r.opv1_date)) { missingVaccines.push('OPV เข็ม 1 (6 ด.)'); opvPass = false; }
+  if (!has(r.opv4_date)) { missingVaccines.push('OPV เข็ม 2 (1.5 ปี)'); opvPass = false; }
+  if (!has(r.opv5_date)) { missingVaccines.push('OPV เข็ม 3 (4 ปี)'); opvPass = false; }
+  if (opvPass) passedVaccines.push('OPV เข็ม 1, 2, 3');
   
   // 7. MMR 2 ครั้ง (9 เดือน, 1 ปี 6 เดือน)
   let mmrPass = true;
-  if (!has(r.mmr1_date)) { missingVaccines.push('ขาด MMR เข็ม 1 (061)'); mmrPass = false; }
-  if (!has(r.mmr2_date)) { missingVaccines.push('ขาด MMR เข็ม 2 (073)'); mmrPass = false; }
-  if (mmrPass) passedVaccines.push('MMR ครบ 2 เข็ม');
+  if (!has(r.mmr1_date)) { missingVaccines.push('MMR เข็ม 1'); mmrPass = false; }
+  if (!has(r.mmr2_date)) { missingVaccines.push('MMR เข็ม 2'); mmrPass = false; }
+  if (mmrPass) passedVaccines.push('MMR เข็ม 1, 2');
   
   // 8. Rota (ยกเว้นในเด็ก 5 ปี เนื่องจากเกิดก่อนนโยบายวัคซีนใหม่)
   // ไม่นำมาคำนวณ Fully Immunized
   
   // 9. LAJE 2 ครั้ง หรือ JE 3 ครั้ง
-  let jePass = true;
-  if (has(r.je1_date) || has(r.je2_date) || has(r.je3_date)) {
-    // เชื้อตาย 3 เข็ม
-    if (!has(r.je1_date)) { missingVaccines.push('ขาด JE เข็ม 1 (051)'); jePass = false; }
-    if (!has(r.je2_date)) { missingVaccines.push('ขาด JE เข็ม 2 (052)'); jePass = false; }
-    if (!has(r.je3_date)) { missingVaccines.push('ขาด JE เข็ม 3 (053)'); jePass = false; }
-  } else if (has(r.j11_date) || has(r.j12_date)) {
-    // เชื้อเป็น 2 เข็ม
-    if (!has(r.j11_date)) { missingVaccines.push('ขาด LAJE เข็ม 1 (J11)'); jePass = false; }
-    if (!has(r.j12_date)) { missingVaccines.push('ขาด LAJE เข็ม 2 (J12)'); jePass = false; }
-  } else {
-    // ไม่มีข้อมูลเลย
-    missingVaccines.push('ขาด LAJE/JE (เข็มแรก)');
-    jePass = false;
+  const hasJE1 = has(r.j11_date) || has(r.je1_date);
+  if (!hasJE1) {
+    missingVaccines.push('LAJE เข็ม 1 หรือ JE เข็ม 1');
   }
-  if (jePass) passedVaccines.push('LAJE ครบ 2 เข็ม หรือ JE ครบ 3 เข็ม');
+
+  const hasLAJEComplete = has(r.j11_date) && has(r.j12_date);
+  const hasJEComplete = has(r.je1_date) && has(r.je2_date) && has(r.je3_date);
+  
+  if (hasLAJEComplete || hasJEComplete) {
+    passedVaccines.push(hasLAJEComplete ? 'LAJE ครบ 2 เข็ม' : 'JE ครบ 3 เข็ม');
+  } else {
+    missingVaccines.push('LAJE เข็ม 2 หรือ JE เข็ม 2-3 (ครบ)');
+  }
 
   let isFullyImmunized = missingVaccines.length === 0;
 

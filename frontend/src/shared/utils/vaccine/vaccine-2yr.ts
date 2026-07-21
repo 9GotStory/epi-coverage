@@ -60,67 +60,72 @@ export function evaluateView2_2Yr(record: EpiRecord): VaccineStatus {
 
   // 2. HBV 3 times (hbv1, hbv2, hbv4)
   let hbvPass = true;
-  if (!has(record.hbv1_date)) { missing.push('ขาด HBV เข็ม 1 (041)'); hbvPass = false; }
-  if (!has(record.hbv2_date)) { missing.push('ขาด HBV เข็ม 2 (042)'); hbvPass = false; }
-  if (!has(record.hbv4_date)) { missing.push('ขาด HBV เข็ม 4 (043)'); hbvPass = false; }
-  if (hbvPass) passed.push('HBV ครบ 3 เข็ม');
+  if (!has(record.hbv1_date)) { missing.push('HBV เข็ม 1'); hbvPass = false; }
+  if (!has(record.hbv2_date)) { missing.push('HBV เข็ม 2'); hbvPass = false; }
+  if (!has(record.hbv4_date)) { missing.push('HBV เข็ม 3 (6 ด.)'); hbvPass = false; }
+  if (hbvPass) passed.push('HBV เข็ม 1, 2, 3');
 
   // 3. DTP 4 times (dtp1, dtp2, dtp3, dtp4)
   let dtpPass = true;
-  if (!has(record.dtp1_date)) { missing.push('ขาด DTP เข็ม 1 (031)'); dtpPass = false; }
-  if (!has(record.dtp2_date)) { missing.push('ขาด DTP เข็ม 2 (032)'); dtpPass = false; }
-  if (!has(record.dtp3_date)) { missing.push('ขาด DTP เข็ม 3 (033)'); dtpPass = false; }
-  if (!has(record.dtp4_date)) { missing.push('ขาด DTP เข็ม 4 (034)'); dtpPass = false; }
-  if (dtpPass) passed.push('DTP ครบ 4 เข็ม');
+  if (!has(record.dtp1_date)) { missing.push('DTP เข็ม 1'); dtpPass = false; }
+  if (!has(record.dtp2_date)) { missing.push('DTP เข็ม 2'); dtpPass = false; }
+  if (!has(record.dtp3_date)) { missing.push('DTP เข็ม 3'); dtpPass = false; }
+  if (!has(record.dtp4_date)) { missing.push('DTP เข็ม 4'); dtpPass = false; }
+  if (dtpPass) passed.push('DTP เข็ม 1, 2, 3, 4');
 
   // 4. Hib 3 times (hib1, hib2, hib3)
   let hibPass = true;
-  if (!has(record.hib1_date)) { missing.push('ขาด Hib เข็ม 1 (H11)'); hibPass = false; }
-  if (!has(record.hib2_date)) { missing.push('ขาด Hib เข็ม 2 (H12)'); hibPass = false; }
-  if (!has(record.hib3_date)) { missing.push('ขาด Hib เข็ม 3 (H13)'); hibPass = false; }
-  if (hibPass) passed.push('Hib ครบ 3 เข็ม');
+  if (!has(record.hib1_date)) { missing.push('Hib เข็ม 1'); hibPass = false; }
+  if (!has(record.hib2_date)) { missing.push('Hib เข็ม 2'); hibPass = false; }
+  if (!has(record.hib3_date)) { missing.push('Hib เข็ม 3'); hibPass = false; }
+  if (hibPass) passed.push('Hib เข็ม 1, 2, 3');
 
   // 5. IPV ครบ 2 เข็ม
   let ipvPass = true;
-  if (!has(record.ipv1_date)) { missing.push('ขาด IPV เข็ม 1 (I11)'); ipvPass = false; }
-  if (!has(record.ipv2_date)) { missing.push('ขาด IPV เข็ม 2 (I12)'); ipvPass = false; }
-  if (ipvPass) passed.push('IPV ครบ 2 เข็ม');
+  if (!has(record.ipv1_date)) { missing.push('IPV เข็ม 1'); ipvPass = false; }
+  if (!has(record.ipv2_date)) { missing.push('IPV เข็ม 2'); ipvPass = false; }
+  if (ipvPass) passed.push('IPV เข็ม 1, 2');
 
   // 6. OPV 2 times (Usually opv1 and opv4)
   let opvPass = true;
-  if (!has(record.opv1_date)) { missing.push('ขาด OPV เข็ม 3 (083)'); opvPass = false; }
-  if (!has(record.opv4_date)) { missing.push('ขาด OPV เข็ม 4 (084)'); opvPass = false; }
-  if (opvPass) passed.push('OPV ครบ 4 เข็ม');
+  if (!has(record.opv1_date)) { missing.push('OPV เข็ม 1 (6 ด.)'); opvPass = false; }
+  if (!has(record.opv4_date)) { missing.push('OPV เข็ม 2 (1.5 ปี)'); opvPass = false; }
+  if (opvPass) passed.push('OPV เข็ม 1, 2');
 
   // 7. MMR 2 times (mmr1, mmr2)
   let mmrPass = true;
-  if (!has(record.mmr1_date)) { missing.push('ขาด MMR เข็ม 1 (061)'); mmrPass = false; }
-  if (!has(record.mmr2_date)) { missing.push('ขาด MMR เข็ม 2 (073)'); mmrPass = false; }
-  if (mmrPass) passed.push('MMR ครบ 2 เข็ม');
+  if (!has(record.mmr1_date)) { missing.push('MMR เข็ม 1'); mmrPass = false; }
+  if (!has(record.mmr2_date)) { missing.push('MMR เข็ม 2'); mmrPass = false; }
+  if (mmrPass) passed.push('MMR เข็ม 1, 2');
 
   // 8. Rota Complete
-  let rotaPass = true;
-  if (has(record.rv31_date) || has(record.rv32_date) || has(record.rv33_date)) {
-    if (!has(record.rv31_date)) { missing.push('ขาด Rota เข็ม 1 (R21)'); rotaPass = false; }
-    if (!has(record.rv32_date)) { missing.push('ขาด Rota เข็ม 2 (R22)'); rotaPass = false; }
-    if (!has(record.rv33_date)) { missing.push('ขาด Rota เข็ม 3 (R23)'); rotaPass = false; }
-  } else if (has(record.rv21_date) || has(record.rv22_date)) {
-    if (!has(record.rv21_date)) { missing.push('ขาด Rota เข็ม 1 (R11)'); rotaPass = false; }
-    if (!has(record.rv22_date)) { missing.push('ขาด Rota เข็ม 2 (R12)'); rotaPass = false; }
-  } else {
-    missing.push('ขาด Rota (เข็มแรก)');
-    rotaPass = false;
+  const hasRota1 = has(record.rv21_date) || has(record.rv31_date);
+  if (!hasRota1) {
+    missing.push('Rota เข็ม 1');
   }
-  if (rotaPass) passed.push('Rota ครบถ้วน');
+
+  const hasRota2Series = has(record.rv21_date) && has(record.rv22_date);
+  const hasRota3Series = has(record.rv31_date) && has(record.rv32_date) && has(record.rv33_date);
+
+  if (hasRota2Series || hasRota3Series) {
+    passed.push('Rota ครบถ้วน');
+  } else {
+    missing.push('Rota เข็มสุดท้าย (ครบ)');
+  }
 
   // 9. LAJE 1 time OR JE 2 times
+  const hasJE1 = has(record.j11_date) || has(record.je1_date);
+  if (!hasJE1) {
+    missing.push('LAJE เข็ม 1 หรือ JE เข็ม 1');
+  }
+
   const hasLAJE = has(record.j11_date);
   const hasJEComplete = has(record.je1_date) && has(record.je2_date);
   
-  if (!hasLAJE && !hasJEComplete) {
-    missing.push('ขาด LAJE เข็ม 1 หรือ JE เข็ม 2');
-  } else {
+  if (hasLAJE || hasJEComplete) {
     passed.push(hasLAJE ? 'LAJE 1 เข็ม' : 'JE ครบ 2 เข็ม');
+  } else {
+    missing.push('JE เข็ม 2 (เฉพาะกรณีรับ JE)');
   }
 
   let isFullyImmunized = missing.length === 0;

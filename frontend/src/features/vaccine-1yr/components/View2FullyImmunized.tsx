@@ -125,8 +125,6 @@ export function View2FullyImmunized({ fiscalYear, quarter, data, isLoading, erro
       id: 'status',
       size: 500,
       cell: ({ row }) => {
-        const evaluation = row.evaluation; // For some reason it is accessed via row.original.evaluation usually, let me check the target content carefully
-        // Wait, the target content says: const evaluation = row.original.evaluation;
         const ev = row.original.evaluation;
         if (ev.status === 'PASS') {
           return (
@@ -189,7 +187,6 @@ export function View2FullyImmunized({ fiscalYear, quarter, data, isLoading, erro
   // Handle Export
   const handleExportExcel = () => {
     const exportData = filteredData.map(row => {
-      const missingStr = row.evaluation.missingVaccines.join(', ');
       const age = getAgeInMonths(row.birth);
       const ageStr = age >= 12 ? `${Math.floor(age / 12)} ปี ${age % 12} เดือน` : `${age} เดือน`;
       const birthStr = row.birth ? new Date(row.birth as string).toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric' }) : '';
@@ -212,7 +209,6 @@ export function View2FullyImmunized({ fiscalYear, quarter, data, isLoading, erro
 
   const handleExportPdf = () => {
     const exportData = filteredData.map(row => {
-      const missingStr = row.evaluation.missingVaccines.join(', ');
       const age = getAgeInMonths(row.birth);
       const ageStr = age >= 12 ? `${Math.floor(age / 12)} ปี ${age % 12} เดือน` : `${age} เดือน`;
       const birthStr = row.birth ? new Date(row.birth as string).toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric' }) : '';
@@ -340,8 +336,8 @@ export function View2FullyImmunized({ fiscalYear, quarter, data, isLoading, erro
                     <span className="text-[11px] text-indigo-700">วิธีบันทึกใน HIS: เลือกลงเป็น <strong>วัคซีนรวม (Pentavalent)</strong> (รหัส 43 แฟ้ม: <code className="bg-indigo-100 px-1 py-0.5 rounded font-mono text-[10px]">D21, D22, D23</code>)</span>
                   </div>
                   <div className="flex flex-col gap-0.5">
-                    <span className="font-medium text-indigo-900">IPV (โปลิโอชนิดฉีด) - ครบ 2 เข็ม</span>
-                    <span className="text-[11px] text-indigo-700">วิธีบันทึกใน HIS: เลือกลงเป็น <strong>IPV เข็ม 1-2</strong> (รหัส 43 แฟ้ม: <code className="bg-indigo-100 px-1 py-0.5 rounded font-mono text-[10px]">I11, I12</code>)</span>
+                    <span className="font-medium text-indigo-900">IPV (โปลิโอชนิดฉีด) - เข็ม 1 และ 2</span>
+                    <span className="text-[11px] text-indigo-700">วิธีบันทึกใน HIS: เลือกลงเป็น <strong>IPV เข็ม 1, 2</strong> (รหัส 43 แฟ้ม: <code className="bg-indigo-100 px-1 py-0.5 rounded font-mono text-[10px]">I11, I12</code>)</span>
                   </div>
                   <div className="flex flex-col gap-0.5">
                     <span className="font-medium text-indigo-900">OPV (โปลิโอชนิดหยอด) - 1 เข็ม (ตอน 6 เดือน)</span>
