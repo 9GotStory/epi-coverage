@@ -119,6 +119,8 @@ export const getDataErrors = (record: EpiRecord, rules: VaccineRule[]): string[]
   const errors: string[] = [];
   if (!record.birth || !rules) return errors;
   
+  const currentAgeMonths = getAgeInMonths(record.birth);
+  
   for (const rule of rules) {
     let hasError = false;
     if (rule.required_fields) {
@@ -128,7 +130,9 @@ export const getDataErrors = (record: EpiRecord, rules: VaccineRule[]): string[]
       hasError = rule.branch_alt_fields.some(field => hasFieldDataError(record, field as keyof EpiRecord));
     }
     if (hasError) {
-      errors.push(rule.display_name);
+      const isV1 = rule.view_type === 1;
+      const { names } = resolveSmartVaccineNames(record, rule, isV1, currentAgeMonths);
+      errors.push(...names);
     }
   }
   
