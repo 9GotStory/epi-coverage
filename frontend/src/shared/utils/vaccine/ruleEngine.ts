@@ -270,9 +270,13 @@ export const evaluateDynamicV2 = (record: EpiRecord, rules: VaccineRule[]): Vacc
       pendingVaccines.length = 0;
     } else if (record.result.includes('ไม่ผ่าน')) {
       isFullyImmunized = false;
-      status = 'FAIL';
-      if (missingVaccines.length === 0 && pendingVaccines.length === 0) {
-        missingVaccines.push('ไม่ผ่านเกณฑ์ HDC (ตรวจสอบรายละเอียดในระบบ)');
+      
+      // If local logic says PENDING, keep it as PENDING (because HDC doesn't have PENDING state in export)
+      if (status !== 'PENDING') {
+        status = 'FAIL';
+        if (missingVaccines.length === 0 && pendingVaccines.length === 0) {
+          missingVaccines.push('ไม่ผ่านเกณฑ์ HDC (ตรวจสอบรายละเอียดในระบบ)');
+        }
       }
     }
   }
