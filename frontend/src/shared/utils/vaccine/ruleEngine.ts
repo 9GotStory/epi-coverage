@@ -135,6 +135,66 @@ export const getDataErrors = (record: EpiRecord, rules: VaccineRule[]): string[]
   return Array.from(new Set(errors));
 };
 
+const resolveSmartVaccineNames = (record: EpiRecord, rule: VaccineRule, isV1: boolean, currentAgeMonths: number): { names: string[], isPending: boolean } => {
+  let targetAge: number | undefined = rule.target_age_months;
+  if (targetAge === undefined || targetAge === null) {
+    const hdcCodeStr = rule.hdc_code ? String(rule.hdc_code) : '';
+    const codes = hdcCodeStr.split(/[-,\/\s]+/).map(c => c.trim().padStart(3, '0')).filter(Boolean);
+    let maxAge = -1;
+    for (const code of codes) {
+      if (TARGET_AGE_MONTHS_MAP[code] !== undefined) {
+        maxAge = Math.max(maxAge, TARGET_AGE_MONTHS_MAP[code]);
+      }
+    }
+    targetAge = maxAge !== -1 ? maxAge : undefined;
+  }
+  
+  let isPending = targetAge !== undefined && currentAgeMonths < targetAge;
+  
+  // Smart Rota Logic
+  if (rule.vaccine_group === 'Rota' && rule.logic_type === 'BRANCH') {
+    // If it's the complete series rule (it requires rv22_date)
+    if (rule.required_fields.includes('rv22_date')) {
+      if (targetAge === undefined) {
+        targetAge = 6;
+        isPending = currentAgeMonths < 6;
+      }
+      const hasRv21 = hasDose(record, 'rv21_date', record.birth);
+      const hasRv31 = hasDose(record, 'rv31_date', record.birth);
+      
+      if (hasRv31 && !hasRv21) {
+        // 3-dose series
+        const hasRv32 = hasDose(record, 'rv32_date', record.birth);
+        const hasRv33 = hasDose(record, 'rv33_date', record.birth);
+        const missing = [];
+        let hasPending = false;
+        
+        if (!hasRv32) {
+          missing.push(isV1 ? 'ขาด Rota เข็ม 2 (rv32)' : 'Rota เข็ม 2 (rv32)');
+          if (currentAgeMonths < 4) hasPending = true;
+        }
+        if (hasRv32 && !hasRv33) {
+          missing.push(isV1 ? 'ขาด Rota เข็ม 3 (rv33)' : 'Rota เข็ม 3 (rv33)');
+          if (currentAgeMonths < 6) hasPending = true;
+        }
+        if (missing.length > 0) return { names: missing, isPending: hasPending };
+      } else if (hasRv21 && !hasRv31) {
+        // 2-dose series
+        const hasRv22 = hasDose(record, 'rv22_date', record.birth);
+        if (!hasRv22) {
+          return { 
+            names: [isV1 ? 'ขาด Rota เข็ม 2 (rv22)' : 'Rota เข็ม 2 (rv22)'], 
+            isPending: currentAgeMonths < 4 
+          };
+        }
+      }
+      // If neither, fallback to default display_name
+    }
+  }
+
+  return { names: [rule.display_name], isPending };
+};
+
 /**
  * Evaluate Dynamic View 1 (รายเข็ม)
  * Return structure ให้เข้ากันกับ View1Evaluation
@@ -171,24 +231,11 @@ export const evaluateDynamicV1 = (record: EpiRecord, rules: VaccineRule[]): View
 
     results[rule.display_name] = passed;
     if (!passed) {
-      let targetAge: number | undefined = rule.target_age_months;
-      if (targetAge === undefined || targetAge === null) {
-        const hdcCodeStr = rule.hdc_code ? String(rule.hdc_code) : '';
-        const codes = hdcCodeStr.split(/[-,\/\s]+/).map(c => c.trim().padStart(3, '0')).filter(Boolean);
-        
-        let maxAge = -1;
-        for (const code of codes) {
-          if (TARGET_AGE_MONTHS_MAP[code] !== undefined) {
-            maxAge = Math.max(maxAge, TARGET_AGE_MONTHS_MAP[code]);
-          }
-        }
-        targetAge = maxAge !== -1 ? maxAge : undefined;
-      }
-
-      if (targetAge !== undefined && currentAgeMonths < targetAge) {
-        pendingVaccines.push(rule.display_name);
+      const { names, isPending } = resolveSmartVaccineNames(record, rule, true, currentAgeMonths);
+      if (isPending) {
+        pendingVaccines.push(...names);
       } else {
-        missingVaccines.push(rule.display_name);
+        missingVaccines.push(...names);
       }
     } else {
       passedCount++;
@@ -226,24 +273,11 @@ export const evaluateDynamicV2 = (record: EpiRecord, rules: VaccineRule[]): Vacc
     }
 
     if (!passed) {
-      let targetAge: number | undefined = rule.target_age_months;
-      if (targetAge === undefined || targetAge === null) {
-        const hdcCodeStr = rule.hdc_code ? String(rule.hdc_code) : '';
-        const codes = hdcCodeStr.split(/[-,\/\s]+/).map(c => c.trim().padStart(3, '0')).filter(Boolean);
-        
-        let maxAge = -1;
-        for (const code of codes) {
-          if (TARGET_AGE_MONTHS_MAP[code] !== undefined) {
-            maxAge = Math.max(maxAge, TARGET_AGE_MONTHS_MAP[code]);
-          }
-        }
-        targetAge = maxAge !== -1 ? maxAge : undefined;
-      }
-
-      if (targetAge !== undefined && currentAgeMonths < targetAge) {
-        pendingVaccines.push(rule.display_name);
+      const { names, isPending } = resolveSmartVaccineNames(record, rule, false, currentAgeMonths);
+      if (isPending) {
+        pendingVaccines.push(...names);
       } else {
-        missingVaccines.push(rule.display_name);
+        missingVaccines.push(...names);
       }
     } else {
       passedVaccines.push(rule.display_name);
