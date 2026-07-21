@@ -101,6 +101,40 @@ export const hasDose = (record: EpiRecord, field: keyof EpiRecord, birthDate?: s
   return true;
 };
 
+export const hasFieldDataError = (record: EpiRecord, field: keyof EpiRecord): boolean => {
+  const val = record[field];
+  if (!val || typeof val !== 'string' || !record.birth) return false;
+  
+  const birthStr = typeof record.birth === 'string' ? record.birth : record.birth.toISOString();
+  const cleanBirth = birthStr.split('T')[0].trim();
+  const cleanVal = val.split('T')[0].trim();
+  
+  if (cleanVal !== '' && cleanVal !== '-' && cleanVal < cleanBirth) {
+    return true;
+  }
+  return false;
+};
+
+export const getDataErrors = (record: EpiRecord, rules: VaccineRule[]): string[] => {
+  const errors: string[] = [];
+  if (!record.birth || !rules) return errors;
+  
+  for (const rule of rules) {
+    let hasError = false;
+    if (rule.required_fields) {
+      hasError = rule.required_fields.some(field => hasFieldDataError(record, field as keyof EpiRecord));
+    }
+    if (!hasError && rule.branch_alt_fields) {
+      hasError = rule.branch_alt_fields.some(field => hasFieldDataError(record, field as keyof EpiRecord));
+    }
+    if (hasError) {
+      errors.push(rule.display_name);
+    }
+  }
+  
+  return Array.from(new Set(errors));
+};
+
 /**
  * Evaluate Dynamic View 1 (รายเข็ม)
  * Return structure ให้เข้ากันกับ View1Evaluation

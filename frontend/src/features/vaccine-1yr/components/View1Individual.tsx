@@ -3,7 +3,7 @@ import { InfoIcon, FileSpreadsheetIcon, FileTextIcon } from 'lucide-react';
 import type { ColumnDef } from '@tanstack/react-table';
 
 import { evaluateView1 } from '../../../shared/utils/vaccine/vaccine-1yr';
-import { evaluateDynamicV1 } from '../../../shared/utils/vaccine/ruleEngine';
+import { evaluateDynamicV1, getDataErrors } from '../../../shared/utils/vaccine/ruleEngine';
 import { formatDateTimeStr, getBirthDateRangeForQuarter, getAgeInMonths } from '../../../shared/utils/dateUtils';
 import type { EpiRecord } from '../../../shared/types';
 import { EpiDataTable } from '../../../shared/components/EpiDataTable';
@@ -27,6 +27,7 @@ function shortenFacilityName(name: string) {
 type ProcessedView1Record = EpiRecord & {
   missingVaccines: string[];
   pendingVaccines: string[];
+  dataErrors?: string[];
   status: 'PASS' | 'FAIL' | 'PENDING';
 };
 
@@ -66,10 +67,13 @@ export function View1Individual({ fiscalYear, quarter, data, isLoading, error, a
       if (missing.length > 0) status = 'FAIL';
       else if (pending.length > 0) status = 'PENDING';
       
+      const dataErrors = getDataErrors(record, rules);
+      
       return {
         ...record,
         missingVaccines: missing,
         pendingVaccines: pending,
+        dataErrors,
         status: status
       };
     });
@@ -158,11 +162,22 @@ export function View1Individual({ fiscalYear, quarter, data, isLoading, error, a
               </span>
             )}
             <div className="flex flex-wrap gap-1 mt-1">
-              {row.original.missingVaccines.map((v, i) => (
-                <span key={`m-${i}`} className="inline-flex px-1.5 py-0.5 rounded bg-red-50 text-red-600 text-[10px] font-medium border border-red-100 shadow-sm">
-                  {v}
-                </span>
-              ))}
+              {row.original.missingVaccines.map((v, i) => {
+                const hasDataError = row.original.dataErrors?.some(err => v === err);
+                if (hasDataError) {
+                  return (
+                    <span key={`m-${i}`} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 text-[10px] font-medium border border-orange-200 shadow-sm" title="วันที่รับวัคซีนก่อนวันเกิด">
+                      <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                      {v} (ข้อมูลวันที่ผิด)
+                    </span>
+                  );
+                }
+                return (
+                  <span key={`m-${i}`} className="inline-flex px-1.5 py-0.5 rounded bg-red-50 text-red-600 text-[10px] font-medium border border-red-100 shadow-sm">
+                    {v}
+                  </span>
+                );
+              })}
               {row.original.pendingVaccines.map((v, i) => (
                 <span key={`p-${i}`} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-zinc-100 text-zinc-600 text-[10px] font-medium border border-zinc-200 shadow-sm">
                   <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
