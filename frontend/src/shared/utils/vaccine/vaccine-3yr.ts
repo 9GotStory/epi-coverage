@@ -81,10 +81,10 @@ export function evaluateView2_3Yr(record: EpiRecord): VaccineStatus {
   if (!has(record.hib3_date)) { missing.push('ขาด Hib เข็ม 3 (H13)'); hibPass = false; }
   if (hibPass) passed.push('Hib ครบ 3 เข็ม');
 
-  // 5. IPV 2 times
+  // 5. IPV ครบ 2 เข็ม
   let ipvPass = true;
-  if (!has(record.ipv1_date)) { missing.push('ขาด IPV เข็ม 1 (091)'); ipvPass = false; }
-  if (!has(record.ipv2_date)) { missing.push('ขาด IPV เข็ม 2 (092)'); ipvPass = false; }
+  if (!has(record.ipv1_date)) { missing.push('ขาด IPV เข็ม 1 (I11)'); ipvPass = false; }
+  if (!has(record.ipv2_date)) { missing.push('ขาด IPV เข็ม 2 (I12)'); ipvPass = false; }
   if (ipvPass) passed.push('IPV ครบ 2 เข็ม');
 
   // 6. OPV 2 times

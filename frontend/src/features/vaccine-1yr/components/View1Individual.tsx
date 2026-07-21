@@ -343,7 +343,7 @@ export function View1Individual({ fiscalYear, quarter, data, isLoading, error, a
                   </div>
                   <div className="flex flex-col gap-0.5">
                     <span className="font-medium text-blue-900">Hib (ฮิบ)</span>
-                    <span className="text-[11px] text-blue-700">วิธีบันทึกใน HIS: เลือกลงเป็น <strong>วัคซีนรวม (Pentavalent)</strong> (รหัส 43 แฟ้ม: <code className="bg-blue-100 px-1 py-0.5 rounded font-mono text-[10px]">H11, H12, H13</code>)</span>
+                    <span className="text-[11px] text-blue-700">วิธีบันทึกใน HIS: เลือกลงเป็น <strong>วัคซีนรวม (Pentavalent)</strong> (รหัส 43 แฟ้ม: <code className="bg-blue-100 px-1 py-0.5 rounded font-mono text-[10px]">D21, D22, D23</code>)</span>
                   </div>
                   <div className="flex flex-col gap-0.5">
                     <span className="font-medium text-blue-900">OPV (โปลิโอชนิดหยอด)</span>
@@ -351,7 +351,7 @@ export function View1Individual({ fiscalYear, quarter, data, isLoading, error, a
                   </div>
                   <div className="flex flex-col gap-0.5">
                     <span className="font-medium text-blue-900">IPV (โปลิโอชนิดฉีด)</span>
-                    <span className="text-[11px] text-blue-700">วิธีบันทึกใน HIS: เลือกลงเป็น <strong>IPV เข็ม 1-2</strong> (รหัส 43 แฟ้ม: <code className="bg-blue-100 px-1 py-0.5 rounded font-mono text-[10px]">091, 092</code>)</span>
+                    <span className="text-[11px] text-blue-700">วิธีบันทึกใน HIS: เลือกลงเป็น <strong>IPV เข็ม 1-2</strong> (รหัส 43 แฟ้ม: <code className="bg-blue-100 px-1 py-0.5 rounded font-mono text-[10px]">I11, I12</code>)</span>
                   </div>
                   <div className="flex flex-col gap-0.5">
                     <span className="font-medium text-blue-900">MMR (หัด หัดเยอรมัน คางทูม)</span>
@@ -406,7 +406,7 @@ export function View1Individual({ fiscalYear, quarter, data, isLoading, error, a
           <div className="bg-zinc-50 p-4 rounded-lg border border-zinc-100">
             <p className="font-semibold text-zinc-800 mb-1">Q: วัคซีนโปลิโอฉีด (IPV) ระบบตรวจสอบอย่างไร?</p>
             <p className="text-zinc-600">
-              <strong className="text-zinc-800">A:</strong> ระบบจะตรวจสอบการได้รับ IPV จำนวน 2 เข็ม คือ <strong>IPV 2 เดือน</strong> (รหัส 43 แฟ้ม: <code className="bg-zinc-100 px-1 py-0.5 rounded font-mono text-zinc-700">091</code>) และ <strong>IPV 4 เดือน</strong> (รหัส 43 แฟ้ม: <code className="bg-zinc-100 px-1 py-0.5 rounded font-mono text-zinc-700">092</code>) หากเจ้าหน้าที่ลืมลงบันทึกรหัสใดรหัสหนึ่ง ระบบจะฟ้องว่าตกหล่น เพื่อให้กลับไปบันทึกข้อมูลย้อนหลังให้ครบถ้วนครับ
+              <strong className="text-zinc-800">A:</strong> ระบบจะตรวจสอบการได้รับ IPV จำนวน 2 เข็ม คือ <strong>IPV 2 เดือน</strong> (รหัส 43 แฟ้ม: <code className="bg-zinc-100 px-1 py-0.5 rounded font-mono text-zinc-700">I11</code>) และ <strong>IPV 4 เดือน</strong> (รหัส 43 แฟ้ม: <code className="bg-zinc-100 px-1 py-0.5 rounded font-mono text-zinc-700">I12</code>) หากเจ้าหน้าที่ลืมลงบันทึกรหัสใดรหัสหนึ่ง ระบบจะฟ้องว่าตกหล่น เพื่อให้กลับไปบันทึกข้อมูลย้อนหลังให้ครบถ้วนครับ
             </p>
           </div>
 

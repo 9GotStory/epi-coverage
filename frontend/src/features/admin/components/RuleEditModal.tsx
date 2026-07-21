@@ -258,7 +258,7 @@ export function RuleEditModal({ rule, isOpen, onClose, onSave, fiscalYear, ageGr
                   <FormItem>
                     <FormLabel>รหัส HDC (ถ้ามี)</FormLabel>
                     <FormControl>
-                      <Input placeholder="เช่น 041, 091" {...field} />
+                      <Input placeholder="เช่น 041, I11" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

@@ -47,8 +47,8 @@ export function evaluateView1(record: EpiRecord): View1Evaluation {
   evaluateItem('ขาด Hib เข็ม 1 (H11)', has(record.hib1_date));
   evaluateItem('ขาด Hib เข็ม 2 (H12)', has(record.hib2_date));
   evaluateItem('ขาด Hib เข็ม 3 (H13)', has(record.hib3_date));
-  evaluateItem('ขาด IPV เข็ม 1 (091)', has(record.ipv1_date));
-  evaluateItem('ขาด IPV เข็ม 2 (092)', has(record.ipv2_date));
+  evaluateItem('ขาด IPV เข็ม 1 (I11)', has(record.ipv1_date));
+  evaluateItem('ขาด IPV เข็ม 2 (I12)', has(record.ipv2_date));
   evaluateItem('ขาด OPV เข็ม 3 (083)', has(record.opv1_date)); // opv1_date ใน Sheet = OPV 6 เดือน
   evaluateItem('ขาด MMR เข็ม 1 (061)', has(record.mmr1_date));
   
@@ -105,8 +105,8 @@ export function evaluateView2(record: EpiRecord): VaccineStatus {
 
   // 5. IPV 2 times
   let ipvPass = true;
-  if (!has(record.ipv1_date)) { missing.push('ขาด IPV เข็ม 1 (091)'); ipvPass = false; }
-  if (!has(record.ipv2_date)) { missing.push('ขาด IPV เข็ม 2 (092)'); ipvPass = false; }
+  if (!has(record.ipv1_date)) { missing.push('ขาด IPV เข็ม 1 (I11)'); ipvPass = false; }
+  if (!has(record.ipv2_date)) { missing.push('ขาด IPV เข็ม 2 (I12)'); ipvPass = false; }
   if (ipvPass) passed.push('IPV ครบ 2 เข็ม');
 
   // 6. OPV 1 time (ที่อายุ 6 เดือน ซึ่งใน sheet คือ opv1_date)

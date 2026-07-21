@@ -93,8 +93,8 @@ export const evaluateView2_5Yr = (r: EpiRecord): VaccineStatus => {
   if (hibPass) passedVaccines.push('Hib ครบ 3 เข็ม');
   
   // 5. IPV 1 ครั้ง (4 เดือน) 
-  // *จากการวิเคราะห์ไฟล์ HDC เด็ก 5 ปี วัคซีน IPV 4 เดือนจะถูกบันทึกใน ipv2_date (092)
-  if (!has(r.ipv2_date)) missingVaccines.push('ขาด IPV เข็ม 4 เดือน (092)'); else passedVaccines.push('IPV 1 เข็ม');
+  // *จากการวิเคราะห์ไฟล์ HDC เด็ก 5 ปี วัคซีน IPV 4 เดือนจะถูกบันทึกใน ipv2_date (I12)
+  if (!has(r.ipv2_date)) missingVaccines.push('ขาด IPV เข็ม 4 เดือน (I12)'); else passedVaccines.push('IPV 1 เข็ม');
   
   // 6. OPV 3 ครั้ง (6 เดือน, 1 ปี 6 เดือน, 4 ปี)
   let opvPass = true;
