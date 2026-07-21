@@ -262,7 +262,7 @@ function cloneRulesFromYear(fromYear, toYear, adminEmail) {
  * @param {string|number} fiscalYear - ปีงบประมาณที่ต้องการ Seed
  * @param {string} adminEmail
  */
-function seedVaccineRules(fiscalYear, adminEmail) {
+function seedVaccineRules(fiscalYear, adminEmail, force = false) {
   if (!fiscalYear) {
     return { success: false, error: 'fiscalYear is required' };
   }
@@ -278,8 +278,24 @@ function seedVaccineRules(fiscalYear, adminEmail) {
     const obj = arrayToObj(headers, row);
     return String(obj.fiscal_year) === String(fiscalYear);
   });
+  
   if (existing.length > 0) {
-    return { success: false, error: `Year ${fiscalYear} already has ${existing.length} rules. Use cloneVaccineRules or delete existing rules first.` };
+    if (force) {
+      const rowsToDelete = [];
+      data.forEach((row, idx) => {
+        if (idx === 0) return;
+        const obj = arrayToObj(headers, row);
+        if (String(obj.fiscal_year) === String(fiscalYear)) {
+          rowsToDelete.push(idx + 1);
+        }
+      });
+      // Delete from bottom to top to avoid index shifting
+      for (let i = rowsToDelete.length - 1; i >= 0; i--) {
+        sheet.deleteRow(rowsToDelete[i]);
+      }
+    } else {
+      return { success: false, error: `Year ${fiscalYear} already has ${existing.length} rules. Use cloneVaccineRules or delete existing rules first.` };
+    }
   }
 
   // ──────────────────────────────────────────────────────────

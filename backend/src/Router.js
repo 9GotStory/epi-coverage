@@ -80,7 +80,7 @@ function handleRequest(method, e) {
       case 'migrateEpiSheets': return responseJson(migrateSheetNames(body.fromFiscalYear));
       case 'setupEpiSheetForYear': return responseJson(setupEpiSheetForYear(body.fiscalYear));
       // B2: Vaccine Rules CRUD
-      case 'seedVaccineRules': return responseJson(seedVaccineRules(body.fiscalYear, body.adminEmail));
+      case 'seedVaccineRules': return responseJson(seedVaccineRules(body.fiscalYear, body.adminEmail, body.force));
       case 'saveVaccineRule': return responseJson(saveVaccineRule(body.rule, body.adminEmail));
       case 'cloneVaccineRules': return responseJson(cloneRulesFromYear(body.fromYear, body.toYear, body.adminEmail));
       case 'batchSaveRules': return responseJson(batchSaveRules(body.fiscalYear, body.ageGroup, body.rules, body.adminEmail));

@@ -13,7 +13,7 @@ import { getCurrentFiscalYear } from '../../../shared/utils/dateUtils';
 import { useAvailableYears } from '../../../shared/hooks/useAvailableYears';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link, useBlocker } from 'react-router-dom';
-import { AlertCircle, CheckCircle2, RotateCw } from 'lucide-react';
+import { AlertCircle, CheckCircle2, RotateCw, RotateCcw } from 'lucide-react';
 
 interface VaccineRuleManagerProps {
   onDirtyChange?: (isDirty: boolean) => void;
@@ -96,6 +96,26 @@ export const VaccineRuleManager = ({ onDirtyChange }: VaccineRuleManagerProps) =
       }
     } catch (err: any) {
       toast.error(err.message || 'เกิดข้อผิดพลาดในการสร้างกฎ');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleRestoreDefaults = async () => {
+    if (!window.confirm(`คุณแน่ใจหรือไม่ที่จะลบเกณฑ์วัคซีนทั้งหมดของปี ${fiscalYear} และคืนค่าเริ่มต้น? การกระทำนี้ไม่สามารถยกเลิกได้`)) return;
+    try {
+      setIsProcessing(true);
+      const res = await fetchApi('seedVaccineRules', { fiscalYear, force: true });
+      if (res.data?.success) {
+        toast.success(`คืนค่าเริ่มต้นสำหรับปี ${fiscalYear} สำเร็จ`);
+        setDraftRules(null);
+        setHasUnsavedChanges(false);
+        queryClient.invalidateQueries({ queryKey: ['vaccineRules'] });
+      } else {
+        toast.error(res.data?.error || 'เกิดข้อผิดพลาดในการคืนค่าเริ่มต้น');
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'เกิดข้อผิดพลาดในการคืนค่าเริ่มต้น');
     } finally {
       setIsProcessing(false);
     }
@@ -281,7 +301,7 @@ export const VaccineRuleManager = ({ onDirtyChange }: VaccineRuleManagerProps) =
           </div>
           
           {displayRules.length > 0 && (
-            <div className="flex items-end mb-1">
+            <div className="flex items-end mb-1 gap-2">
               <Button 
                 variant="outline" 
                 onClick={handleAutoSetTargetAge}
@@ -290,6 +310,15 @@ export const VaccineRuleManager = ({ onDirtyChange }: VaccineRuleManagerProps) =
               >
                 <Wand2 className="w-4 h-4 mr-2" />
                 อัปเดตอายุเป้าหมาย (Auto)
+              </Button>
+              <Button 
+                variant="outline" 
+                onClick={handleRestoreDefaults}
+                className="bg-red-50 text-red-700 border-red-200 hover:bg-red-100 hover:text-red-800"
+                disabled={isProcessing}
+              >
+                <RotateCcw className="w-4 h-4 mr-2" />
+                คืนค่าเริ่มต้น (Restore)
               </Button>
             </div>
           )}
