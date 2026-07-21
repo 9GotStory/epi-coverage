@@ -99,8 +99,18 @@ export function OpenDataDashboard({ targetTable = 's_epi1' }: OpenDataDashboardP
     const filteredData = selectedHosp === 'all' 
       ? data 
       : data.filter(d => d.hospcode === selectedHosp);
-    return formatEpiAllVaccines(filteredData, targetTable);
-  }, [data, selectedHosp, targetTable]);
+    
+    const baseData = formatEpiAllVaccines(filteredData, targetTable);
+    
+    // Map specific dynamic targets for each vaccine gauge
+    return baseData.map(item => {
+      const vaccineKeyForTarget = item.vaccine === 'mmr' || item.vaccine === 'mmr1' || item.vaccine === 'mmr2' ? 'mmr' : item.vaccine;
+      return {
+        ...item,
+        goal: getTarget(quarter, 1, vaccineKeyForTarget)
+      };
+    });
+  }, [data, selectedHosp, targetTable, quarter, getTarget]);
 
   // Calculate total summary for the selected year
   const summary = useMemo(() => {

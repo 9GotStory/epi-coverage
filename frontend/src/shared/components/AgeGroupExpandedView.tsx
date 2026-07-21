@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import type { GroupSummary } from '../utils/dashboardLogic';
+import { useTargetSettings } from '../hooks/useTargetSettings';
 
 function shortenFacilityName(name: string) {
   return name.replace(/โรงพยาบาลส่งเสริมสุขภาพตำบล/g, 'รพ.สต.')
@@ -90,6 +91,29 @@ const FacilityGroup = ({ title, facilities, target, isPassedGroup }: FacilityGro
 };
 
 export function AgeGroupExpandedView({ summary, targetView1, targetView2 }: AgeGroupExpandedViewProps) {
+  const { getTarget } = useTargetSettings();
+  
+  // Helper to get specific vaccine target based on its name
+  const getSpecificTarget = (name: string, defaultTarget: number, view: 1 | 2) => {
+    const lowerName = name.toLowerCase();
+    let vaccineKey = '';
+    if (lowerName.includes('mmr')) vaccineKey = 'mmr';
+    else if (lowerName.includes('bcg')) vaccineKey = 'bcg';
+    else if (lowerName.includes('hbv')) vaccineKey = 'hbv';
+    else if (lowerName.includes('dtp')) vaccineKey = 'dtp';
+    else if (lowerName.includes('opv')) vaccineKey = 'opv';
+    else if (lowerName.includes('ipv')) vaccineKey = 'ipv';
+    else if (lowerName.includes('hib')) vaccineKey = 'hib';
+    else if (lowerName.includes('rota') || lowerName.includes('rv')) vaccineKey = 'rota';
+    else if (lowerName.includes('je') || lowerName.includes('laje')) vaccineKey = 'je';
+    else if (lowerName.includes('hpv')) vaccineKey = 'hpv';
+    
+    if (vaccineKey) {
+      return getTarget(4, view, vaccineKey);
+    }
+    return defaultTarget;
+  };
+
   // Use useMemo to avoid recalculating array filters on every re-render
   const passedFacilitiesV1 = useMemo(() => summary.facilityBreakdownV1.filter(f => f.coverage >= targetView1), [summary.facilityBreakdownV1, targetView1]);
   const failedFacilitiesV1 = useMemo(() => summary.facilityBreakdownV1.filter(f => f.coverage < targetView1).sort((a, b) => a.coverage - b.coverage), [summary.facilityBreakdownV1, targetView1]);
@@ -124,7 +148,8 @@ export function AgeGroupExpandedView({ summary, targetView1, targetView2 }: AgeG
             {summary.view1Breakdown.length > 0 ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1">
                 {summary.view1Breakdown.map(item => {
-                  const isPassed = item.coverage >= targetView1;
+                  const specificTarget = getSpecificTarget(item.name, targetView1, 1);
+                  const isPassed = item.coverage >= specificTarget;
                   return (
                     <div key={item.name} className={`flex justify-between items-center text-xs py-1.5 border-b ${isPassed ? 'border-green-100/30' : 'border-red-100/30'} last:border-0`}>
                       <span className="text-zinc-700 truncate font-medium mr-2" title={item.name}>{item.name}</span>
@@ -176,7 +201,8 @@ export function AgeGroupExpandedView({ summary, targetView1, targetView2 }: AgeG
             {summary.view2Breakdown.length > 0 ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1">
                 {summary.view2Breakdown.map(item => {
-                  const isPassed = item.coverage >= targetView2;
+                  const specificTarget = getSpecificTarget(item.name, targetView2, 2);
+                  const isPassed = item.coverage >= specificTarget;
                   return (
                     <div key={item.name} className={`flex justify-between items-center text-xs py-1.5 border-b ${isPassed ? 'border-emerald-100/30' : 'border-red-100/30'} last:border-0`}>
                       <span className="text-zinc-700 truncate font-medium mr-2" title={item.name}>{item.name}</span>

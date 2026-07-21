@@ -18,8 +18,9 @@ export function VaccineGaugeGrid({ data, goalTarget = 90 }: VaccineGaugeGridProp
   return (
     <div className="flex flex-wrap justify-center gap-4">
       {data.map((item) => {
-        // ✅ ใช้ goalTarget แบบ dynamic แทนการ hardcode 90
-        const isTargetMet = item.coverage >= goalTarget;
+        // ✅ ใช้เป้าหมายเฉพาะวัคซีน (item.goal) หรือเป้าหมายรวมถ้าไม่ได้กำหนด
+        const targetToUse = item.goal || goalTarget;
+        const isTargetMet = item.coverage >= targetToUse;
         const color = isTargetMet ? '#10B981' : '#EF4444'; // Success Green vs Danger Red
         
         const chartData = [
@@ -61,7 +62,7 @@ export function VaccineGaugeGrid({ data, goalTarget = 90 }: VaccineGaugeGridProp
               <p className="text-sm font-medium text-zinc-800">
                 {item.result.toLocaleString()} <span className="text-zinc-400">/</span> {item.target.toLocaleString()}
               </p>
-              <p className="text-xs text-zinc-400 mt-0.5">เป้า {goalTarget}%</p>
+              <p className="text-xs text-zinc-400 mt-0.5">เป้า {targetToUse}%</p>
             </div>
           </div>
         );
