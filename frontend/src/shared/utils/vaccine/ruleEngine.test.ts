@@ -7,6 +7,7 @@ describe('ruleEngine', () => {
   const mockRecord: EpiRecord = {
     hoscode: '00000',
     hosname: 'Mock',
+    pid: '000000',
     cid: '1234567890123',
     name: 'Test',
     lname: 'User',

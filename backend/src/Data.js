@@ -101,6 +101,117 @@ function getEpiData(hoscode, targetTable = 'Epi_1_Year', fiscalYear = null) {
 }
 
 /**
+ * บันทึกผลการวิเคราะห์จาก AI (Gemini) ลงฐานข้อมูล
+ */
+function saveAiAnalysis(recordKey, targetTable, aiAnalysis, adminEmail) {
+  const ss = getSpreadsheet();
+  let sheet = ss.getSheetByName(targetTable);
+  
+  if (!sheet) {
+    return { success: false, error: `Sheet not found: ${targetTable}` };
+  }
+  
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0];
+  
+  const iHoscode = headers.indexOf('hoscode');
+  const iPid = headers.indexOf('pid');
+  const iCid = headers.indexOf('cid');
+  const iSex = headers.indexOf('sex');
+  const iBirth = headers.indexOf('birth');
+  const iCheckVhid = headers.indexOf('check_vhid');
+  const aiAnalysisCol = headers.indexOf('ai_analysis');
+  const aiAnalyzedAtCol = headers.indexOf('ai_analyzed_at');
+  
+  if (iHoscode === -1 || iPid === -1 || iCid === -1 || iSex === -1 || iBirth === -1 || iCheckVhid === -1 || aiAnalysisCol === -1 || aiAnalyzedAtCol === -1) {
+    return { success: false, error: "Missing required columns in database schema for AI Analysis (Composite Key)." };
+  }
+  
+  const now = new Date();
+  let updatedCount = 0;
+  
+  const targetBirth = new Date(recordKey.birth).getTime();
+  
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    const rowBirth = new Date(row[iBirth]).getTime();
+    
+    if (
+      String(row[iHoscode]) === String(recordKey.hoscode) &&
+      String(row[iPid]) === String(recordKey.pid) &&
+      String(row[iCid]) === String(recordKey.cid) &&
+      String(row[iSex]) === String(recordKey.sex) &&
+      rowBirth === targetBirth &&
+      String(row[iCheckVhid] || '') === String(recordKey.check_vhid || '')
+    ) {
+      sheet.getRange(i + 1, aiAnalysisCol + 1).setValue(aiAnalysis);
+      sheet.getRange(i + 1, aiAnalyzedAtCol + 1).setValue(now.toISOString());
+      updatedCount++;
+    }
+  }
+  
+  if (updatedCount > 0) {
+    logAction('SYSTEM', adminEmail || 'Admin', 'save_ai_analysis', `Saved AI analysis for CID ${recordKey.cid} in ${targetTable}`);
+    return { success: true, message: "AI Analysis saved", aiAnalyzedAt: now.toISOString() };
+  } else {
+    return { success: false, error: "Record not found for Composite Key" };
+  }
+}
+
+/**
+ * ส่งคำขอไปยัง Gemini API เพื่อวิเคราะห์ข้อมูล และบันทึกผลลัพธ์
+ */
+function analyzeVaccineData(prompt, recordKey, targetTable, adminEmail) {
+  try {
+    // 1. Get API Key from Script Properties (Security Best Practice)
+    const scriptProperties = PropertiesService.getScriptProperties();
+    const apiKey = scriptProperties.getProperty('GEMINI_API_KEY');
+    
+    if (!apiKey) {
+      return { success: false, error: "ไม่พบ GEMINI_API_KEY ใน Script Properties (Project Settings)" };
+    }
+    
+    // 2. Call Gemini API
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${apiKey}`;
+    const payload = {
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: { temperature: 0.2 }
+    };
+    
+    const options = {
+      method: 'post',
+      contentType: 'application/json',
+      payload: JSON.stringify(payload),
+      muteHttpExceptions: true
+    };
+    
+    const response = UrlFetchApp.fetch(url, options);
+    const result = JSON.parse(response.getContentText());
+    
+    if (result.error) {
+      return { success: false, error: `Gemini API Error: ${result.error.message}` };
+    }
+    
+    if (result.candidates && result.candidates[0].content.parts[0].text) {
+      const aiAnalysis = result.candidates[0].content.parts[0].text;
+      
+      // 3. Save to DB
+      const saveResult = saveAiAnalysis(recordKey, targetTable, aiAnalysis, adminEmail);
+      
+      return { 
+        success: true, 
+        aiAnalysis: aiAnalysis,
+        aiAnalyzedAt: saveResult.success ? saveResult.aiAnalyzedAt : new Date().toISOString()
+      };
+    } else {
+      return { success: false, error: "ไม่สามารถประมวลผลคำตอบจาก AI ได้" };
+    }
+  } catch (err) {
+    return { success: false, error: err.toString() };
+  }
+}
+
+/**
  * ดึงประวัติการทำงาน (Audit Logs)
  */
 function getAuditLogs() {

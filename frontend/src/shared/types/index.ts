@@ -32,10 +32,13 @@ export interface AuditLog {
 export interface EpiRecord {
   hoscode: string;
   hosname: string;
+  pid: string;
   cid: string;
   name: string;
   lname: string;
+  sex?: string | number;
   birth: Date | string;
+  check_vhid?: string;
   
   // Vaccines
   bcg_date?: string;
@@ -91,6 +94,10 @@ export interface EpiRecord {
   fiscal_year?: string;
   last_seen_batch?: string;
   is_active?: boolean;
+  
+  // AI Analysis
+  ai_analysis?: string;
+  ai_analyzed_at?: string;
 }
 
 export interface VaccineStatus {

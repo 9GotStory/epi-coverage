@@ -13,7 +13,7 @@ function getEpiSchemas() {
       'dtp1_date', 'dtp2_date', 'dtp3_date', 'hib1_date', 'hib2_date', 'hib3_date',
       'ipv1_date', 'ipv2_date', 'opv1_date', 'opv2_date', 'opv3_date', 'mmr1_date',
       'rv21_date', 'rv22_date', 'rv31_date', 'rv32_date', 'rv33_date',
-      'pcv1_date', 'pcv2_date', 'pcv3_date', 'result', 'batch_id', 'fiscal_year', 'last_seen_batch', 'is_active'
+      'pcv1_date', 'pcv2_date', 'pcv3_date', 'result', 'batch_id', 'fiscal_year', 'last_seen_batch', 'is_active', 'ai_analysis', 'ai_analyzed_at'
     ],
     'Epi_2_Year': [
       'hoscode', 'hosname', 'pid', 'cid', 'name', 'lname', 'sex', 'birth', 'check_vhid',
@@ -22,7 +22,7 @@ function getEpiSchemas() {
       'ipv1_date', 'ipv2_date', 'opv1_date', 'opv2_date', 'opv3_date', 'opv4_date',
       'mmr1_date', 'mmr2_date', 'rv21_date', 'rv22_date', 'rv31_date', 'rv32_date', 'rv33_date',
       'pcv1_date', 'pcv2_date', 'pcv3_date', 'je1_date', 'je2_date', 'j11_date',
-      'result', 'batch_id', 'fiscal_year', 'last_seen_batch', 'is_active'
+      'result', 'batch_id', 'fiscal_year', 'last_seen_batch', 'is_active', 'ai_analysis', 'ai_analyzed_at'
     ],
     'Epi_3_Year': [
       'hoscode', 'hosname', 'pid', 'cid', 'name', 'lname', 'sex', 'birth', 'check_vhid',
@@ -31,7 +31,7 @@ function getEpiSchemas() {
       'ipv1_date', 'ipv2_date', 'opv1_date', 'opv2_date', 'opv3_date', 'opv4_date',
       'mmr1_date', 'mmr2_date', 'rv21_date', 'rv22_date', 'rv31_date', 'rv32_date', 'rv33_date',
       'pcv1_date', 'pcv2_date', 'pcv3_date', 'je1_date', 'je2_date', 'je3_date', 'j11_date', 'j12_date',
-      'result', 'batch_id', 'fiscal_year', 'last_seen_batch', 'is_active'
+      'result', 'batch_id', 'fiscal_year', 'last_seen_batch', 'is_active', 'ai_analysis', 'ai_analyzed_at'
     ],
     'Epi_5_Year': [
       'hoscode', 'hosname', 'pid', 'cid', 'name', 'lname', 'sex', 'birth', 'check_vhid',
@@ -40,7 +40,7 @@ function getEpiSchemas() {
       'ipv1_date', 'ipv2_date', 'opv1_date', 'opv2_date', 'opv3_date', 'opv4_date', 'opv5_date',
       'mmr1_date', 'mmr2_date', 'rv21_date', 'rv22_date', 'rv31_date', 'rv32_date', 'rv33_date',
       'pcv1_date', 'pcv2_date', 'pcv3_date', 'pcv4_date', 'je1_date', 'je2_date', 'je3_date', 'j11_date', 'j12_date',
-      'result', 'batch_id', 'fiscal_year', 'last_seen_batch', 'is_active'
+      'result', 'batch_id', 'fiscal_year', 'last_seen_batch', 'is_active', 'ai_analysis', 'ai_analyzed_at'
     ]
   };
 }
@@ -66,6 +66,35 @@ function setupSheetWithHeaders(ss, sheetName, columns, applyTextFormat) {
     sheet.getRange(2, 1, sheet.getMaxRows(), sheet.getMaxColumns()).setNumberFormat('@');
   }
   return sheet;
+}
+
+/**
+ * ฟังก์ชันสำหรับเพิ่มคอลัมน์ ai_analysis และ ai_analyzed_at ลงใน Sheet เดิมที่มีอยู่แล้ว
+ * (ใช้ Run ครั้งเดียวจาก Apps Script Editor หรือเรียกผ่าน API เพื่ออัปเกรด Schema)
+ */
+function addAiColumnsToExistingSheets() {
+  const ss = getSpreadsheet();
+  const sheets = ss.getSheets();
+  let updatedSheets = [];
+  
+  sheets.forEach(sheet => {
+    const sheetName = sheet.getName();
+    if (sheetName.startsWith('Epi_')) {
+      const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+      const missingColumns = ['ai_analysis', 'ai_analyzed_at'].filter(col => !headers.includes(col));
+      
+      if (missingColumns.length > 0) {
+        const startCol = headers.length + 1;
+        const headerRange = sheet.getRange(1, startCol, 1, missingColumns.length);
+        headerRange.setValues([missingColumns]);
+        headerRange.setFontWeight('bold');
+        headerRange.setBackground('#f3f3f3');
+        updatedSheets.push(sheetName);
+      }
+    }
+  });
+  
+  return { success: true, message: "เพิ่มคอลัมน์ AI ให้ Sheet แล้ว", updatedSheets };
 }
 
 /**
@@ -195,5 +224,11 @@ function setupDatabase() {
     ss.deleteSheet(defaultSheet);
   }
 
-  return { message: 'Database static sheets setup completed successfully. Use setupEpiSheetForYear(fiscalYear) to create EPI data sheets.' };
+  // อัปเกรด/เพิ่มคอลัมน์ AI ให้กับชีตข้อมูล EPI ที่มีอยู่แล้ว (Migration)
+  const aiMigrationResult = addAiColumnsToExistingSheets();
+
+  return { 
+    message: 'Database static sheets setup completed successfully. Use setupEpiSheetForYear(fiscalYear) to create EPI data sheets.',
+    ai_migration: aiMigrationResult
+  };
 }

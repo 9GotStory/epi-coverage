@@ -76,6 +76,8 @@ function handleRequest(method, e) {
       case 'updateUserFacility': return responseJson(updateUserFacility(body.googleId, body.hoscode));
       case 'deleteSession': return responseJson(deleteSession(body.token));
       case 'saveDashboardSummary': return responseJson(saveDashboardSummary(body.targetTable, body.fiscalYear, body.summaryData));
+      case 'saveAiAnalysis': return responseJson(saveAiAnalysis(body.recordKey, body.targetTable, body.aiAnalysis, body.adminEmail));
+      case 'analyzeVaccineData': return responseJson(analyzeVaccineData(body.prompt, body.recordKey, body.targetTable, e.parameter.email || body.adminEmail));
       // A1: Migration + Dynamic Sheet
       case 'migrateEpiSheets': return responseJson(migrateSheetNames(body.fromFiscalYear));
       case 'setupEpiSheetForYear': return responseJson(setupEpiSheetForYear(body.fiscalYear));
