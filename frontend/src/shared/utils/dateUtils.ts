@@ -1,4 +1,4 @@
-import { differenceInMonths, isValid } from 'date-fns';
+import { differenceInMonths, isValid, intervalToDuration } from 'date-fns';
 
 export function getCurrentFiscalYear(): number {
   const date = new Date();
@@ -6,11 +6,31 @@ export function getCurrentFiscalYear(): number {
   return date.getFullYear() + 543 + (date.getMonth() >= 9 ? 1 : 0);
 }
 
-export function getAgeInMonths(birthDate: Date | string | null | undefined): number {
+export function getAgeInMonths(birthDate: Date | string | null | undefined, referenceDate?: Date | string | null): number {
   if (!birthDate) return 0;
   const date = new Date(birthDate);
-  if (!isValid(date)) return 0;
-  return Math.max(0, differenceInMonths(new Date(), date));
+  const ref = referenceDate ? new Date(referenceDate) : new Date();
+  if (!isValid(date) || !isValid(ref)) return 0;
+  return Math.max(0, differenceInMonths(ref, date));
+}
+
+export function formatAgeStr(birthDate: Date | string | null | undefined, referenceDate?: Date | string | null): string {
+  if (!birthDate) return '-';
+  const start = new Date(birthDate);
+  const end = referenceDate ? new Date(referenceDate) : new Date();
+  
+  if (!isValid(start) || !isValid(end)) return '-';
+  if (start > end) return '0 เดือน';
+  
+  const duration = intervalToDuration({ start, end });
+  const years = duration.years || 0;
+  const months = duration.months || 0;
+  
+  if (years === 0) {
+    return `${months} เดือน`;
+  }
+  
+  return `${years} ปี ${months > 0 ? `${months} ด.` : ''}`.trim();
 }
 
 export function formatDateStr(dateStr: Date | string | null | undefined): string {

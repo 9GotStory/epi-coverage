@@ -1,3 +1,4 @@
+import { differenceInMonths, isValid } from 'date-fns';
 import type { EpiRecord, VaccineStatus } from '../../types';
 import type { View1Evaluation } from './vaccine-1yr';
 
@@ -38,17 +39,11 @@ export const TARGET_AGE_MONTHS_MAP: Record<string, number> = {
 export const getAgeInMonths = (birthDateStr: string | Date | undefined, evaluationDate: Date = new Date()): number => {
   if (!birthDateStr) return 999; // If no birth date, assume reached age
   const birthDate = typeof birthDateStr === 'string' ? new Date(birthDateStr) : birthDateStr;
-  if (isNaN(birthDate.getTime())) return 999;
+  
+  if (!isValid(birthDate)) return 999;
 
-  let months = (evaluationDate.getFullYear() - birthDate.getFullYear()) * 12;
-  months -= birthDate.getMonth();
-  months += evaluationDate.getMonth();
-  
-  if (evaluationDate.getDate() < birthDate.getDate()) {
-    months--;
-  }
-  
-  return months >= 0 ? months : 0;
+  const months = differenceInMonths(evaluationDate, birthDate);
+  return Math.max(0, months);
 };
 
 export interface VaccineRule {
@@ -80,47 +75,8 @@ export const hasDose = (record: EpiRecord, field: keyof EpiRecord, birthDate?: s
   const cleanVal = val.split('T')[0].trim();
   if (cleanVal === '' || cleanVal === '-') return false;
   
-  // บางครั้งข้อมูลลงผิดเป็นวันเกิด แต่สำหรับ BCG และ HBV เข็ม 1 ฉีดแรกเกิดได้
-  if (birthDate) {
-    const birthStr = typeof birthDate === 'string' ? birthDate : birthDate.toISOString();
-    const cleanBirth = birthStr.split('T')[0].trim();
-    
-    // ข้อมูลผิดพลาด: วันที่ฉีดก่อนวันเกิด
-    if (cleanVal < cleanBirth) {
-      return false;
-    }
-
-    // ข้อมูลผิดพลาด: ลงผิดเป็นวันเกิด (ยกเว้น BCG และ HBV1)
-    if (cleanVal === cleanBirth) {
-      if (field !== 'bcg_date' && field !== 'hbv1_date') {
-        return false;
-      }
-    }
-  }
-  
   return true;
 };
-
-const VACCINE_FAMILIES = [
-  ['hbv1_date', 'hbv2_date', 'hbv3_date', 'hbv4_date'],
-  ['dtp1_date', 'dtp2_date', 'dtp3_date', 'dtp4_date', 'dtp5_date'],
-  ['opv1_date', 'opv2_date', 'opv3_date', 'opv4_date', 'opv5_date'],
-  ['hib1_date', 'hib2_date', 'hib3_date'],
-  ['ipv1_date', 'ipv2_date'],
-  ['mmr1_date', 'mmr2_date'],
-  ['rv21_date', 'rv22_date', 'rv31_date', 'rv32_date', 'rv33_date'],
-  ['pcv1_date', 'pcv2_date', 'pcv3_date', 'pcv4_date'],
-  ['je1_date', 'je2_date', 'je3_date'],
-  ['j11_date', 'j12_date']
-];
-
-// O(1) Lookup Map for performance best practice
-const FIELD_TO_FAMILY_MAP: Record<string, string[]> = {};
-for (const family of VACCINE_FAMILIES) {
-  for (const f of family) {
-    FIELD_TO_FAMILY_MAP[f] = family;
-  }
-}
 
 export const hasFieldDataError = (record: EpiRecord, field: keyof EpiRecord): boolean => {
   const val = record[field];
@@ -136,22 +92,10 @@ export const hasFieldDataError = (record: EpiRecord, field: keyof EpiRecord): bo
   if (cleanVal < cleanBirth) {
     return true;
   }
-
-  // 2. Check Same-day Duplicates in same vaccine family (Optimized Lookup)
-  const family = FIELD_TO_FAMILY_MAP[field as string];
-  if (family) {
-    let matchCount = 0;
-    for (const f of family) {
-      const fVal = record[f as keyof EpiRecord];
-      if (fVal && typeof fVal === 'string') {
-        const cleanFVal = fVal.split('T')[0].trim();
-        if (cleanFVal !== '' && cleanFVal !== '-' && cleanFVal === cleanVal) {
-          matchCount++;
-        }
-      }
-    }
-    // If more than 1 field in the same family has this exact same date, it's a duplicate error
-    if (matchCount > 1) {
+  
+  // 2. ลงผิดเป็นวันเกิด (ยกเว้น BCG และ HBV1 ที่ฉีดแรกเกิดได้)
+  if (cleanVal === cleanBirth) {
+    if (field !== 'bcg_date' && field !== 'hbv1_date') {
       return true;
     }
   }
