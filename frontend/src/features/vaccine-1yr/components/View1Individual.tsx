@@ -73,7 +73,8 @@ export function View1Individual({ fiscalYear, quarter, data, isLoading, error, a
       if (missing.length > 0) status = 'FAIL';
       else if (pending.length > 0) status = 'PENDING';
       
-      const dataErrors = getDataErrors(record, rules);
+      const v1Rules = rules ? rules.filter(r => r.view_type === 1 && r.is_active) : [];
+      const dataErrors = getDataErrors(record, v1Rules.length > 0 ? v1Rules : []);
       
       return {
         ...record,

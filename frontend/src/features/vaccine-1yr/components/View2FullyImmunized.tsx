@@ -62,11 +62,14 @@ export function View2FullyImmunized({ fiscalYear, quarter, data, isLoading, erro
     // 2. Evaluate criteria for fully immunized
     const evalFn = rules && rules.length > 0 ? (r: EpiRecord) => evaluateDynamicV2(r, rules) : evaluateView2;
     
-    return cohort.map(record => ({
-      ...record,
-      evaluation: evalFn(record),
-      dataErrors: getDataErrors(record, rules)
-    }));
+    return cohort.map(record => {
+      const v2Rules = rules ? rules.filter(r => r.view_type === 2 && r.is_active && r.is_required_for_v2) : [];
+      return {
+        ...record,
+        evaluation: evalFn(record),
+        dataErrors: getDataErrors(record, v2Rules.length > 0 ? v2Rules : [])
+      };
+    });
   }, [data, fiscalYear, quarter, rules]);
 
   const filteredData = useMemo(() => {
