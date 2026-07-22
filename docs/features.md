@@ -38,7 +38,7 @@
 - **DTP:** 3 ครั้ง (เช็ค `dtp1_date` AND `dtp2_date` AND `dtp3_date` ต้องมีค่าครบทั้ง  3)
 - **Hib:** 3 ครั้ง (เช็ค `hib1_date` AND `hib2_date` AND `hib3_date` ต้องมีค่าครบทั้ง 3)
 - **IPV:** 2 ครั้ง (เช็ค `ipv1_date` AND `ipv2_date`)
-- **OPV:** 1 ครั้ง (เช็คว่ามีค่าใน `opv1_date` อย่างน้อย 1 ช่อง, `opv2/opv3` สำรองเก็บกรณีพิเศษ)
+- **OPV:** 3 ครั้ง (เช็ค `opv1_date` (2 ด.), `opv2_date` (4 ด.), และ `opv3_date` (6 ด.) ตามลำดับแบบตรงไปตรงมา)
 - **MMR:** 1 ครั้ง (`mmr1_date`)
 - **Rota:** ครบถ้วนตามเกณฑ์ (มีข้อมูลครบ 2 เข็มใน `rv2` หรือครบ 3 เข็มใน `rv3`)
 *(หากได้รับครบตามรายการด้านบน จะถือว่าผ่านเกณฑ์ Fully Immunized และนำไปคิดเป็นร้อยละความครอบคลุมภาพรวมของ รพ.สต.)*
@@ -53,7 +53,7 @@
 - **DTP:** 4 ครั้ง (`dtp1_date` ถึง `dtp4_date`)
 - **Hib:** 3 ครั้ง (`hib1_date` ถึง `hib3_date`)
 - **IPV:** 2 ครั้ง (`ipv1_date`, `ipv2_date`)
-- **OPV:** 2 ครั้ง (`opv1_date` และ `opv4_date`)
+- **OPV:** 4 ครั้ง (`opv1_date` ถึง `opv4_date`)
 - **MMR:** 2 ครั้ง (`mmr1_date`, `mmr2_date`)
 - **Rota:** ครบถ้วนตามเกณฑ์ (2 หรือ 3 ครั้ง)
 - **LAJE 2 ครั้ง หรือ JE 3 ครั้ง:** (`j11_date` AND `j12_date`) หรือ (`je1_date` AND `je2_date` AND `je3_date`)

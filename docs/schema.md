@@ -33,7 +33,7 @@
 | `dtp1_date` ... `dtp3_date` | Date | วันที่ฉีด DTP 1-3 |
 | `hib1_date` ... `hib3_date` | Date | วันที่ฉีด Hib 1-3 |
 | `ipv1_date`, `ipv2_date` | Date | วันที่ฉีด IPV 1-2 |
-| `opv1_date` ... `opv3_date` | Date | วันที่หยอด OPV (`opv1_date` = 6 เดือน ตามเกณฑ์, `opv2_date`, `opv3_date` สำรองการบันทึกเพิ่มเติม) |
+| `opv1_date` ... `opv3_date` | Date | วันที่หยอด OPV (`opv1_date` = 2 เดือน, `opv2_date` = 4 เดือน, `opv3_date` = 6 เดือน ตามลำดับเข็ม) |
 | `mmr1_date` | Date | วันที่ฉีด MMR 1 |
 | `rv21_date` ... `rv33_date` | Date | วันที่ฉีด Rota (`rv21, rv22` = ชนิด 2 เข็ม หรือ `rv31, rv32, rv33` = ชนิด 3 เข็ม) |
 | `pcv1_date` ... `pcv3_date` | Date | วันที่ฉีด PCV 1-3 |

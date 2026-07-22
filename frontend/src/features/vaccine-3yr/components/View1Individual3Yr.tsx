@@ -11,6 +11,8 @@ import { EpiDataTable } from '../../../shared/components/EpiDataTable';
 import { exportToExcel, exportToPdf } from '../../../shared/exportUtils';
 import { useVaccineRules } from '../../../shared/hooks/useVaccineRules';
 import { DynamicVaccineGuide } from '../../../shared/components/DynamicVaccineGuide';
+import { VaccineHistoryModal } from '../../../shared/components/VaccineHistoryModal';
+import { Search } from 'lucide-react';
 
 // Helper for abbreviation
 function shortenFacilityName(name: string) {
@@ -42,6 +44,10 @@ interface View1Props {
 export function View1Individual3Yr({ fiscalYear, quarter, data, isLoading, error, asOfDate }: View1Props) {
   const [filterFacility, setFilterFacility] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
+
+  // Modal state
+  const [selectedPatient, setSelectedPatient] = useState<EpiRecord | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
   const { rules } = useVaccineRules(fiscalYear, '3yr');
 
   const processedData = useMemo(() => {
@@ -150,6 +156,25 @@ export function View1Individual3Yr({ fiscalYear, quarter, data, isLoading, error
           </div>
         );
       },
+    },
+    {
+      header: 'Actions',
+      id: 'actions',
+      size: 50,
+      cell: ({ row }) => {
+        return (
+          <button
+            onClick={() => {
+              setSelectedPatient(row.original);
+              setIsModalOpen(true);
+            }}
+            className="p-1.5 text-zinc-400 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
+            title="ดูประวัติวัคซีน"
+          >
+            <Search className="w-4 h-4" />
+          </button>
+        );
+      },
     }
   ], []);
 
@@ -216,8 +241,14 @@ export function View1Individual3Yr({ fiscalYear, quarter, data, isLoading, error
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500">
-      
-      {/* Header section */}
+        <VaccineHistoryModal 
+          isOpen={isModalOpen}
+          onClose={() => setIsModalOpen(false)}
+          record={selectedPatient}
+          rules={rules.filter(r => r.view_type === 1 && r.is_active)}
+        />
+        
+        {/* Header section */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
           <h2 className="text-lg font-semibold text-zinc-900">

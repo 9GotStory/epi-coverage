@@ -101,6 +101,27 @@ export const hasDose = (record: EpiRecord, field: keyof EpiRecord, birthDate?: s
   return true;
 };
 
+const VACCINE_FAMILIES = [
+  ['hbv1_date', 'hbv2_date', 'hbv3_date', 'hbv4_date'],
+  ['dtp1_date', 'dtp2_date', 'dtp3_date', 'dtp4_date', 'dtp5_date'],
+  ['opv1_date', 'opv2_date', 'opv3_date', 'opv4_date', 'opv5_date'],
+  ['hib1_date', 'hib2_date', 'hib3_date'],
+  ['ipv1_date', 'ipv2_date'],
+  ['mmr1_date', 'mmr2_date'],
+  ['rv21_date', 'rv22_date', 'rv31_date', 'rv32_date', 'rv33_date'],
+  ['pcv1_date', 'pcv2_date', 'pcv3_date', 'pcv4_date'],
+  ['je1_date', 'je2_date', 'je3_date'],
+  ['j11_date', 'j12_date']
+];
+
+// O(1) Lookup Map for performance best practice
+const FIELD_TO_FAMILY_MAP: Record<string, string[]> = {};
+for (const family of VACCINE_FAMILIES) {
+  for (const f of family) {
+    FIELD_TO_FAMILY_MAP[f] = family;
+  }
+}
+
 export const hasFieldDataError = (record: EpiRecord, field: keyof EpiRecord): boolean => {
   const val = record[field];
   if (!val || typeof val !== 'string' || !record.birth) return false;
@@ -109,9 +130,32 @@ export const hasFieldDataError = (record: EpiRecord, field: keyof EpiRecord): bo
   const cleanBirth = birthStr.split('T')[0].trim();
   const cleanVal = val.split('T')[0].trim();
   
-  if (cleanVal !== '' && cleanVal !== '-' && cleanVal < cleanBirth) {
+  if (cleanVal === '' || cleanVal === '-') return false;
+
+  // 1. Check Date before Birth
+  if (cleanVal < cleanBirth) {
     return true;
   }
+
+  // 2. Check Same-day Duplicates in same vaccine family (Optimized Lookup)
+  const family = FIELD_TO_FAMILY_MAP[field as string];
+  if (family) {
+    let matchCount = 0;
+    for (const f of family) {
+      const fVal = record[f as keyof EpiRecord];
+      if (fVal && typeof fVal === 'string') {
+        const cleanFVal = fVal.split('T')[0].trim();
+        if (cleanFVal !== '' && cleanFVal !== '-' && cleanFVal === cleanVal) {
+          matchCount++;
+        }
+      }
+    }
+    // If more than 1 field in the same family has this exact same date, it's a duplicate error
+    if (matchCount > 1) {
+      return true;
+    }
+  }
+
   return false;
 };
 
