@@ -271,15 +271,10 @@ export function RuleEditModal({ rule, isOpen, onClose, onSave, fiscalYear, ageGr
                   <FormItem>
                     <FormLabel>อายุเป้าหมาย (เดือน)</FormLabel>
                     <FormControl>
-                      <Input 
-                        type="number" 
-                        placeholder="เช่น 2, 6, 9" 
-                        value={field.value ?? ""} 
-                        onChange={e => field.onChange(e.target.value ? parseInt(e.target.value) : null)}
-                      />
+                      <Input type="number" {...field} onChange={e => field.onChange(e.target.value === '' ? undefined : Number(e.target.value))} value={field.value ?? ''} />
                     </FormControl>
-                    <FormDescription className="text-xs">
-                      (ปล่อยว่างใช้ค่าตั้งต้น)
+                    <FormDescription>
+                      ไม่บังคับกรอก (ถ้าปล่อยว่าง: จะไม่มีสถานะ 'รอดำเนินการ' ถ้าไม่ได้ฉีดจะถือว่าขาดทันที)
                     </FormDescription>
                     <FormMessage />
                   </FormItem>

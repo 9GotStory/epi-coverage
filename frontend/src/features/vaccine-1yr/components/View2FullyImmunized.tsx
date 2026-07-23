@@ -1,10 +1,9 @@
 import { useMemo, useState } from 'react';
 import { InfoIcon, FileSpreadsheetIcon, FileTextIcon } from 'lucide-react';
 import type { ColumnDef } from '@tanstack/react-table';
-import { evaluateView2 } from '../../../shared/utils/vaccine/vaccine-1yr';
 import { evaluateDynamicV2, getDataErrors } from '../../../shared/utils/vaccine/ruleEngine';
 import type { VaccineStatus } from '../../../shared/types';
-import { formatDateTimeStr, getBirthDateRangeForQuarter, getAgeInMonths, formatAgeStr } from '../../../shared/utils/dateUtils';
+import { formatDateTimeStr, getBirthDateRangeForQuarter, formatAgeStr } from '../../../shared/utils/dateUtils';
 import type { EpiRecord } from '../../../shared/types';
 import { EpiDataTable } from '../../../shared/components/EpiDataTable';
 import { exportToExcel, exportToPdf } from '../../../shared/exportUtils';
@@ -59,8 +58,7 @@ export function View2FullyImmunized({ fiscalYear, quarter, data, isLoading, erro
       return bDate >= start && bDate <= end;
     });
 
-    // 2. Evaluate criteria for fully immunized
-    const evalFn = rules && rules.length > 0 ? (r: EpiRecord) => evaluateDynamicV2(r, rules) : evaluateView2;
+    const evalFn = (r: EpiRecord) => evaluateDynamicV2(r, rules || []);
     
     return cohort.map(record => {
       const v2Rules = rules ? rules.filter(r => r.view_type === 2 && r.is_active && r.is_required_for_v2) : [];
@@ -244,8 +242,7 @@ export function View2FullyImmunized({ fiscalYear, quarter, data, isLoading, erro
   // Handle Export
   const handleExportExcel = () => {
     const exportData = filteredData.map(row => {
-      const age = getAgeInMonths(row.birth);
-      const ageStr = age >= 12 ? `${Math.floor(age / 12)} ปี ${age % 12} เดือน` : `${age} เดือน`;
+      const ageStr = formatAgeStr(row.birth);
       const birthStr = row.birth ? new Date(row.birth as string).toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric' }) : '';
 
       return {
@@ -272,8 +269,7 @@ export function View2FullyImmunized({ fiscalYear, quarter, data, isLoading, erro
 
   const handleExportPdf = () => {
     const exportData = filteredData.map(row => {
-      const age = getAgeInMonths(row.birth);
-      const ageStr = age >= 12 ? `${Math.floor(age / 12)} ปี ${age % 12} เดือน` : `${age} เดือน`;
+      const ageStr = formatAgeStr(row.birth);
       const birthStr = row.birth ? new Date(row.birth as string).toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric' }) : '';
 
       return {

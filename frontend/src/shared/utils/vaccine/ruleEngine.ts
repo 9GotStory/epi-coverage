@@ -1,40 +1,11 @@
 import { differenceInMonths, isValid } from 'date-fns';
 import type { EpiRecord, VaccineStatus } from '../../types';
-import type { View1Evaluation } from './vaccine-1yr';
-
-export const TARGET_AGE_MONTHS_MAP: Record<string, number> = {
-  // แรกเกิด (0 เดือน)
-  '010': 0, '011': 0, // BCG
-  '041': 0, // HBV1
-  
-  // 2 เดือน
-  '031': 2, '081': 2, 'D21': 2, 'I11': 2, '042': 2, // DTP1, OPV1, Penta1 (D21), IPV1, HBV2
-  'R11': 2, 'R21': 2, 'R31': 2, 'P11': 2, // Rota1, PCV1
-  
-  // 4 เดือน
-  '032': 4, '082': 4, 'D22': 4, 'I12': 4, // DTP2, OPV2, Penta2, IPV2
-  'R12': 4, 'R22': 4, 'R32': 4, 'P12': 4,
-  
-  // 6 เดือน
-  '033': 6, '083': 6, 'D23': 6, '043': 6, '044': 6, // DTP3, OPV3, Penta3, HBV3
-  'R13': 6, 'R33': 6, 'P13': 6,
-  
-  // 9-12 เดือน
-  '061': 9, // MMR1
-  'J11': 12, '051': 12, // LAJE1, JE1 (เชื้อตาย 1)
-  
-  // 1 ปีครึ่ง (18 เดือน)
-  '034': 18, '084': 18, // DTP4, OPV4
-  '073': 18, // MMR2
-  '052': 18, // JE เชื้อตาย 2
-  
-  // 2 ปีครึ่ง (30 เดือน)
-  '074': 30, 'J12': 30, // LAJE2, MRC
-  '053': 30, // JE เชื้อตาย 3
-  
-  // 4 ปี (48 เดือน)
-  '035': 48, '085': 48, 'D35': 48, 'D45': 48, 'D55': 48, 'T11': 48, 'I15': 48, // DTP5, OPV5 และรหัสทางเลือก
-};
+export interface View1Evaluation {
+  passedCount: number;
+  missingVaccines: string[];
+  pendingVaccines?: string[];
+  results: Record<string, boolean>;
+}
 
 export const getAgeInMonths = (birthDateStr: string | Date | undefined, evaluationDate: Date = new Date()): number => {
   if (!birthDateStr) return 999; // If no birth date, assume reached age
@@ -67,7 +38,7 @@ export interface VaccineRule {
  * เช็กว่าได้รับวัคซีนนั้นๆ หรือยัง โดยอิงจาก Field วันที่
  * (ถ้ามีวันเดือนปี และไม่ใช่วันเกิด)
  */
-export const hasDose = (record: EpiRecord, field: keyof EpiRecord, birthDate?: string | Date): boolean => {
+export const hasDose = (record: EpiRecord, field: keyof EpiRecord, _birthDate?: string | Date): boolean => {
   const val = record[field];
   if (!val || typeof val !== 'string') return false;
   
@@ -129,19 +100,13 @@ export const getDataErrors = (record: EpiRecord, rules: VaccineRule[]): string[]
 
 const resolveSmartVaccineNames = (record: EpiRecord, rule: VaccineRule, isV1: boolean, currentAgeMonths: number): { names: string[], isPending: boolean } => {
   let targetAge: number | undefined = rule.target_age_months;
-  if (targetAge === undefined || targetAge === null) {
-    const hdcCodeStr = rule.hdc_code ? String(rule.hdc_code) : '';
-    const codes = hdcCodeStr.split(/[-,\/\s]+/).map(c => c.trim().padStart(3, '0')).filter(Boolean);
-    let maxAge = -1;
-    for (const code of codes) {
-      if (TARGET_AGE_MONTHS_MAP[code] !== undefined) {
-        maxAge = Math.max(maxAge, TARGET_AGE_MONTHS_MAP[code]);
-      }
-    }
-    targetAge = maxAge !== -1 ? maxAge : undefined;
-  }
   
-  let isPending = targetAge !== undefined && currentAgeMonths < targetAge;
+  // ถ้าระบบไม่ได้ตั้งอายุเป้าหมายมา ให้ถือว่าไม่ใช่ Pending แน่นอน (ถ้าไม่ได้ฉีดคือ Missing ทันที)
+  let isPending = false;
+  if (targetAge !== undefined && targetAge !== null) {
+    isPending = currentAgeMonths < targetAge;
+  }
+
   
   // Smart Rota Logic
   if (rule.vaccine_group === 'Rota' && rule.logic_type === 'BRANCH') {

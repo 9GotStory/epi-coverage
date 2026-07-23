@@ -1,10 +1,9 @@
 import { useMemo, useState } from 'react';
 import { InfoIcon, FileSpreadsheetIcon, FileTextIcon } from 'lucide-react';
 import type { ColumnDef } from '@tanstack/react-table';
-import { evaluateView2_3Yr } from '../../../shared/utils/vaccine/vaccine-3yr';
-import { evaluateDynamicV2 } from '../../../shared/utils/vaccine/ruleEngine';
+import { evaluateDynamicV2, getDataErrors } from '../../../shared/utils/vaccine/ruleEngine';
 import type { VaccineStatus } from '../../../shared/types';
-import { formatDateTimeStr, getBirthDateRangeForQuarter, getAgeInMonths } from '../../../shared/utils/dateUtils';
+import { formatDateTimeStr, getBirthDateRangeForQuarter, formatAgeStr } from '../../../shared/utils/dateUtils';
 import type { EpiRecord } from '../../../shared/types';
 import { EpiDataTable } from '../../../shared/components/EpiDataTable';
 import { exportToExcel, exportToPdf } from '../../../shared/exportUtils';
@@ -28,6 +27,7 @@ function shortenFacilityName(name: string) {
 
 type ProcessedFullyImmunizedRecord = EpiRecord & {
   evaluation: VaccineStatus;
+  dataErrors: string[];
 };
 
 interface View2Props {
@@ -58,13 +58,16 @@ export function View2FullyImmunized3Yr({ fiscalYear, quarter, data, isLoading, e
       return bDate >= start && bDate <= end;
     });
 
-    // 2. Evaluate criteria for fully immunized
-    const evalFn = rules && rules.length > 0 ? (r: EpiRecord) => evaluateDynamicV2(r, rules) : evaluateView2_3Yr;
+    const evalFn = (r: EpiRecord) => evaluateDynamicV2(r, rules || []);
     
-    return cohort.map(record => ({
-      ...record,
-      evaluation: evalFn(record),
-    }));
+    return cohort.map(record => {
+      const v2Rules = rules ? rules.filter(r => r.view_type === 2 && r.is_active && r.is_required_for_v2) : [];
+      return {
+        ...record,
+        evaluation: evalFn(record),
+        dataErrors: getDataErrors(record, v2Rules.length > 0 ? v2Rules : [])
+      };
+    });
   }, [data, fiscalYear, quarter, rules]);
 
   const filteredData = useMemo(() => {
@@ -121,8 +124,16 @@ export function View2FullyImmunized3Yr({ fiscalYear, quarter, data, isLoading, e
       accessorKey: 'birth',
       size: 120,
       cell: info => {
-        const d = new Date(info.getValue() as string);
-        return <span className="text-zinc-600">{d.toLocaleDateString('th-TH')}</span>;
+        const dStr = info.getValue() as string;
+        if (!dStr) return <span className="text-zinc-400">-</span>;
+        const d = new Date(dStr);
+        const ageStr = formatAgeStr(dStr);
+        return (
+          <div className="flex flex-col">
+            <span className="text-zinc-600">{d.toLocaleDateString('th-TH')}</span>
+            <span className="text-zinc-400 text-[11px]">(อายุ {ageStr})</span>
+          </div>
+        );
       },
     },
     {
@@ -131,27 +142,67 @@ export function View2FullyImmunized3Yr({ fiscalYear, quarter, data, isLoading, e
       size: 500,
       cell: ({ row }) => {
         const evaluation = row.original.evaluation;
+        const dataErrors = row.original.dataErrors || [];
+        
         if (evaluation.isFullyImmunized) {
           return (
-            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 border border-green-200">
-              <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
-              ผ่านเกณฑ์
-            </span>
+            <div className="flex flex-col gap-1 items-start">
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-600 border border-emerald-200 shadow-sm">
+                <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
+                ผ่านเกณฑ์
+              </span>
+              {/* Data Error Badges (Orange Badges) */}
+              {dataErrors.length > 0 && (
+                <div className="flex flex-wrap gap-1 mt-0.5">
+                  {dataErrors.map((err, i) => (
+                    <span key={`err-${i}`} className="inline-flex px-1.5 py-0.5 rounded bg-orange-50 text-orange-600 text-[10px] font-medium border border-orange-200 shadow-sm" title="พบความผิดปกติของข้อมูลวันที่ (เช่น ฉีดก่อนวันเกิด, หรือฉีดพร้อมกันเกินกำหนด) - ข้อมูลอาจไม่ถูกนำไปคำนวณใน HDC">
+                      {err} (ข้อมูลวันที่ผิด)
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
           );
         }
+        
         return (
           <div className="flex flex-col gap-1 items-start">
-            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 border border-red-200">
-              <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" /></svg>
-              ไม่ผ่านเกณฑ์ (ตกหล่น)
-            </span>
+            {evaluation.status === 'FAIL' ? (
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-50 text-red-600 border border-red-200 shadow-sm">
+                <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" /></svg>
+                ไม่ผ่านเกณฑ์ (ตกหล่น)
+              </span>
+            ) : (
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-zinc-50 text-zinc-600 border border-zinc-200 shadow-sm">
+                <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM11 5a1 1 0 10-2 0v4.586l-2.707 2.707a1 1 0 101.414 1.414l3-3A1 1 0 0011 10.586V5z" clipRule="evenodd" /></svg>
+                ยังไม่ถึงเกณฑ์ (รอรับบริการ)
+              </span>
+            )}
             <div className="flex flex-wrap gap-1 mt-1">
-              {evaluation.missingVaccines.map((v, i) => (
-                <span key={i} className="inline-flex px-1.5 py-0.5 rounded bg-red-50 text-red-600 text-[10px] font-medium border border-red-100 shadow-sm">
-                  {v}
-                </span>
-              ))}
+              {evaluation.status === 'FAIL' 
+                ? evaluation.missingVaccines.map((v, i) => (
+                    <span key={i} className="inline-flex px-1.5 py-0.5 rounded bg-red-50 text-red-600 text-[10px] font-medium border border-red-100 shadow-sm">
+                      ขาด {v}
+                    </span>
+                  ))
+                : (evaluation.pendingVaccines || []).map((v, i) => (
+                    <span key={i} className="inline-flex px-1.5 py-0.5 rounded bg-zinc-50 text-zinc-600 text-[10px] font-medium border border-zinc-200 shadow-sm">
+                      {v}
+                    </span>
+                  ))
+              }
             </div>
+
+            {/* Data Error Badges (Orange Badges) */}
+            {dataErrors.length > 0 && (
+              <div className="flex flex-wrap gap-1 mt-0.5">
+                {dataErrors.map((err, i) => (
+                  <span key={`err-${i}`} className="inline-flex px-1.5 py-0.5 rounded bg-orange-50 text-orange-600 text-[10px] font-medium border border-orange-200 shadow-sm" title="พบความผิดปกติของข้อมูลวันที่ (เช่น ฉีดก่อนวันเกิด, หรือฉีดพร้อมกันเกินกำหนด) - ข้อมูลอาจไม่ถูกนำไปคำนวณใน HDC">
+                    {err} (ข้อมูลวันที่ผิด)
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         );
       },
@@ -195,12 +246,9 @@ export function View2FullyImmunized3Yr({ fiscalYear, quarter, data, isLoading, e
     );
   }
 
-  // Handle Export
   const handleExportExcel = () => {
     const exportData = filteredData.map(row => {
-      const missingStr = row.evaluation.missingVaccines.join(', ');
-      const age = getAgeInMonths(row.birth);
-      const ageStr = age >= 12 ? `${Math.floor(age / 12)} ปี ${age % 12} เดือน` : `${age} เดือน`;
+      const ageStr = formatAgeStr(row.birth);
       const birthStr = row.birth ? new Date(row.birth as string).toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric' }) : '';
 
       return {
@@ -209,7 +257,17 @@ export function View2FullyImmunized3Yr({ fiscalYear, quarter, data, isLoading, e
         'ชื่อ': row.name,
         'นามสกุล': row.lname,
         'วันเกิด': birthStr ? `${birthStr}\n(อายุ ${ageStr})` : '',
-        'ผลการประเมิน (Fully Immunized)': row.evaluation.isFullyImmunized ? 'ผ่านเกณฑ์' : `ตกหล่น: ${missingStr}`
+        'ผลการประเมิน (Fully Immunized)': (() => {
+          let text = row.evaluation.status === 'PASS' 
+            ? 'ผ่านเกณฑ์' 
+            : (row.evaluation.status === 'FAIL' 
+              ? `ตกหล่น: ${row.evaluation.missingVaccines.join(', ')}` 
+              : `ยังไม่ถึงเกณฑ์: ${(row.evaluation.pendingVaccines || []).join(', ')}`);
+          if (row.dataErrors && row.dataErrors.length > 0) {
+            text += `\n[ข้อมูลวันที่ผิดปกติ: ${row.dataErrors.join(', ')}]`;
+          }
+          return text;
+        })()
       };
     });
     exportToExcel(exportData, `EPI_View2_FullyImmunized3Yr_${new Date().getTime()}`);
@@ -217,9 +275,7 @@ export function View2FullyImmunized3Yr({ fiscalYear, quarter, data, isLoading, e
 
   const handleExportPdf = () => {
     const exportData = filteredData.map(row => {
-      const missingStr = row.evaluation.missingVaccines.join(', ');
-      const age = getAgeInMonths(row.birth);
-      const ageStr = age >= 12 ? `${Math.floor(age / 12)} ปี ${age % 12} เดือน` : `${age} เดือน`;
+      const ageStr = formatAgeStr(row.birth);
       const birthStr = row.birth ? new Date(row.birth as string).toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric' }) : '';
 
       return {
@@ -227,7 +283,17 @@ export function View2FullyImmunized3Yr({ fiscalYear, quarter, data, isLoading, e
         'CID': row.cid,
         'ชื่อ-สกุล': `${row.name} ${row.lname}`,
         'วันเกิด': birthStr ? `${birthStr}\n(อายุ ${ageStr})` : '',
-        'ผลการประเมิน': row.evaluation.isFullyImmunized ? 'ผ่านเกณฑ์' : `ตกหล่น: ${missingStr}`
+        'ผลการประเมิน': (() => {
+          let text = row.evaluation.status === 'PASS' 
+            ? 'ผ่านเกณฑ์' 
+            : (row.evaluation.status === 'FAIL' 
+              ? `ตกหล่น: ${row.evaluation.missingVaccines.join(', ')}` 
+              : `ยังไม่ถึงเกณฑ์: ${(row.evaluation.pendingVaccines || []).join(', ')}`);
+          if (row.dataErrors && row.dataErrors.length > 0) {
+            text += `\n[ข้อมูลวันที่ผิดปกติ: ${row.dataErrors.join(', ')}]`;
+          }
+          return text;
+        })()
       };
     });
     const title = `ทะเบียนเด็กความครบถ้วนของวัคซีน (Fully Immunized 3 ปี) - ไตรมาส ${quarter}/${fiscalYear}`;

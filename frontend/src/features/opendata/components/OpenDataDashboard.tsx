@@ -158,7 +158,6 @@ export function OpenDataDashboard({ targetTable = 's_epi1' }: OpenDataDashboardP
       'ผลงาน (คน)': row.result,
       'ความครอบคลุม (%)': row.coverage.toFixed(2)
     }));
-    const quarterLabel = quarter === 'all' ? `ภาพรวมทั้งปีงบประมาณ ${year}` : `ไตรมาส ${quarter}/${year}`;
     exportToExcel(exportData, `OpenData_Dashboard_${vaccine}_${new Date().getTime()}`);
   };
 

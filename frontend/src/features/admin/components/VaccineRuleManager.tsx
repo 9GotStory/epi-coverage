@@ -8,12 +8,45 @@ import { toast } from 'sonner';
 import { RuleEditModal } from './RuleEditModal';
 import { Pencil, ArrowRight, Wand2 } from 'lucide-react';
 import type { VaccineRule } from '../../../shared/utils/vaccine/ruleEngine';
-import { TARGET_AGE_MONTHS_MAP } from '../../../shared/utils/vaccine/ruleEngine';
 import { getCurrentFiscalYear } from '../../../shared/utils/dateUtils';
 import { useAvailableYears } from '../../../shared/hooks/useAvailableYears';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link, useBlocker } from 'react-router-dom';
 import { AlertCircle, CheckCircle2, RotateCw, RotateCcw } from 'lucide-react';
+
+const TARGET_AGE_MONTHS_MAP: Record<string, number> = {
+  // แรกเกิด (0 เดือน)
+  '010': 0, '011': 0, // BCG
+  '041': 0, // HBV1
+  
+  // 2 เดือน
+  '031': 2, '081': 2, 'D21': 2, 'I11': 2, '042': 2, // DTP1, OPV1, Penta1 (D21), IPV1, HBV2
+  'R11': 2, 'R21': 2, 'R31': 2, 'P11': 2, // Rota1, PCV1
+  
+  // 4 เดือน
+  '032': 4, '082': 4, 'D22': 4, 'I12': 4, // DTP2, OPV2, Penta2, IPV2
+  'R12': 4, 'R22': 4, 'R32': 4, 'P12': 4,
+  
+  // 6 เดือน
+  '033': 6, '083': 6, 'D23': 6, '043': 6, '044': 6, // DTP3, OPV3, Penta3, HBV3
+  'R13': 6, 'R33': 6, 'P13': 6,
+  
+  // 9-12 เดือน
+  '061': 9, // MMR1
+  'J11': 12, '051': 12, // LAJE1, JE1 (เชื้อตาย 1)
+  
+  // 1 ปีครึ่ง (18 เดือน)
+  '034': 18, '084': 18, // DTP4, OPV4
+  '073': 18, // MMR2
+  '052': 18, // JE เชื้อตาย 2
+  
+  // 2 ปีครึ่ง (30 เดือน)
+  '074': 30, 'J12': 30, // LAJE2, MRC
+  '053': 30, // JE เชื้อตาย 3
+  
+  // 4 ปี (48 เดือน)
+  '035': 48, '085': 48, 'D35': 48, 'D45': 48, 'D55': 48, 'T11': 48, 'I15': 48, // DTP5, OPV5 และรหัสทางเลือก
+};
 
 interface VaccineRuleManagerProps {
   onDirtyChange?: (isDirty: boolean) => void;

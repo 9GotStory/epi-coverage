@@ -1,6 +1,5 @@
 import type { EpiRecord, VaccineStatus } from '../types';
-import type { View1Evaluation } from './vaccine/vaccine-1yr';
-
+import type { View1Evaluation } from './vaccine/ruleEngine';
 // We can define the return type for better type safety
 export interface GroupSummary {
   total: number;

@@ -2,9 +2,8 @@ import { useMemo, useState } from 'react';
 import { InfoIcon, FileSpreadsheetIcon, FileTextIcon } from 'lucide-react';
 import type { ColumnDef } from '@tanstack/react-table';
 
-import { evaluateView1 } from '../../../shared/utils/vaccine/vaccine-1yr';
 import { evaluateDynamicV1, getDataErrors } from '../../../shared/utils/vaccine/ruleEngine';
-import { formatDateTimeStr, getBirthDateRangeForQuarter, getAgeInMonths, formatAgeStr } from '../../../shared/utils/dateUtils';
+import { formatDateTimeStr, getBirthDateRangeForQuarter, formatAgeStr } from '../../../shared/utils/dateUtils';
 import type { EpiRecord } from '../../../shared/types';
 import { EpiDataTable } from '../../../shared/components/EpiDataTable';
 import { exportToExcel, exportToPdf } from '../../../shared/exportUtils';
@@ -62,8 +61,7 @@ export function View1Individual({ fiscalYear, quarter, data, isLoading, error, a
       return bDate >= start && bDate <= end;
     });
 
-    // 2. Evaluate criteria
-    const evalFn = rules && rules.length > 0 ? (r: EpiRecord) => evaluateDynamicV1(r, rules) : evaluateView1;
+    const evalFn = (r: EpiRecord) => evaluateDynamicV1(r, rules || []);
 
     return cohort.map(record => {
       const evaluation = evalFn(record);
@@ -72,6 +70,8 @@ export function View1Individual({ fiscalYear, quarter, data, isLoading, error, a
       let status: 'PASS' | 'FAIL' | 'PENDING' = 'PASS';
       if (missing.length > 0) status = 'FAIL';
       else if (pending.length > 0) status = 'PENDING';
+      
+
       
       const v1Rules = rules ? rules.filter(r => r.view_type === 1 && r.is_active) : [];
       const dataErrors = getDataErrors(record, v1Rules.length > 0 ? v1Rules : []);
@@ -255,8 +255,7 @@ export function View1Individual({ fiscalYear, quarter, data, isLoading, error, a
   // Handle Export
   const handleExportExcel = () => {
     const exportData = filteredData.map(row => {
-      const age = getAgeInMonths(row.birth);
-      const ageStr = age >= 12 ? `${Math.floor(age / 12)} ปี ${age % 12} เดือน` : `${age} เดือน`;
+      const ageStr = formatAgeStr(row.birth);
       const birthStr = row.birth ? new Date(row.birth as string).toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric' }) : '';
       
       return {
@@ -283,8 +282,7 @@ export function View1Individual({ fiscalYear, quarter, data, isLoading, error, a
 
   const handleExportPdf = () => {
     const exportData = filteredData.map(row => {
-      const age = getAgeInMonths(row.birth);
-      const ageStr = age >= 12 ? `${Math.floor(age / 12)} ปี ${age % 12} เดือน` : `${age} เดือน`;
+      const ageStr = formatAgeStr(row.birth);
       const birthStr = row.birth ? new Date(row.birth as string).toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric' }) : '';
       
       return {
