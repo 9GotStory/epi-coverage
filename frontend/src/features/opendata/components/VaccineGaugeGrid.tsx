@@ -6,7 +6,7 @@ export interface VaccineCoverageData {
   target: number;
   result: number;
   coverage: number;
-  goal: number;
+  goal?: number;
 }
 
 interface VaccineGaugeGridProps {

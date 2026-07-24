@@ -54,7 +54,7 @@ function handleRequest(method, e) {
     const adminActions = [
       'getAllUsers', 'getUsers', 'updateUserStatus', 'updateUserFacility',
       'upsertFacility', 'upsertEpiData', 'cleanupEpiData', 'getAuditLogs',
-      'saveDashboardSummary', 'migrateEpiSheets', 'setupEpiSheetForYear',
+      'saveDashboardSummary',
       'seedVaccineRules', 'saveVaccineRule', 'cloneVaccineRules', 'batchSaveRules'
     ];
     if (adminActions.includes(action) && authResult.role !== 'admin') {
@@ -78,9 +78,7 @@ function handleRequest(method, e) {
       case 'saveDashboardSummary': return responseJson(saveDashboardSummary(body.targetTable, body.fiscalYear, body.summaryData));
       case 'saveAiAnalysis': return responseJson(saveAiAnalysis(body.recordKey, body.targetTable, body.aiAnalysis, body.adminEmail));
       case 'analyzeVaccineData': return responseJson(analyzeVaccineData(body.prompt, body.recordKey, body.targetTable, e.parameter.email || body.adminEmail));
-      // A1: Migration + Dynamic Sheet
-      case 'migrateEpiSheets': return responseJson(migrateSheetNames(body.fromFiscalYear));
-      case 'setupEpiSheetForYear': return responseJson(setupEpiSheetForYear(body.fiscalYear));
+      // A1: Migration + Dynamic Sheet (Removed legacy year-based endpoints)
       // B2: Vaccine Rules CRUD
       case 'seedVaccineRules': return responseJson(seedVaccineRules(body.fiscalYear, body.adminEmail, body.force));
       case 'saveVaccineRule': return responseJson(saveVaccineRule(body.rule, body.adminEmail));

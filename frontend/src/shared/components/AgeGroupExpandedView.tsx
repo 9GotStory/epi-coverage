@@ -18,14 +18,15 @@ interface FacilityData {
 
 interface AgeGroupExpandedViewProps {
   summary: GroupSummary;
-  targetView1: number;
-  targetView2: number;
+  targetView1?: number;
+  targetView2?: number;
+  fiscalYear: number;
 }
 
 interface FacilityGroupProps {
   title: string;
   facilities: FacilityData[];
-  target: number;
+  target?: number;
   isPassedGroup: boolean;
 }
 
@@ -61,7 +62,7 @@ const FacilityGroup = ({ title, facilities, target, isPassedGroup }: FacilityGro
           <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${classes.ping} opacity-75`}></span>
           <span className={`relative inline-flex rounded-full h-2 w-2 ${classes.dot}`}></span>
         </span>
-        {title} (≥ {target}%)
+        {title} {target !== undefined ? `(≥ ${target}%)` : '(ไม่ได้กำหนดเป้า)'}
       </h5>
       <div className="space-y-1">
         {facilities.length === 0 ? (
@@ -90,11 +91,10 @@ const FacilityGroup = ({ title, facilities, target, isPassedGroup }: FacilityGro
   );
 };
 
-export function AgeGroupExpandedView({ summary, targetView1, targetView2 }: AgeGroupExpandedViewProps) {
+export function AgeGroupExpandedView({ summary, targetView1, targetView2, fiscalYear }: AgeGroupExpandedViewProps) {
   const { getTarget } = useTargetSettings();
   
-  // Helper to get specific vaccine target based on its name
-  const getSpecificTarget = (name: string, defaultTarget: number, view: 1 | 2) => {
+  const getSpecificTarget = (name: string, defaultTarget: number | undefined, view: 1 | 2) => {
     const lowerName = name.toLowerCase();
     let vaccineKey = '';
     if (lowerName.includes('mmr')) vaccineKey = 'mmr';
@@ -109,17 +109,17 @@ export function AgeGroupExpandedView({ summary, targetView1, targetView2 }: AgeG
     else if (lowerName.includes('hpv')) vaccineKey = 'hpv';
     
     if (vaccineKey) {
-      return getTarget(4, view, vaccineKey);
+      return getTarget(4, view, vaccineKey, fiscalYear);
     }
     return defaultTarget;
   };
 
   // Use useMemo to avoid recalculating array filters on every re-render
-  const passedFacilitiesV1 = useMemo(() => summary.facilityBreakdownV1.filter(f => f.coverage >= targetView1), [summary.facilityBreakdownV1, targetView1]);
-  const failedFacilitiesV1 = useMemo(() => summary.facilityBreakdownV1.filter(f => f.coverage < targetView1).sort((a, b) => a.coverage - b.coverage), [summary.facilityBreakdownV1, targetView1]);
+  const passedFacilitiesV1 = useMemo(() => summary.facilityBreakdownV1.filter(f => f.coverage >= (targetView1 ?? 0)), [summary.facilityBreakdownV1, targetView1]);
+  const failedFacilitiesV1 = useMemo(() => summary.facilityBreakdownV1.filter(f => f.coverage < (targetView1 ?? 0)).sort((a, b) => a.coverage - b.coverage), [summary.facilityBreakdownV1, targetView1]);
   
-  const passedFacilitiesV2 = useMemo(() => summary.facilityBreakdownV2.filter(f => f.coverage >= targetView2), [summary.facilityBreakdownV2, targetView2]);
-  const failedFacilitiesV2 = useMemo(() => summary.facilityBreakdownV2.filter(f => f.coverage < targetView2).sort((a, b) => a.coverage - b.coverage), [summary.facilityBreakdownV2, targetView2]);
+  const passedFacilitiesV2 = useMemo(() => summary.facilityBreakdownV2.filter(f => f.coverage >= (targetView2 ?? 0)), [summary.facilityBreakdownV2, targetView2]);
+  const failedFacilitiesV2 = useMemo(() => summary.facilityBreakdownV2.filter(f => f.coverage < (targetView2 ?? 0)).sort((a, b) => a.coverage - b.coverage), [summary.facilityBreakdownV2, targetView2]);
   
   return (
     <div className="mt-4 pt-5 border-t border-zinc-100 animate-in fade-in slide-in-from-top-2 duration-300">
@@ -148,7 +148,7 @@ export function AgeGroupExpandedView({ summary, targetView1, targetView2 }: AgeG
             {summary.view1Breakdown.length > 0 ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1">
                 {summary.view1Breakdown.map(item => {
-                  const specificTarget = getSpecificTarget(item.name, targetView1, 1);
+                  const specificTarget = getSpecificTarget(item.name, targetView1, 1) ?? 0;
                   const isPassed = item.coverage >= specificTarget;
                   return (
                     <div key={item.name} className={`flex justify-between items-center text-xs py-1.5 border-b ${isPassed ? 'border-green-100/30' : 'border-red-100/30'} last:border-0`}>
@@ -201,7 +201,7 @@ export function AgeGroupExpandedView({ summary, targetView1, targetView2 }: AgeG
             {summary.view2Breakdown.length > 0 ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1">
                 {summary.view2Breakdown.map(item => {
-                  const specificTarget = getSpecificTarget(item.name, targetView2, 2);
+                  const specificTarget = getSpecificTarget(item.name, targetView2, 2) ?? 0;
                   const isPassed = item.coverage >= specificTarget;
                   return (
                     <div key={item.name} className={`flex justify-between items-center text-xs py-1.5 border-b ${isPassed ? 'border-emerald-100/30' : 'border-red-100/30'} last:border-0`}>

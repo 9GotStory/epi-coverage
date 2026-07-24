@@ -229,39 +229,32 @@ function getAuditLogs() {
 }
 
 /**
- * ดึงค่า Config เป้าหมาย (Target) จาก Sheet 'config'
- * โครงสร้าง: key | value | description
+ * ดึงค่า Config เป้าหมาย (Target) จาก Sheet 'configs_system'
+ * โครงสร้าง: config_key | config_value | description
  */
 function getTargetConfig() {
   const ss = getSpreadsheet();
-  const sheet = ss.getSheetByName('config');
+  const sheet = ss.getSheetByName('configs_system');
   if (!sheet) {
-    // ถ้ายังไม่มี Sheet ให้ return ค่าเริ่มต้น
-    return {
-      target_q1: 50,
-      target_q2: 70,
-      target_q3: 80,
-      target_q4: 90,
-      target_mmr_q1: 95,
-      target_mmr_q2: 95,
-      target_mmr_q3: 95,
-      target_mmr_q4: 95
-    };
+    return {};
   }
 
   const data = sheet.getDataRange().getValues();
   if (data.length <= 1) return {};
-
-  const headers = data[0]; // ['key', 'value', 'description']
-  const keyCol = headers.indexOf('key');
-  const valueCol = headers.indexOf('value');
+  
+  const headers = data[0]; // ['config_key', 'config_value', 'description']
+  const keyCol = headers.indexOf('config_key');
+  const valueCol = headers.indexOf('config_value');
+  
   if (keyCol === -1 || valueCol === -1) return {};
 
   const config = {};
   for (let i = 1; i < data.length; i++) {
     const k = String(data[i][keyCol]).trim();
     const v = data[i][valueCol];
-    if (k) config[k] = isNaN(Number(v)) ? String(v) : Number(v);
+    if (k && v !== '') {
+      config[k] = isNaN(Number(v)) ? String(v) : Number(v);
+    }
   }
   return config;
 }

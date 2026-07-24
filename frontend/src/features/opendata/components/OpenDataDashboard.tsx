@@ -100,17 +100,14 @@ export function OpenDataDashboard({ targetTable = 's_epi1' }: OpenDataDashboardP
       ? data 
       : data.filter(d => d.hospcode === selectedHosp);
     
-    const baseData = formatEpiAllVaccines(filteredData, targetTable);
-    
-    // Map specific dynamic targets for each vaccine gauge
-    return baseData.map(item => {
+    return formatEpiAllVaccines(filteredData, targetTable).map(item => {
       const vaccineKeyForTarget = item.vaccine === 'mmr' || item.vaccine === 'mmr1' || item.vaccine === 'mmr2' ? 'mmr' : item.vaccine;
       return {
         ...item,
-        goal: getTarget(quarter, 1, vaccineKeyForTarget)
+        goal: getTarget(quarter, 1, vaccineKeyForTarget, Number(year))
       };
     });
-  }, [data, selectedHosp, targetTable, quarter, getTarget]);
+  }, [data, selectedHosp, targetTable, quarter, getTarget, year]);
 
   // Calculate total summary for the selected year
   const summary = useMemo(() => {
@@ -146,9 +143,9 @@ export function OpenDataDashboard({ targetTable = 's_epi1' }: OpenDataDashboardP
 
   // คำนวณเป้าหมายแบบ Dynamic ตามไตรมาส + ชนิดวัคซีน (มุมมอง 1 = view1)
   const vaccineKeyForTarget = vaccine === 'mmr' || vaccine === 'mmr1' || vaccine === 'mmr2' ? 'mmr' : undefined;
-  const dynamicTarget = getTarget(quarter, 1, vaccineKeyForTarget);
+  const dynamicTarget = getTarget(quarter, 1, vaccineKeyForTarget, Number(year));
   // เป้าหมายสำหรับ Radar (ใช้ค่าพื้นฐานของไตรมาส ไม่แยกวัคซีน)
-  const radarTarget = getTarget(quarter, 1);
+  const radarTarget = getTarget(quarter, 1, undefined, Number(year));
 
   // Handle Export
   const handleExportExcel = () => {
@@ -321,11 +318,11 @@ export function OpenDataDashboard({ targetTable = 's_epi1' }: OpenDataDashboardP
               </div>
               <div className="bg-white p-5 rounded-xl border border-zinc-200 relative overflow-hidden">
                 <p className="text-sm text-zinc-500 font-medium">ความครอบคลุมสะสม</p>
-                <p className={`text-3xl font-bold mt-1 ${summary.coverage >= dynamicTarget ? 'text-green-600' : 'text-red-600'}`}>
+                <p className={`text-3xl font-bold mt-1 ${dynamicTarget !== undefined && summary.coverage >= dynamicTarget ? 'text-green-600' : (dynamicTarget !== undefined ? 'text-red-600' : 'text-zinc-600')}`}>
                   {summary.coverage.toFixed(2)}%
                 </p>
-                <p className="text-xs text-zinc-400 mt-0.5">เทียบเป้า {dynamicTarget}% (Q{quarter})</p>
-                <div className={`absolute bottom-0 left-0 h-1 transition-all ${summary.coverage >= dynamicTarget ? 'bg-green-500' : 'bg-red-500'}`} style={{ width: `${Math.min(summary.coverage, 100)}%` }}></div>
+                <p className="text-xs text-zinc-400 mt-0.5">เทียบเป้า {dynamicTarget !== undefined ? `${dynamicTarget}%` : 'ยังไม่ได้กำหนดเป้าหมาย'} (Q{quarter})</p>
+                <div className={`absolute bottom-0 left-0 h-1 transition-all ${dynamicTarget !== undefined && summary.coverage >= dynamicTarget ? 'bg-green-500' : (dynamicTarget !== undefined ? 'bg-red-500' : 'bg-zinc-300')}`} style={{ width: `${Math.min(summary.coverage, 100)}%` }}></div>
               </div>
             </div>
 

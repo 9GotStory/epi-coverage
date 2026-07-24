@@ -85,6 +85,13 @@ function saveVaccineRule(rule, adminEmail) {
     }
   }
 
+  // ป้องกันเลข 0 นำหน้าหาย สำหรับ hdc_code
+  const hdcCodeColIndex = headers.indexOf('hdc_code');
+  if (hdcCodeColIndex !== -1) {
+    const targetRow = existingRowIndex !== -1 ? existingRowIndex : sheet.getLastRow() + 1;
+    sheet.getRange(targetRow, hdcCodeColIndex + 1).setNumberFormat('@');
+  }
+
   const rowData = headers.map(header => {
     switch (header) {
       case 'rule_id': return rule.rule_id;
@@ -457,6 +464,13 @@ function seedVaccineRules(fiscalYear, adminEmail, force = false) {
   }));
 
   const startRow = sheet.getLastRow() + 1;
+  
+  // ป้องกันเลข 0 นำหน้าหาย สำหรับ hdc_code
+  const hdcCodeColIndex = headers.indexOf('hdc_code');
+  if (hdcCodeColIndex !== -1) {
+    sheet.getRange(startRow, hdcCodeColIndex + 1, rows.length, 1).setNumberFormat('@');
+  }
+  
   sheet.getRange(startRow, 1, rows.length, headers.length).setValues(rows);
 
   logAction('SYSTEM', adminEmail || 'system', 'seed_vaccine_rules',

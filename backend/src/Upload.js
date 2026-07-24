@@ -85,12 +85,34 @@ function upsertEpiData(chunk, batchId, adminEmail, fiscalYear, targetTable = 'Ep
     rowsToUpdate.forEach(update => {
       existingData[update.rowIdx] = update.newRowData;
     });
+    
+    // ตั้งค่า Format ตามกฎก่อนเขียนทับ เพื่อป้องกันสูญเสีย 0 นำหน้า
+    headers.forEach((h, i) => {
+      if (h.includes('hosc') || h.includes('hosp') || h === 'cid' || h.includes('hdc_code')) {
+        sheet.getRange(2, i + 1, existingData.length - 1, 1).setNumberFormat('@');
+      }
+    });
+
     sheet.getRange(1, 1, existingData.length, headers.length).setValues(existingData);
   }
 
   // Apply inserts
   if (rowsToInsert.length > 0) {
     const startRow = existingData.length + 1;
+    const totalReqRows = startRow + rowsToInsert.length - 1;
+    
+    // ป้องกัน Out of Bounds ถ้าข้อมูลที่อัปโหลดเยอะกว่าจำนวนบรรทัดที่เหลืออยู่
+    if (sheet.getMaxRows() < totalReqRows) {
+      sheet.insertRowsAfter(sheet.getMaxRows(), totalReqRows - sheet.getMaxRows());
+    }
+
+    // ตั้งค่า Format ตามกฎก่อนเขียนข้อมูลใหม่
+    headers.forEach((h, i) => {
+      if (h.includes('hosc') || h.includes('hosp') || h === 'cid' || h.includes('hdc_code')) {
+        sheet.getRange(startRow, i + 1, rowsToInsert.length, 1).setNumberFormat('@');
+      }
+    });
+
     sheet.getRange(startRow, 1, rowsToInsert.length, headers.length).setValues(rowsToInsert);
   }
 

@@ -49,7 +49,7 @@ export const hasDose = (record: EpiRecord, field: keyof EpiRecord, _birthDate?: 
   return true;
 };
 
-export const hasFieldDataError = (record: EpiRecord, field: keyof EpiRecord): boolean => {
+export const hasFieldDataError = (record: EpiRecord, field: keyof EpiRecord, allowOnBirth: boolean = false): boolean => {
   const val = record[field];
   if (!val || typeof val !== 'string' || !record.birth) return false;
   
@@ -64,11 +64,9 @@ export const hasFieldDataError = (record: EpiRecord, field: keyof EpiRecord): bo
     return true;
   }
   
-  // 2. ลงผิดเป็นวันเกิด (ยกเว้น BCG และ HBV1 ที่ฉีดแรกเกิดได้)
-  if (cleanVal === cleanBirth) {
-    if (field !== 'bcg_date' && field !== 'hbv1_date') {
-      return true;
-    }
+  // 2. ลงผิดเป็นวันเกิด (ยกเว้นวัคซีนที่ฉีดแรกเกิดได้ allowOnBirth)
+  if (cleanVal === cleanBirth && !allowOnBirth) {
+    return true;
   }
 
   return false;
@@ -78,27 +76,25 @@ export const getDataErrors = (record: EpiRecord, rules: VaccineRule[]): string[]
   const errors: string[] = [];
   if (!record.birth || !rules) return errors;
   
-  const currentAgeMonths = getAgeInMonths(record.birth);
-  
   for (const rule of rules) {
     let hasError = false;
+    const allowOnBirth = rule.target_age_months === 0;
+    
     if (rule.required_fields) {
-      hasError = rule.required_fields.some(field => hasFieldDataError(record, field as keyof EpiRecord));
+      hasError = rule.required_fields.some(field => hasFieldDataError(record, field as keyof EpiRecord, allowOnBirth));
     }
     if (!hasError && rule.branch_alt_fields) {
-      hasError = rule.branch_alt_fields.some(field => hasFieldDataError(record, field as keyof EpiRecord));
+      hasError = rule.branch_alt_fields.some(field => hasFieldDataError(record, field as keyof EpiRecord, allowOnBirth));
     }
     if (hasError) {
-      const isV1 = rule.view_type === 1;
-      const { names } = resolveSmartVaccineNames(record, rule, isV1, currentAgeMonths);
-      errors.push(...names);
+      errors.push(rule.display_name);
     }
   }
   
   return Array.from(new Set(errors));
 };
 
-const resolveSmartVaccineNames = (record: EpiRecord, rule: VaccineRule, isV1: boolean, currentAgeMonths: number): { names: string[], isPending: boolean } => {
+const resolveSmartVaccineNames = (record: EpiRecord, rule: VaccineRule, currentAgeMonths: number): { names: string[], isPending: boolean } => {
   let targetAge: number | undefined = rule.target_age_months;
   
   // ถ้าระบบไม่ได้ตั้งอายุเป้าหมายมา ให้ถือว่าไม่ใช่ Pending แน่นอน (ถ้าไม่ได้ฉีดคือ Missing ทันที)
@@ -107,44 +103,51 @@ const resolveSmartVaccineNames = (record: EpiRecord, rule: VaccineRule, isV1: bo
     isPending = currentAgeMonths < targetAge;
   }
 
-  
   // Smart Rota Logic
   if (rule.vaccine_group === 'Rota' && rule.logic_type === 'BRANCH') {
-    // If it's the complete series rule (it requires rv22_date)
-    if (rule.required_fields.includes('rv22_date')) {
-      if (targetAge === undefined) {
-        targetAge = 6;
-        isPending = currentAgeMonths < 6;
-      }
+    // If it's the complete series rule (it requires BOTH Dose 1 AND the final dose in either path, AND targetAge >= 6)
+    const reqStr = (rule.required_fields || []).join(',');
+    const altStr = (rule.branch_alt_fields || []).join(',');
+    const isCompleteSeries = 
+      (
+        (reqStr.includes('rv21_date') && reqStr.includes('rv22_date')) || 
+        (altStr.includes('rv21_date') && altStr.includes('rv22_date')) ||
+        (reqStr.includes('rv31_date') && reqStr.includes('rv33_date')) ||
+        (altStr.includes('rv31_date') && altStr.includes('rv33_date'))
+      ) && 
+      (targetAge !== undefined && targetAge !== null && targetAge >= 6);
+    
+    if (isCompleteSeries) {
       const hasRv21 = hasDose(record, 'rv21_date', record.birth);
       const hasRv31 = hasDose(record, 'rv31_date', record.birth);
       
-      if (hasRv31 && !hasRv21) {
-        // 3-dose series
-        const hasRv32 = hasDose(record, 'rv32_date', record.birth);
-        const hasRv33 = hasDose(record, 'rv33_date', record.birth);
-        const missing = [];
-        let hasPending = false;
-        
-        if (!hasRv32) {
-          missing.push(isV1 ? 'ขาด Rota เข็ม 2 (rv32)' : 'Rota เข็ม 2 (rv32)');
-          if (currentAgeMonths < 4) hasPending = true;
+      if (!hasRv21 && !hasRv31) {
+        let pending = false;
+        if (targetAge !== undefined && targetAge !== null) {
+          pending = currentAgeMonths < Math.max(0, targetAge - 4);
         }
-        if (hasRv32 && !hasRv33) {
-          missing.push(isV1 ? 'ขาด Rota เข็ม 3 (rv33)' : 'Rota เข็ม 3 (rv33)');
-          if (currentAgeMonths < 6) hasPending = true;
-        }
-        if (missing.length > 0) return { names: missing, isPending: hasPending };
-      } else if (hasRv21 && !hasRv31) {
-        // 2-dose series
-        const hasRv22 = hasDose(record, 'rv22_date', record.birth);
-        if (!hasRv22) {
-          return { 
-            names: [isV1 ? 'ขาด Rota เข็ม 2 (rv22)' : 'Rota เข็ม 2 (rv22)'], 
-            isPending: currentAgeMonths < 4 
-          };
-        }
+        return { names: ['Rota เข็ม 1'], isPending: pending };
       }
+
+      const hasRv22 = hasDose(record, 'rv22_date', record.birth);
+      const hasRv32 = hasDose(record, 'rv32_date', record.birth);
+      
+      if (!hasRv22 && !hasRv32) {
+        let pending = false;
+        if (targetAge !== undefined && targetAge !== null) {
+          pending = currentAgeMonths < Math.max(0, targetAge - 2);
+        }
+        return { names: ['Rota เข็ม 2'], isPending: pending };
+      }
+
+      // If we reach here, they have at least one Dose 1 and one Dose 2.
+      // Since evaluateDynamicV1/V2 already checked if they completed their specific path (and they failed),
+      // they MUST be missing Dose 3.
+      let pending = false;
+      if (targetAge !== undefined && targetAge !== null) {
+        pending = currentAgeMonths < targetAge;
+      }
+      return { names: ['Rota เข็ม 3 (rv33)'], isPending: pending };
       // If neither, fallback to default display_name
     }
   }
@@ -171,13 +174,13 @@ export const evaluateDynamicV1 = (record: EpiRecord, rules: VaccineRule[]): View
 
     if (rule.logic_type === 'ALL') {
       // ต้องมีทุกเข็ม
-      passed = rule.required_fields.every(field => hasDose(record, field as keyof EpiRecord, record.birth));
+      passed = rule.required_fields && rule.required_fields.length > 0 && rule.required_fields.every(field => hasDose(record, field as keyof EpiRecord, record.birth));
     } else if (rule.logic_type === 'ANY') {
       // มีเข็มใดเข็มหนึ่งก็ผ่าน
-      passed = rule.required_fields.some(field => hasDose(record, field as keyof EpiRecord, record.birth));
+      passed = rule.required_fields && rule.required_fields.length > 0 && rule.required_fields.some(field => hasDose(record, field as keyof EpiRecord, record.birth));
     } else if (rule.logic_type === 'BRANCH') {
       // เส้นทางที่ 1 (เช่น Rota 2 เข็ม)
-      const path1Passed = rule.required_fields.every(field => hasDose(record, field as keyof EpiRecord, record.birth));
+      const path1Passed = rule.required_fields && rule.required_fields.length > 0 && rule.required_fields.every(field => hasDose(record, field as keyof EpiRecord, record.birth));
       // เส้นทางที่ 2 (เช่น Rota 3 เข็ม)
       const path2Passed = rule.branch_alt_fields && rule.branch_alt_fields.length > 0
         ? rule.branch_alt_fields.every(field => hasDose(record, field as keyof EpiRecord, record.birth))
@@ -188,7 +191,7 @@ export const evaluateDynamicV1 = (record: EpiRecord, rules: VaccineRule[]): View
 
     results[rule.display_name] = passed;
     if (!passed) {
-      const { names, isPending } = resolveSmartVaccineNames(record, rule, true, currentAgeMonths);
+      const { names, isPending } = resolveSmartVaccineNames(record, rule, currentAgeMonths);
       if (isPending) {
         pendingVaccines.push(...names);
       } else {
@@ -213,16 +216,16 @@ export const evaluateDynamicV2 = (record: EpiRecord, rules: VaccineRule[]): Vacc
   
   const currentAgeMonths = getAgeInMonths(record.birth);
   
-  const v2Rules = rules.filter(r => r.view_type === 2 && r.is_active && r.is_required_for_v2);
+  const v2Rules = rules.filter(r => r.view_type === 2 && r.is_active);
 
   for (const rule of v2Rules) {
     let passed = false;
     if (rule.logic_type === 'ALL') {
-      passed = rule.required_fields.every(field => hasDose(record, field as keyof EpiRecord, record.birth));
+      passed = rule.required_fields && rule.required_fields.length > 0 && rule.required_fields.every(field => hasDose(record, field as keyof EpiRecord, record.birth));
     } else if (rule.logic_type === 'ANY') {
-      passed = rule.required_fields.some(field => hasDose(record, field as keyof EpiRecord, record.birth));
+      passed = rule.required_fields && rule.required_fields.length > 0 && rule.required_fields.some(field => hasDose(record, field as keyof EpiRecord, record.birth));
     } else if (rule.logic_type === 'BRANCH') {
-      const path1Passed = rule.required_fields.every(field => hasDose(record, field as keyof EpiRecord, record.birth));
+      const path1Passed = rule.required_fields && rule.required_fields.length > 0 && rule.required_fields.every(field => hasDose(record, field as keyof EpiRecord, record.birth));
       const path2Passed = rule.branch_alt_fields && rule.branch_alt_fields.length > 0
         ? rule.branch_alt_fields.every(field => hasDose(record, field as keyof EpiRecord, record.birth))
         : false;
@@ -230,7 +233,7 @@ export const evaluateDynamicV2 = (record: EpiRecord, rules: VaccineRule[]): Vacc
     }
 
     if (!passed) {
-      const { names, isPending } = resolveSmartVaccineNames(record, rule, false, currentAgeMonths);
+      const { names, isPending } = resolveSmartVaccineNames(record, rule, currentAgeMonths);
       if (isPending) {
         pendingVaccines.push(...names);
       } else {

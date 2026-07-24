@@ -25,14 +25,16 @@ const AgeGroupSection = memo(function AgeGroupSection({
   updatedAt,
   targetView1,
   targetView2,
+  fiscalYear,
   isLoading,
   path
 }: {
   age: string;
   summary: ReturnType<typeof calcGroupSummary>;
   updatedAt?: string | null;
-  targetView1: number;
-  targetView2: number;
+  targetView1?: number;
+  targetView2?: number;
+  fiscalYear: number;
   isLoading: boolean;
   path: string;
 }) {
@@ -50,8 +52,8 @@ const AgeGroupSection = memo(function AgeGroupSection({
     );
   }
 
-  const v1TargetMet = summary.view1Coverage >= targetView1;
-  const v2TargetMet = summary.view2Coverage >= targetView2;
+  const v1TargetMet = targetView1 !== undefined ? summary.view1Coverage >= targetView1 : true;
+  const v2TargetMet = targetView2 !== undefined ? summary.view2Coverage >= targetView2 : true;
 
   return (
     <section className="bg-white rounded-2xl p-6 border border-zinc-200 shadow-sm mb-6">
@@ -98,8 +100,9 @@ const AgeGroupSection = memo(function AgeGroupSection({
               </p>
             </div>
             <div className="text-right">
-              <p className="text-xs text-zinc-400">เป้าหมาย View 1</p>
-              <p className="text-sm font-semibold text-zinc-700">{targetView1}%</p>
+              {targetView1 !== undefined && (
+                <p className="text-[10px] text-zinc-400 mt-1">เป้าหมาย: ≥ {targetView1}%</p>
+              )}
             </div>
           </div>
           
@@ -135,8 +138,9 @@ const AgeGroupSection = memo(function AgeGroupSection({
               </p>
             </div>
             <div className="text-right">
-              <p className="text-xs text-zinc-400">เป้าหมาย View 2</p>
-              <p className="text-sm font-semibold text-zinc-700">{targetView2}%</p>
+              {targetView2 !== undefined && (
+                <p className="text-[10px] text-zinc-400 mt-1">เป้าหมาย: ≥ {targetView2}%</p>
+              )}
             </div>
           </div>
 
@@ -163,7 +167,7 @@ const AgeGroupSection = memo(function AgeGroupSection({
 
       {/* ── Expanded Content ── */}
       {isExpanded && (
-        <AgeGroupExpandedView summary={summary} targetView1={targetView1} targetView2={targetView2} />
+        <AgeGroupExpandedView summary={summary} targetView1={targetView1} targetView2={targetView2} fiscalYear={fiscalYear} />
       )}
     </section>
   );
@@ -179,9 +183,9 @@ export function Dashboard() {
   // โหลดข้อมูลผลสรุป (JSON Cache) จาก API แทนการโหลดข้อมูลดิบ
   const { data: summaries, isLoading } = useDashboardSummaries(currentYear);
 
-  // ดึงเป้าหมายแบบไดนามิก (ใช้ไตรมาส 4 เป็นค่าเริ่มต้นสำหรับภาพรวมรายปี)
-  const targetView1 = getTarget(4, 1);
-  const targetView2 = getTarget(4, 2);
+  // ดึงเป้าหมายแบบไดนามิกของปีปัจจุบัน (ใช้ไตรมาส 4 เป็นค่าเริ่มต้นสำหรับภาพรวมรายปี)
+  const targetView1 = getTarget(4, 1, undefined, currentYear);
+  const targetView2 = getTarget(4, 2, undefined, currentYear);
 
   // ดึง summary ของแต่ละกลุ่มอายุจาก Array ที่ได้กลับมา
   const getSummary = (table: string) => {
@@ -221,6 +225,7 @@ export function Dashboard() {
           updatedAt={summary1yr.updatedAt}
           targetView1={targetView1}
           targetView2={targetView2}
+          fiscalYear={currentYear}
           isLoading={isLoading}
           path="/dashboard/epi-1yr"
         />
@@ -231,6 +236,7 @@ export function Dashboard() {
           updatedAt={summary2yr.updatedAt}
           targetView1={targetView1}
           targetView2={targetView2}
+          fiscalYear={currentYear}
           isLoading={isLoading}
           path="/dashboard/epi-2yr"
         />
@@ -241,6 +247,7 @@ export function Dashboard() {
           updatedAt={summary3yr.updatedAt}
           targetView1={targetView1}
           targetView2={targetView2}
+          fiscalYear={currentYear}
           isLoading={isLoading}
           path="/dashboard/epi-3yr"
         />
@@ -251,6 +258,7 @@ export function Dashboard() {
           updatedAt={summary5yr.updatedAt}
           targetView1={targetView1}
           targetView2={targetView2}
+          fiscalYear={currentYear}
           isLoading={isLoading}
           path="/dashboard/epi-5yr"
         />
