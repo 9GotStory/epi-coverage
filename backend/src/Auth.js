@@ -4,12 +4,23 @@
  * @returns {object|null} { sub, email, name, ... } หรือ null ถ้าไม่ถูกต้อง
  */
 function verifyGoogleToken(idToken) {
+  // Use a hash or substring of the token to stay within cache key limits (max 250 chars)
+  const cacheKey = 'jwt_' + idToken.substring(idToken.length - 100); 
+  const cache = CacheService.getScriptCache();
+  const cachedData = cache.get(cacheKey);
+  
+  if (cachedData) {
+    return JSON.parse(cachedData);
+  }
+
   const url = `https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`;
   try {
     const response = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
     const result = JSON.parse(response.getContentText());
     
     if (response.getResponseCode() === 200 && result.sub) {
+      // Cache valid token data for 30 minutes
+      cache.put(cacheKey, JSON.stringify(result), 1800);
       return result;
     }
     return null;
