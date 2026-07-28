@@ -25,16 +25,15 @@ function handleRequest(method, e) {
     
     // 4. Public Actions (ไม่ใช้ Token)
     const publicActions = [
-      'setup', 'verifyToken', 'createUser', 'createSession', 'getUser', 'updateLastLogin',
+      'setup', 'verifyToken', 'loginWithGoogle', 'createUser', 'updateLastLogin',
       'getTargetConfig', 'getDashboardSummaries', 'getDashboardSummariesMultiYear', 'getVaccineRules', 'getAvailableYears'
     ];
     if (publicActions.includes(action)) {
       switch (action) {
         case 'setup': return responseJson(setupDatabase());
         case 'verifyToken': return responseJson(verifyGoogleToken(body.idToken));
+        case 'loginWithGoogle': return responseJson(loginWithGoogle(body.accessToken, body.ipAddress || '', body.userAgent || ''));
         case 'createUser': return responseJson(createUser(body.userData));
-        case 'createSession': return responseJson(createSession(body.userId, body.token, body.ipAddress || '', body.userAgent || ''));
-        case 'getUser': return responseJson(getUserByGoogleId(e.parameter.googleId || body.googleId));
         case 'updateLastLogin': return responseJson(updateLastLogin(body.googleId));
         case 'getTargetConfig': return responseJson(getTargetConfig());
         case 'getDashboardSummaries': return responseJson(getDashboardSummaries(e.parameter.fiscalYear || body.fiscalYear));

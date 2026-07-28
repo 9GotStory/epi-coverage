@@ -110,6 +110,66 @@ function getUserByGoogleId(googleId) {
 }
 
 /**
+ * Endpoint สำหรับการล็อกอินด้วย Google Access Token
+ * ทำการยืนยันกับ Google, ค้นหา User, และออก Session ให้หากได้รับอนุมัติ
+ */
+function loginWithGoogle(accessToken, ipAddress, userAgent) {
+  if (!accessToken) {
+    return { success: false, error: 'No access token provided' };
+  }
+
+  try {
+    const url = 'https://www.googleapis.com/oauth2/v3/userinfo';
+    const response = UrlFetchApp.fetch(url, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      muteHttpExceptions: true
+    });
+    
+    if (response.getResponseCode() !== 200) {
+      return { success: false, error: 'Invalid Google Access Token' };
+    }
+    
+    const googleData = JSON.parse(response.getContentText());
+    if (!googleData.sub) {
+      return { success: false, error: 'Invalid user info from Google' };
+    }
+
+    const user = getUserByGoogleId(googleData.sub);
+    
+    if (!user) {
+      // User doesn't exist, return googleData to frontend so they can register
+      return { success: true, isNewUser: true, googleData: googleData };
+    }
+
+    if (user.status === 'pending') {
+      return { success: true, isNewUser: false, status: 'pending', user: user };
+    }
+
+    if (user.status === 'approved' || user.role === 'admin' || user.role === 'superadmin') {
+      // Update last login
+      updateLastLogin(user.google_id);
+      
+      // Create session
+      const sessionResult = createSession(user.id, accessToken, ipAddress, userAgent);
+      
+      return { 
+        success: true, 
+        isNewUser: false, 
+        status: 'approved', 
+        user: user, 
+        session_id: sessionResult.session_id 
+      };
+    }
+
+    return { success: false, error: 'Account rejected or suspended.' };
+
+  } catch (error) {
+    console.error('loginWithGoogle error:', error);
+    return { success: false, error: 'Internal server error during login' };
+  }
+}
+
+/**
  * ดึงข้อมูลผู้ใช้ทั้งหมด (สำหรับ Admin Panel)
  */
 function getAllUsers() {

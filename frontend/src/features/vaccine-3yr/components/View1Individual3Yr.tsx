@@ -34,7 +34,7 @@ type ProcessedView1Record = EpiRecord & {
 
 interface View1Props {
   fiscalYear: number;
-  quarter: number;
+  quarter: number | 'all';
   data: EpiRecord[];
   isLoading: boolean;
   error: string | null;
@@ -158,19 +158,19 @@ export function View1Individual3Yr({ fiscalYear, quarter, data, isLoading, error
           <div className="flex flex-col gap-1 items-start">
             {/* Main Status Pill */}
             {status === 'PASS' ? (
-              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-600 border border-emerald-200 shadow-sm">
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[12px] font-medium tracking-[-0.12px] bg-[#e3f4e1] text-[#1e7e26]">
                 <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
                 ได้รับวัคซีนครบถ้วน (LAJE เข็ม 2 / JE เข็ม 3)
               </span>
             ) : status === 'FAIL' ? (
               <div className="flex flex-col gap-1 items-start">
-                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-50 text-red-600 border border-red-200 shadow-sm">
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[12px] font-medium tracking-[-0.12px] bg-[#ffe2e5] text-[#d91f2a]">
                   <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" /></svg>
                   ไม่ผ่านเกณฑ์ (ตกหล่น)
                 </span>
                 <div className="flex flex-wrap gap-1 mt-1">
                   {row.original.missingVaccines.map((v, i) => (
-                    <span key={i} className="inline-flex px-1.5 py-0.5 rounded bg-red-50 text-red-600 text-[10px] font-medium border border-red-100 shadow-sm">
+                    <span key={i} className="inline-flex px-1.5 py-0.5 rounded text-[11px] font-medium tracking-[-0.1px] bg-[#ffe2e5] text-[#d91f2a]">
                       ขาด {v}
                     </span>
                   ))}
@@ -178,13 +178,13 @@ export function View1Individual3Yr({ fiscalYear, quarter, data, isLoading, error
               </div>
             ) : (
               <div className="flex flex-col gap-1 items-start">
-                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-zinc-50 text-zinc-600 border border-zinc-200 shadow-sm">
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[12px] font-medium tracking-[-0.12px] bg-[#fff0d6] text-[#b06100]">
                   <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM11 5a1 1 0 10-2 0v4.586l-2.707 2.707a1 1 0 101.414 1.414l3-3A1 1 0 0011 10.586V5z" clipRule="evenodd" /></svg>
                   ยังไม่ถึงเกณฑ์ (รอรับบริการ)
                 </span>
                 <div className="flex flex-wrap gap-1 mt-1">
                   {row.original.pendingVaccines.map((v, i) => (
-                    <span key={i} className="inline-flex px-1.5 py-0.5 rounded bg-zinc-50 text-zinc-600 text-[10px] font-medium border border-zinc-200 shadow-sm">
+                    <span key={i} className="inline-flex px-1.5 py-0.5 rounded text-[11px] font-medium tracking-[-0.1px] bg-[#e3e3e8] text-[#424245]">
                       {v}
                     </span>
                   ))}
@@ -196,7 +196,7 @@ export function View1Individual3Yr({ fiscalYear, quarter, data, isLoading, error
             {dataErrors.length > 0 && (
               <div className="flex flex-wrap gap-1 mt-0.5">
                 {dataErrors.map((err, i) => (
-                  <span key={`err-${i}`} className="inline-flex px-1.5 py-0.5 rounded bg-orange-50 text-orange-600 text-[10px] font-medium border border-orange-200 shadow-sm" title="พบความผิดปกติของข้อมูลวันที่ (เช่น ฉีดก่อนวันเกิด, หรือฉีดพร้อมกันเกินกำหนด) - ข้อมูลอาจไม่ถูกนำไปคำนวณใน HDC">
+                  <span key={`err-${i}`} className="inline-flex px-1.5 py-0.5 rounded text-[11px] font-medium tracking-[-0.1px] bg-[#ffe8d6] text-[#c95d00]" title="พบความผิดปกติของข้อมูลวันที่ (เช่น ฉีดก่อนวันเกิด, หรือฉีดพร้อมกันเกินกำหนด) - ข้อมูลอาจไม่ถูกนำไปคำนวณใน HDC">
                     {err} (ข้อมูลวันที่ผิด)
                   </span>
                 ))}
@@ -315,11 +315,11 @@ export function View1Individual3Yr({ fiscalYear, quarter, data, isLoading, error
         {/* Header section */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
-          <h2 className="text-lg font-semibold text-zinc-900">
+          <h2 className="text-[20px] font-semibold text-[#1d1d1f] tracking-[-0.432px]">
             ทะเบียนติดตามเด็กรายบุคคล: ความครอบคลุมการได้รับวัคซีนรายชนิด (LAJE)
           </h2>
-          <p className="text-sm text-zinc-500 mt-1">
-            ข้อมูลอัปเดตล่าสุด: <span className="font-medium text-blue-600">{asOfDateText}</span>
+          <p className="text-[14px] text-[#7a7a7a] mt-1 tracking-[-0.224px]">
+            ข้อมูลอัปเดตล่าสุด: <span className="font-medium text-[#0066cc]">{asOfDateText}</span>
           </p>
         </div>
         
@@ -327,7 +327,7 @@ export function View1Individual3Yr({ fiscalYear, quarter, data, isLoading, error
           <select 
             value={filterFacility} 
             onChange={(e) => setFilterFacility(e.target.value)}
-            className="px-3 py-2 bg-white border border-zinc-200 rounded-lg text-sm shadow-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+            className="px-3 py-2 bg-white border border-[#e0e0e0] rounded-lg text-[14px] text-[#1d1d1f] focus:ring-2 focus:ring-[#0066cc] focus:border-[#0066cc] focus:outline-none transition-colors"
           >
             {uniqueFacilities.length === 1 ? (
               <option value="all">{uniqueFacilities[0]}</option>
@@ -343,7 +343,7 @@ export function View1Individual3Yr({ fiscalYear, quarter, data, isLoading, error
           <select 
             value={filterStatus} 
             onChange={(e) => setFilterStatus(e.target.value)}
-            className="px-3 py-2 bg-white border border-zinc-200 rounded-lg text-sm shadow-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+            className="px-3 py-2 bg-white border border-[#e0e0e0] rounded-lg text-[14px] text-[#1d1d1f] focus:ring-2 focus:ring-[#0066cc] focus:border-[#0066cc] focus:outline-none transition-colors"
           >
             <option value="all">สถานะการรับวัคซีนทั้งหมด</option>
             <option value="passed">ได้รับวัคซีนครบถ้วน (LAJE เข็ม 2 / JE เข็ม 3)</option>
@@ -352,32 +352,32 @@ export function View1Individual3Yr({ fiscalYear, quarter, data, isLoading, error
           </select>
 
           {/* Export Buttons */}
-          <div className="flex bg-white border border-zinc-200 rounded-lg shadow-sm overflow-hidden">
+          <div className="flex bg-white border border-[#e0e0e0] rounded-lg overflow-hidden">
             <button 
               onClick={handleExportExcel}
-              className="flex items-center gap-1.5 px-3 py-2 text-sm text-green-700 hover:bg-green-50 transition-colors border-r border-zinc-200 focus:outline-none"
+              className="flex items-center gap-1.5 px-3 py-2 text-[14px] text-[#1d1d1f] hover:bg-[#f5f5f7] transition-colors border-r border-[#e0e0e0] focus:outline-none"
               title="Export to Excel"
             >
-              <FileSpreadsheetIcon className="w-4 h-4" />
+              <FileSpreadsheetIcon className="w-4 h-4 text-[#34c759]" />
               <span className="hidden md:inline font-medium">Excel</span>
             </button>
             <button 
               onClick={handleExportPdf}
-              className="flex items-center gap-1.5 px-3 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors focus:outline-none"
+              className="flex items-center gap-1.5 px-3 py-2 text-[14px] text-[#1d1d1f] hover:bg-[#f5f5f7] transition-colors focus:outline-none"
               title="Export to PDF"
             >
-              <FileTextIcon className="w-4 h-4" />
+              <FileTextIcon className="w-4 h-4 text-[#ff3b30]" />
               <span className="hidden md:inline font-medium">PDF</span>
             </button>
           </div>
         </div>
       </div>
 
-      <div className="bg-blue-50/50 border border-blue-100 rounded-xl p-4 flex gap-3 text-sm text-blue-900">
-        <InfoIcon className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
+      <div className="bg-[#f2f8ff] rounded-[16px] p-5 flex gap-4 text-[#1d1d1f]">
+        <InfoIcon className="w-6 h-6 text-[#0066cc] shrink-0" />
         <div>
-          <p className="font-semibold mb-1">เกี่ยวกับมุมมองที่ 1 (ความครอบคลุมวัคซีน LAJE เข็ม 2)</p>
-          <p className="mb-2 text-blue-800 leading-relaxed">
+          <p className="font-semibold text-[15px] mb-1 tracking-[-0.24px]">เกี่ยวกับมุมมองที่ 1 (ความครอบคลุมวัคซีน LAJE เข็ม 2)</p>
+          <p className="mb-2 text-[14px] text-[#424245] leading-relaxed tracking-[-0.224px]">
             มุมมองนี้แสดงประวัติการได้รับวัคซีน <strong>LAJE เข็มที่ 2 หรือ JE เข็มที่ 3</strong> 
             เพื่อสนับสนุนการปฏิบัติงานของเจ้าหน้าที่ในการ <strong>ติดตามเด็กอายุครบ 3 ปีที่ยังไม่ได้รับวัคซีนสมองอักเสบเจอี</strong> ได้อย่างแม่นยำ 
             (หมายเหตุ: เด็ก 1 รายอาจขาดวัคซีนในมุมมองนี้ แต่หากเคยได้รับวัคซีนตัวอื่นๆ ตอนอายุ 1-2 ปีไม่ครบ ก็อาจจะไม่ผ่านเกณฑ์ตัวชี้วัด Fully Immunized ในภาพรวมได้เช่นกัน)

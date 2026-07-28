@@ -20,41 +20,26 @@ export function LoginScreen() {
         if (!accessToken) throw new Error('No access token received');
 
         // Note: For 'implicit' flow, we get an access_token, not an id_token.
-        // We can use Google's userinfo endpoint to get user details.
-        const userInfoRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-          headers: { Authorization: `Bearer ${accessToken}` },
+        // We pass this to our secure backend to verify and create a session.
+        const res = await fetchApi('loginWithGoogle', {
+          accessToken,
+          userAgent: navigator.userAgent
         });
-        
-        if (!userInfoRes.ok) throw new Error('Failed to fetch user info from Google');
-        
-        const googleData = await userInfoRes.json();
-        if (!googleData.sub) throw new Error('Invalid Google Token');
 
-        // 2. Check if user exists in DB
-        const userRes = await fetchApi('getUser', { googleId: googleData.sub });
-        
-        if (userRes.data && userRes.data.google_id) {
-          const user = userRes.data;
-          // 3. User exists, check status
-          if (user.status === 'pending') {
+        if (res.data?.success) {
+          if (res.data.isNewUser) {
+            // New user -> navigate to First-Time Setup and pass google data
+            navigate('/setup', { state: { googleData: res.data.googleData }, replace: true });
+          } else if (res.data.status === 'pending') {
             navigate('/pending', { replace: true });
-          } else if (user.status === 'approved') {
-            // Update last_login and create session
-            await fetchApi('updateLastLogin', { googleId: user.google_id });
-            const sessionRes = await fetchApi('createSession', { 
-              userId: user.id, 
-              token: accessToken,
-              userAgent: navigator.userAgent
-            });
-            
-            login(user, sessionRes.data?.session_id || accessToken);
+          } else if (res.data.status === 'approved' || res.data.user?.role === 'admin' || res.data.user?.role === 'superadmin') {
+            login(res.data.user, res.data.session_id);
             navigate('/dashboard', { replace: true });
           } else {
             setError('Account rejected or suspended.');
           }
         } else {
-          // 4. New user -> navigate to First-Time Setup and pass google data
-          navigate('/setup', { state: { googleData }, replace: true });
+          setError(res.data?.error || 'Login failed from server.');
         }
 
       } catch (err: any) {

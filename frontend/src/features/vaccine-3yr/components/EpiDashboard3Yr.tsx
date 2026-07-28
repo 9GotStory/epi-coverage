@@ -14,7 +14,7 @@ export function EpiDashboard3Yr() {
   // Global Filters for Cohort
   const currentYear = getCurrentFiscalYear();
   const [fiscalYear, setFiscalYear] = useState<number>(currentYear);
-  const [quarter, setQuarter] = useState<number>(1);
+  const [quarter, setQuarter] = useState<number | 'all'>('all');
 
   const { data, isLoading, error, asOfDate } = useEpiData('Epi_3_Year', fiscalYear);
   const { years: availableFiscalYears } = useAvailableYears();
@@ -28,40 +28,40 @@ export function EpiDashboard3Yr() {
   }, [availableFiscalYears, fiscalYear]);
 
   return (
-    <div className="flex flex-col min-h-screen bg-zinc-50/50">
+    <div className="flex flex-col min-h-screen bg-[#f5f5f7]">
       <SubNav title="EPI Tracking Dashboard (เด็ก 3 ปี)" />
       
-      <main className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="flex-1 w-full max-w-[1440px] mx-auto px-4 sm:px-8 py-8">
         
         <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
           {/* Apple-style Segmented Control */}
-          <div className="bg-zinc-200/60 p-1 rounded-xl inline-flex relative shadow-inner">
+          <div className="bg-[#e3e3e8] p-1 rounded-xl inline-flex relative">
             <button
               onClick={() => setActiveTab('view1')}
-              className={`relative z-10 px-6 py-2 text-sm font-medium rounded-lg transition-all duration-300 ${
+              className={`relative z-10 px-6 py-2 text-[14px] font-medium tracking-[-0.224px] rounded-lg transition-all duration-300 ${
                 activeTab === 'view1' 
-                  ? 'text-zinc-900 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.1)]' 
-                  : 'text-zinc-500 hover:text-zinc-700'
+                  ? 'text-[#1d1d1f] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.1)]' 
+                  : 'text-[#7a7a7a] hover:text-[#1d1d1f]'
               }`}
             >
               มุมมองที่ 1: ความครอบคลุมรายชนิด ({v1RulesCount} รายการ)
             </button>
             <button
               onClick={() => setActiveTab('view2')}
-              className={`relative z-10 px-6 py-2 text-sm font-medium rounded-lg transition-all duration-300 ${
+              className={`relative z-10 px-6 py-2 text-[14px] font-medium tracking-[-0.224px] rounded-lg transition-all duration-300 ${
                 activeTab === 'view2'
-                  ? 'text-zinc-900 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.1)]'
-                  : 'text-zinc-500 hover:text-zinc-700'
+                  ? 'text-[#1d1d1f] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.1)]'
+                  : 'text-[#7a7a7a] hover:text-[#1d1d1f]'
               }`}
             >
               มุมมองที่ 2: Fully Immunized (3 ปี)
             </button>
             <button
               onClick={() => setActiveTab('view3')}
-              className={`relative z-10 px-6 py-2 text-sm font-medium rounded-lg transition-all duration-300 ${
+              className={`relative z-10 px-6 py-2 text-[14px] font-medium tracking-[-0.224px] rounded-lg transition-all duration-300 ${
                 activeTab === 'view3'
-                  ? 'text-zinc-900 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.1)]'
-                  : 'text-zinc-500 hover:text-zinc-700'
+                  ? 'text-[#1d1d1f] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.1)]'
+                  : 'text-[#7a7a7a] hover:text-[#1d1d1f]'
               }`}
             >
               มุมมองที่ 3: ภาพรวม (OpenData)
@@ -70,23 +70,24 @@ export function EpiDashboard3Yr() {
           
           {activeTab !== 'view3' && (
             <div className="flex items-center gap-2">
-            <span className="text-sm text-zinc-500 font-medium">ปีงบประมาณ:</span>
+            <span className="text-[14px] text-[#7a7a7a] font-medium tracking-[-0.224px]">ปีงบประมาณ:</span>
             <select 
               value={fiscalYear}
               onChange={e => setFiscalYear(Number(e.target.value))}
-              className="px-2 py-1 bg-white border border-zinc-200 rounded-md text-sm shadow-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              className="px-3 py-1.5 bg-white border border-[#e0e0e0] rounded-lg text-[14px] text-[#1d1d1f] focus:ring-2 focus:ring-[#0066cc] focus:border-[#0066cc] focus:outline-none transition-colors"
             >
               {availableFiscalYears.map(year => (
                 <option key={year} value={year}>{year}</option>
               ))}
             </select>
 
-            <span className="text-sm text-zinc-500 font-medium ml-2">ไตรมาส:</span>
+            <span className="text-[14px] text-[#7a7a7a] font-medium tracking-[-0.224px] ml-3">ไตรมาส:</span>
             <select 
               value={quarter}
-              onChange={e => setQuarter(Number(e.target.value))}
-              className="px-2 py-1 bg-white border border-zinc-200 rounded-md text-sm shadow-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              onChange={e => setQuarter(e.target.value === 'all' ? 'all' : Number(e.target.value))}
+              className="px-3 py-1.5 bg-white border border-[#e0e0e0] rounded-lg text-[14px] text-[#1d1d1f] focus:ring-2 focus:ring-[#0066cc] focus:border-[#0066cc] focus:outline-none transition-colors"
             >
+              <option value="all">ภาพรวมทั้งปีงบประมาณ</option>
               <option value={1}>ไตรมาส 1 (ต.ค. - ธ.ค.)</option>
               <option value={2}>ไตรมาส 2 (ม.ค. - มี.ค.)</option>
               <option value={3}>ไตรมาส 3 (เม.ย. - มิ.ย.)</option>
@@ -97,7 +98,7 @@ export function EpiDashboard3Yr() {
         </div>
 
         {/* Content Area */}
-        <div className="bg-white rounded-2xl p-6 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.1)] ring-1 ring-zinc-200/50 min-h-[500px]">
+        <div className="bg-white rounded-[24px] p-8 border border-[#e0e0e0] min-h-[600px]">
           {activeTab === 'view1' && <View1Individual3Yr fiscalYear={fiscalYear} quarter={quarter} data={data} isLoading={isLoading} error={error} asOfDate={asOfDate} />}
           {activeTab === 'view2' && <View2FullyImmunized3Yr fiscalYear={fiscalYear} quarter={quarter} data={data} isLoading={isLoading} error={error} asOfDate={asOfDate} />}
           {activeTab === 'view3' && <OpenDataDashboard targetTable="s_epi3" />}

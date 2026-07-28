@@ -41,15 +41,15 @@ export function EpiDataTable<TData>({ data, columns }: EpiDataTableProps<TData>)
     : 0;
 
   return (
-    <div className="border border-zinc-200 rounded-xl overflow-hidden bg-white shadow-sm">
+    <div className="border border-[#e0e0e0] rounded-xl overflow-hidden bg-white">
       <div 
         ref={tableContainerRef}
         className="overflow-auto max-h-[560px]"
       >
         <Table>
-          <TableHeader className="bg-zinc-50/80 sticky top-0 z-10 backdrop-blur-sm shadow-[0_1px_0_rgba(0,0,0,0.05)]">
+          <TableHeader className="bg-[#f5f5f7]/80 sticky top-0 z-10 backdrop-blur-md shadow-[0_1px_0_#e0e0e0]">
             {table.getHeaderGroups().map((headerGroup) => (
-              <TableRow key={headerGroup.id} className="hover:bg-transparent">
+              <TableRow key={headerGroup.id} className="hover:bg-transparent border-b-0">
                 {headerGroup.headers.map((header) => {
                   return (
                     <TableHead
@@ -57,7 +57,7 @@ export function EpiDataTable<TData>({ data, columns }: EpiDataTableProps<TData>)
                       style={{
                         width: header.getSize() !== 150 ? header.getSize() : undefined,
                       }}
-                      className="whitespace-nowrap text-[11px] font-semibold tracking-wider text-zinc-500 uppercase h-11 px-4 border-b border-zinc-200"
+                      className="whitespace-nowrap text-[12px] font-medium tracking-[0.02em] text-[#7a7a7a] h-[44px] px-4 border-b-0"
                     >
                       {header.isPlaceholder
                         ? null
@@ -71,7 +71,7 @@ export function EpiDataTable<TData>({ data, columns }: EpiDataTableProps<TData>)
           <TableBody>
             {rows.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={columns.length} className="p-0">
+                <TableCell colSpan={columns.length} className="p-0 border-b-0">
                   <EmptyState className="border-0 rounded-none w-full" />
                 </TableCell>
               </TableRow>
@@ -90,12 +90,12 @@ export function EpiDataTable<TData>({ data, columns }: EpiDataTableProps<TData>)
                       data-index={virtualRow.index}
                       ref={rowVirtualizer.measureElement}
                       data-state={row.getIsSelected() && "selected"}
-                      className="hover:bg-blue-50/40 transition-colors duration-200"
+                      className="hover:bg-[#f5f5f7] transition-colors duration-200 border-b border-[#e0e0e0]/50 last:border-b-0"
                     >
                       {row.getVisibleCells().map((cell) => (
                         <TableCell
                           key={cell.id}
-                          className="py-3 px-4 text-[13.5px] align-top"
+                          className="py-3.5 px-4 text-[14px] text-[#1d1d1f] align-top tracking-[-0.224px]"
                         >
                           {flexRender(cell.column.columnDef.cell, cell.getContext())}
                         </TableCell>
@@ -116,10 +116,10 @@ export function EpiDataTable<TData>({ data, columns }: EpiDataTableProps<TData>)
 
       {/* ── Footer ─────────────────────────────────────────────────────── */}
       {rows.length > 0 && (
-        <div className="flex items-center justify-between px-5 py-3 border-t border-zinc-100 bg-zinc-50/50">
-          <span className="text-xs text-zinc-500">
+        <div className="flex items-center justify-between px-5 py-3 border-t border-[#e0e0e0] bg-[#f5f5f7]">
+          <span className="text-[13px] text-[#7a7a7a] tracking-[-0.08px]">
             แสดงทั้งหมด{' '}
-            <span className="font-semibold text-zinc-700">{rows.length.toLocaleString()}</span> รายการ
+            <span className="font-semibold text-[#1d1d1f]">{rows.length.toLocaleString()}</span> รายการ
           </span>
         </div>
       )}

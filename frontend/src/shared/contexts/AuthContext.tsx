@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import type { ReactNode } from 'react';
 import type { User } from '../types';
 import { fetchApi } from '../lib/api';
@@ -43,14 +43,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('auth:unauthorized', handleUnauthorized);
   }, []);
 
-  const login = (userData: User, authToken: string) => {
+  const login = useCallback((userData: User, authToken: string) => {
     setUser(userData);
     setToken(authToken);
     localStorage.setItem('user', JSON.stringify(userData));
     localStorage.setItem('token', authToken);
-  };
+  }, []);
 
-  const logout = async () => {
+  const logout = useCallback(async () => {
     if (token) {
       // Background logout
       fetchApi('deleteSession', { token }).catch(console.error);
@@ -59,10 +59,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setToken(null);
     localStorage.removeItem('user');
     localStorage.removeItem('token');
-  };
+  }, [token]);
+
+  const value = useMemo(() => ({
+    user,
+    token,
+    isLoading,
+    login,
+    logout
+  }), [user, token, isLoading, login, logout]);
 
   return (
-    <AuthContext.Provider value={{ user, token, isLoading, login, logout }}>
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );
