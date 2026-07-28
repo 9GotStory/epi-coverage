@@ -8,6 +8,7 @@ import { VaccineRadarChart } from './VaccineRadarChart';
 import { RefreshCwIcon, AlertCircleIcon, DatabaseIcon } from 'lucide-react';
 import { useAuth } from '../../../shared/contexts/AuthContext';
 import { useTargetSettings } from '../../../shared/hooks/useTargetSettings';
+import { useAvailableYears } from '../../../shared/hooks/useAvailableYears';
 import { ExportButtonGroup } from '../../../shared/components/ExportButtonGroup';
 import { exportToExcel, exportToPdf } from '../../../shared/exportUtils';
 function getCurrentFiscalYear() {
@@ -30,6 +31,7 @@ export function OpenDataDashboard({ targetTable = 's_epi1' }: OpenDataDashboardP
   
   // Calculate current fiscal year and generate options
   const currentFY = getCurrentFiscalYear();
+  const { years: availableYears } = useAvailableYears();
   const [year, setYear] = useState(currentFY);
   const [province] = useState('54'); // แพร่
   const [amp] = useState('06'); // สอง
@@ -51,9 +53,8 @@ export function OpenDataDashboard({ targetTable = 's_epi1' }: OpenDataDashboardP
     }
   }, [isAdmin]);
 
-  // Generate year options (3 years back, 1 year forward)
-  const currentFYNum = parseInt(currentFY, 10);
-  const yearOptions = Array.from({ length: 5 }, (_, i) => (currentFYNum - 3 + i).toString());
+  // Use dynamically fetched years instead of hardcoded 5 years
+  const yearOptions = availableYears.map(y => y.toString());
 
   const vaccineOptions = isEpi1 ? [
     { value: 'bcg', label: 'BCG (1 เข็ม)' },
