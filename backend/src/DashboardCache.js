@@ -29,12 +29,14 @@ function ensureSummarySheet() {
  * Saves a calculated dashboard summary JSON to the database.
  * @param {string} targetTable - The target table name (e.g. 'Epi_1_Year')
  * @param {number|string} fiscalYear - The fiscal year
+ * @param {number|string} quarter - The quarter (1, 2, 3, 4, or 'all')
  * @param {string} summaryData - JSON string of the pre-calculated summary
  */
-function saveDashboardSummary(targetTable, fiscalYear, summaryData) {
+function saveDashboardSummary(targetTable, fiscalYear, quarter, summaryData) {
   try {
     const sheet = ensureSummarySheet();
-    const id = `${targetTable}_${fiscalYear}`;
+    const q = quarter || 'all';
+    const id = `${targetTable}_${fiscalYear}_${q}`;
     const updatedAt = new Date();
 
     const data = sheet.getDataRange().getValues();
@@ -63,10 +65,11 @@ function saveDashboardSummary(targetTable, fiscalYear, summaryData) {
 }
 
 /**
- * Gets all dashboard summaries for a given fiscal year.
+ * Gets all dashboard summaries for a given fiscal year and quarter.
  * @param {number|string} fiscalYear - The fiscal year to filter by
+ * @param {number|string} quarter - The quarter to filter by
  */
-function getDashboardSummaries(fiscalYear) {
+function getDashboardSummaries(fiscalYear, quarter) {
   try {
     const sheet = ensureSummarySheet();
     const data = sheet.getDataRange().getValues();
@@ -82,7 +85,14 @@ function getDashboardSummaries(fiscalYear) {
       const rowUpdatedAt = row[4];
 
       // Convert fiscalYear to string for safe comparison
-      if (rowFiscalYear.toString() === fiscalYear.toString()) {
+      const q = quarter || 'all';
+      const expectedIdSuffix = `_${fiscalYear}_${q}`;
+      const legacyId = `${rowTargetTable}_${fiscalYear}`;
+      
+      // If rowId ends with the expected suffix (e.g., _2567_all) OR it's a legacy ID without a quarter
+      const isMatch = rowId.endsWith(expectedIdSuffix) || (q === 'all' && rowId === legacyId);
+
+      if (rowFiscalYear.toString() === fiscalYear.toString() && isMatch) {
         try {
           summaries.push({
             id: rowId,
@@ -125,19 +135,23 @@ function getDashboardSummariesMultiYear(fiscalYears) {
 
     for (let i = 1; i < data.length; i++) {
       const row = data[i];
+      const rowId = row[0];
       const rowFiscalYear = String(row[2]);
 
       if (yearsStr.includes(rowFiscalYear)) {
-        try {
-          summaries.push({
-            id: row[0],
-            targetTable: row[1],
-            fiscalYear: row[2],
-            summaryData: JSON.parse(row[3]),
-            updated_at: row[4]
-          });
-        } catch (e) {
-          // Ignore invalid JSON
+        // Only include the yearly summary (quarter = 'all') or legacy summaries without quarter suffix
+        if (rowId.endsWith(`_${rowFiscalYear}_all`) || rowId.endsWith(`_${rowFiscalYear}`)) {
+          try {
+            summaries.push({
+              id: rowId,
+              targetTable: row[1],
+              fiscalYear: row[2],
+              summaryData: JSON.parse(row[3]),
+              updated_at: row[4]
+            });
+          } catch (e) {
+            // Ignore invalid JSON
+          }
         }
       }
     }

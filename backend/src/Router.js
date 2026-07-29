@@ -36,7 +36,7 @@ function handleRequest(method, e) {
         case 'createUser': return responseJson(createUser(body.userData));
         case 'updateLastLogin': return responseJson(updateLastLogin(body.googleId));
         case 'getTargetConfig': return responseJson(getTargetConfig());
-        case 'getDashboardSummaries': return responseJson(getDashboardSummaries(e.parameter.fiscalYear || body.fiscalYear));
+        case 'getDashboardSummaries': return responseJson(getDashboardSummaries(body.fiscalYear || e.parameter.fiscalYear, body.quarter || e.parameter.quarter));
         case 'getDashboardSummariesMultiYear': return responseJson(getDashboardSummariesMultiYear(body.fiscalYears));
         case 'getVaccineRules': return responseJson(getVaccineRules(body.fiscalYear || e.parameter.fiscalYear, body.ageGroup || e.parameter.ageGroup));
         case 'getAvailableYears': return responseJson(getAvailableYears());
@@ -74,7 +74,7 @@ function handleRequest(method, e) {
       case 'updateUserStatus': return responseJson(updateUserStatus(body.googleId, body.status, body.role));
       case 'updateUserFacility': return responseJson(updateUserFacility(body.googleId, body.hoscode));
       case 'deleteSession': return responseJson(deleteSession(body.token));
-      case 'saveDashboardSummary': return responseJson(saveDashboardSummary(body.targetTable, body.fiscalYear, body.summaryData));
+      case 'saveDashboardSummary': return responseJson(saveDashboardSummary(body.targetTable, body.fiscalYear, body.quarter, body.summaryData));
       case 'saveAiAnalysis': return responseJson(saveAiAnalysis(body.recordKey, body.targetTable, body.aiAnalysis, body.adminEmail));
       case 'analyzeVaccineData': return responseJson(analyzeVaccineData(body.prompt, body.recordKey, body.targetTable, e.parameter.email || body.adminEmail));
       // A1: Migration + Dynamic Sheet (Removed legacy year-based endpoints)

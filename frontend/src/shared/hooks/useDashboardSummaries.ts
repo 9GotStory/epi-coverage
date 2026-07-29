@@ -9,11 +9,11 @@ export interface DashboardSummaryData {
   updated_at: string;
 }
 
-export function useDashboardSummaries(fiscalYear: number) {
+export function useDashboardSummaries(fiscalYear: number, quarter: number | 'all' = 'all') {
   const { data, isLoading, error } = useQuery({
-    queryKey: ['dashboardSummaries', fiscalYear],
+    queryKey: ['dashboardSummaries', fiscalYear, quarter],
     queryFn: async () => {
-      const response = await fetchApi('getDashboardSummaries', { fiscalYear });
+      const response = await fetchApi('getDashboardSummaries', { fiscalYear, quarter });
       if (response.data && response.data.success) {
         return response.data.summaries as DashboardSummaryData[];
       }

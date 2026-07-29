@@ -76,6 +76,16 @@ export const getAgeGroupFromTable = (table: string): string => {
   }
 };
 
+export const getAgeFromTable = (table: string): number => {
+  switch (table) {
+    case 'Epi_1_Year': return 1;
+    case 'Epi_2_Year': return 2;
+    case 'Epi_3_Year': return 3;
+    case 'Epi_5_Year': return 5;
+    default: return 1;
+  }
+};
+
 export const getAgeString = (birthDateString: string): string => {
   if (!birthDateString) return '';
   const birth = new Date(birthDateString);

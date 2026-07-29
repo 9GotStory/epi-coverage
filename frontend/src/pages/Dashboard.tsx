@@ -179,13 +179,15 @@ const AgeGroupSection = memo(function AgeGroupSection({
 export function Dashboard() {
   const currentYear = getCurrentFiscalYear();
   const { getTarget } = useTargetSettings();
+  const [quarter, setQuarter] = useState<number | 'all'>('all');
 
   // โหลดข้อมูลผลสรุป (JSON Cache) จาก API แทนการโหลดข้อมูลดิบ
-  const { data: summaries, isLoading } = useDashboardSummaries(currentYear);
+  const { data: summaries, isLoading } = useDashboardSummaries(currentYear, quarter);
 
-  // ดึงเป้าหมายแบบไดนามิกของปีปัจจุบัน (ใช้ไตรมาส 4 เป็นค่าเริ่มต้นสำหรับภาพรวมรายปี)
-  const targetView1 = getTarget(4, 1, undefined, currentYear);
-  const targetView2 = getTarget(4, 2, undefined, currentYear);
+  // ดึงเป้าหมายแบบไดนามิกของปีปัจจุบัน
+  const targetQuarter = quarter === 'all' ? 4 : quarter;
+  const targetView1 = getTarget(targetQuarter, 1, undefined, currentYear);
+  const targetView2 = getTarget(targetQuarter, 2, undefined, currentYear);
 
   // ดึง summary ของแต่ละกลุ่มอายุจาก Array ที่ได้กลับมา
   const getSummary = (table: string) => {
@@ -216,7 +218,24 @@ export function Dashboard() {
       <SubNav title="ภาพรวมการดำเนินงาน (Executive Summary)" />
 
       <main className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
-        <p className="text-zinc-500 font-medium">ภาพรวมผลการดำเนินงานสร้างเสริมภูมิคุ้มกันโรค ปีงบประมาณ {currentYear}</p>
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <p className="text-zinc-500 font-medium">ภาพรวมผลการดำเนินงานสร้างเสริมภูมิคุ้มกันโรค ปีงบประมาณ {currentYear}</p>
+          
+          <div className="flex items-center gap-2">
+            <span className="text-[14px] text-zinc-500 font-medium">ไตรมาส:</span>
+            <select 
+              value={quarter}
+              onChange={e => setQuarter(e.target.value === 'all' ? 'all' : Number(e.target.value))}
+              className="px-3 py-1.5 bg-white border border-[#e0e0e0] rounded-lg text-[14px] text-[#1d1d1f] focus:ring-2 focus:ring-[#0066cc] focus:border-[#0066cc] focus:outline-none transition-colors"
+            >
+              <option value="all">ภาพรวมทั้งปีงบประมาณ</option>
+              <option value={1}>ไตรมาส 1 (ต.ค. - ธ.ค.)</option>
+              <option value={2}>ไตรมาส 2 (ม.ค. - มี.ค.)</option>
+              <option value={3}>ไตรมาส 3 (เม.ย. - มิ.ย.)</option>
+              <option value={4}>ไตรมาส 4 (ก.ค. - ก.ย.)</option>
+            </select>
+          </div>
+        </div>
 
         {/* ── Age Group Sections ── */}
         <AgeGroupSection

@@ -8,7 +8,8 @@ import { calcGroupSummary } from '../../../shared/utils/dashboardLogic';
 
 import { evaluateDynamicV1, evaluateDynamicV2 } from '../../../shared/utils/vaccine/ruleEngine';
 import type { VaccineRule } from '../../../shared/utils/vaccine/ruleEngine';
-import { cleanData, getAgeGroupFromTable } from '../utils/uploadHelpers';
+import { cleanData, getAgeGroupFromTable, getAgeFromTable } from '../utils/uploadHelpers';
+import { getBirthDateRangeForQuarter } from '../../../shared/utils/dateUtils';
 import type { EpiRecord } from '../../../shared/types';
 const CHUNK_SIZE = 500;
 
@@ -137,8 +138,21 @@ export function useUploadManager() {
       evalV1 = (r: EpiRecord) => evaluateDynamicV1(r, rules || []);
       evalV2 = (r: EpiRecord) => evaluateDynamicV2(r, rules || []);
       
-      const summary = calcGroupSummary(fullData, evalV1, evalV2, Number(fiscalYear));
-      await fetchApi('saveDashboardSummary', { targetTable, fiscalYear, summaryData: JSON.stringify(summary) });
+      const summaryAll = calcGroupSummary(fullData, evalV1, evalV2, Number(fiscalYear));
+      await fetchApi('saveDashboardSummary', { targetTable, fiscalYear, quarter: 'all', summaryData: JSON.stringify(summaryAll) });
+
+      // Generate for each quarter
+      const targetAge = getAgeFromTable(targetTable);
+      for (const q of [1, 2, 3, 4] as const) {
+        const { start, end } = getBirthDateRangeForQuarter(Number(fiscalYear), q, targetAge);
+        const quarterData = fullData.filter((record: any) => {
+          if (!record.birth) return false;
+          const bDate = new Date(record.birth);
+          return bDate >= start && bDate <= end;
+        });
+        const summaryQ = calcGroupSummary(quarterData, evalV1, evalV2, Number(fiscalYear));
+        await fetchApi('saveDashboardSummary', { targetTable, fiscalYear, quarter: q, summaryData: JSON.stringify(summaryQ) });
+      }
 
       setProgress(100);
       setResults({ inserted, updated, deactivated: cleanupPayload.deactivated || 0 });
@@ -184,8 +198,20 @@ export function useUploadManager() {
         evalV1 = (r: EpiRecord) => evaluateDynamicV1(r, rules || []);
         evalV2 = (r: EpiRecord) => evaluateDynamicV2(r, rules || []);
         
-        const summary = calcGroupSummary(fullData, evalV1, evalV2, Number(fiscalYear));
-        await fetchApi('saveDashboardSummary', { targetTable: t, fiscalYear: Number(fiscalYear), summaryData: JSON.stringify(summary) });
+        const summaryAll = calcGroupSummary(fullData, evalV1, evalV2, Number(fiscalYear));
+        await fetchApi('saveDashboardSummary', { targetTable: t, fiscalYear: Number(fiscalYear), quarter: 'all', summaryData: JSON.stringify(summaryAll) });
+        
+        const targetAge = getAgeFromTable(t);
+        for (const q of [1, 2, 3, 4] as const) {
+          const { start, end } = getBirthDateRangeForQuarter(Number(fiscalYear), q, targetAge);
+          const quarterData = fullData.filter((record: any) => {
+            if (!record.birth) return false;
+            const bDate = new Date(record.birth);
+            return bDate >= start && bDate <= end;
+          });
+          const summaryQ = calcGroupSummary(quarterData, evalV1, evalV2, Number(fiscalYear));
+          await fetchApi('saveDashboardSummary', { targetTable: t, fiscalYear: Number(fiscalYear), quarter: q, summaryData: JSON.stringify(summaryQ) });
+        }
       }
       
       // Invalidate relevant queries to force dashboard and rules refresh
