@@ -150,64 +150,55 @@ export function View2FullyImmunized5Yr({ fiscalYear, quarter, data, isLoading, e
       id: 'status',
       size: 500,
       cell: ({ row }) => {
-        const evaluation = row.original.evaluation;
+        const ev = row.original.evaluation;
         const dataErrors = row.original.dataErrors || [];
         
-        if (evaluation.isFullyImmunized) {
-          return (
-            <div className="flex flex-col gap-1 items-start">
+        // Filter missing and pending to NOT include dataErrors
+        const pureMissing = ev.missingVaccines.filter(v => !dataErrors.includes(v));
+        const purePending = (ev.pendingVaccines || []).filter(v => !dataErrors.includes(v));
+
+        return (
+          <div className="flex flex-col gap-1 items-start">
+            {ev.status === 'PASS' ? (
               <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[12px] font-medium tracking-[-0.12px] bg-[#e3f4e1] text-[#1e7e26]">
                 <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
                 ผ่านเกณฑ์
               </span>
-              {/* Data Error Badges (Orange Badges) */}
-              {dataErrors.length > 0 && (
-                <div className="flex flex-wrap gap-1 mt-0.5">
-                  {dataErrors.map((err, i) => (
-                    <span key={`err-${i}`} className="inline-flex px-1.5 py-0.5 rounded text-[11px] font-medium tracking-[-0.1px] bg-[#ffe8d6] text-[#c95d00]" title="พบความผิดปกติของข้อมูลวันที่ (เช่น ฉีดก่อนวันเกิด, หรือฉีดพร้อมกันเกินกำหนด) - ข้อมูลอาจไม่ถูกนำไปคำนวณใน HDC">
-                      {err} (ข้อมูลวันที่ผิด)
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-          );
-        }
-        
-        return (
-          <div className="flex flex-col gap-1 items-start">
-            {evaluation.status === 'FAIL' ? (
+            ) : ev.status === 'FAIL' ? (
               <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[12px] font-medium tracking-[-0.12px] bg-[#ffe2e5] text-[#d91f2a]">
                 <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" /></svg>
                 ไม่ผ่านเกณฑ์ (ตกหล่น)
               </span>
             ) : (
               <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[12px] font-medium tracking-[-0.12px] bg-[#fff0d6] text-[#b06100]">
-                <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM11 5a1 1 0 10-2 0v4.586l-2.707 2.707a1 1 0 101.414 1.414l3-3A1 1 0 0011 10.586V5z" clipRule="evenodd" /></svg>
+                <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                 ยังไม่ถึงเกณฑ์ (รอรับบริการ)
               </span>
             )}
-            <div className="flex flex-wrap gap-1 mt-1">
-              {evaluation.status === 'FAIL' 
-                ? evaluation.missingVaccines.map((v, i) => (
-                    <span key={i} className="inline-flex px-1.5 py-0.5 rounded text-[11px] font-medium tracking-[-0.1px] bg-[#ffe2e5] text-[#d91f2a]">
-                      ขาด {v}
-                    </span>
-                  ))
-                : (evaluation.pendingVaccines || []).map((v, i) => (
-                    <span key={i} className="inline-flex px-1.5 py-0.5 rounded text-[11px] font-medium tracking-[-0.1px] bg-[#e3e3e8] text-[#424245]">
-                      {v}
-                    </span>
-                  ))
-              }
-            </div>
+            
+            {/* Badges Container */}
+            {(dataErrors.length > 0 || pureMissing.length > 0 || purePending.length > 0) && (
+              <div className="flex flex-wrap gap-1 mt-1">
+                {/* 1. Data Errors (Orange) */}
+                {dataErrors.map((v, i) => (
+                  <span key={`err-${i}`} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium tracking-[-0.1px] bg-[#ffe8d6] text-[#c95d00]" title="พบความผิดปกติของข้อมูลวันที่ (เช่น ฉีดก่อนวันเกิด, หรือฉีดพร้อมกันเกินกำหนด) - ข้อมูลอาจไม่ถูกนำไปคำนวณใน HDC">
+                    <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                    {v} (ข้อมูลวันที่ผิด)
+                  </span>
+                ))}
+                
+                {/* 2. Pure Missing (Red) */}
+                {pureMissing.map((v, i) => (
+                  <span key={`m-${i}`} className="inline-flex px-1.5 py-0.5 rounded text-[11px] font-medium tracking-[-0.1px] bg-[#ffe2e5] text-[#d91f2a]">
+                    ขาด {v}
+                  </span>
+                ))}
 
-            {/* Data Error Badges (Orange Badges) */}
-            {dataErrors.length > 0 && (
-              <div className="flex flex-wrap gap-1 mt-0.5">
-                {dataErrors.map((err, i) => (
-                  <span key={`err-${i}`} className="inline-flex px-1.5 py-0.5 rounded text-[11px] font-medium tracking-[-0.1px] bg-[#ffe8d6] text-[#c95d00]" title="พบความผิดปกติของข้อมูลวันที่ (เช่น ฉีดก่อนวันเกิด, หรือฉีดพร้อมกันเกินกำหนด) - ข้อมูลอาจไม่ถูกนำไปคำนวณใน HDC">
-                    {err} (ข้อมูลวันที่ผิด)
+                {/* 3. Pure Pending (Gray) */}
+                {purePending.map((v, i) => (
+                  <span key={`p-${i}`} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium tracking-[-0.1px] bg-[#e3e3e8] text-[#424245]">
+                    <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                    {v}
                   </span>
                 ))}
               </div>
