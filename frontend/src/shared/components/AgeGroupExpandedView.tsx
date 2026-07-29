@@ -21,6 +21,7 @@ interface AgeGroupExpandedViewProps {
   targetView1?: number;
   targetView2?: number;
   fiscalYear: number;
+  quarter: number | 'all';
 }
 
 interface FacilityGroupProps {
@@ -91,7 +92,7 @@ const FacilityGroup = ({ title, facilities, target, isPassedGroup }: FacilityGro
   );
 };
 
-export function AgeGroupExpandedView({ summary, targetView1, targetView2, fiscalYear }: AgeGroupExpandedViewProps) {
+export function AgeGroupExpandedView({ summary, targetView1, targetView2, fiscalYear, quarter }: AgeGroupExpandedViewProps) {
   const { getTarget } = useTargetSettings();
   
   const getSpecificTarget = (name: string, defaultTarget: number | undefined, view: 1 | 2) => {
@@ -109,7 +110,8 @@ export function AgeGroupExpandedView({ summary, targetView1, targetView2, fiscal
     else if (lowerName.includes('hpv')) vaccineKey = 'hpv';
     
     if (vaccineKey) {
-      return getTarget(4, view, vaccineKey, fiscalYear);
+      const targetQuarter = quarter === 'all' ? 4 : quarter;
+      return getTarget(targetQuarter, view, vaccineKey, fiscalYear);
     }
     return defaultTarget;
   };

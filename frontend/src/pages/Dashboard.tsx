@@ -15,6 +15,7 @@ import {
 import { AgeGroupExpandedView } from '../shared/components/AgeGroupExpandedView';
 import { calcGroupSummary } from '../shared/utils/dashboardLogic';
 import { formatDateTimeStr } from '../shared/utils/dateUtils';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../shared/components/ui/select';
 
 // ──────────────────────────────────────────────
 // AgeGroupSection Component
@@ -26,6 +27,7 @@ const AgeGroupSection = memo(function AgeGroupSection({
   targetView1,
   targetView2,
   fiscalYear,
+  quarter,
   isLoading,
   path
 }: {
@@ -35,6 +37,7 @@ const AgeGroupSection = memo(function AgeGroupSection({
   targetView1?: number;
   targetView2?: number;
   fiscalYear: number;
+  quarter: number | 'all';
   isLoading: boolean;
   path: string;
 }) {
@@ -165,9 +168,8 @@ const AgeGroupSection = memo(function AgeGroupSection({
         </button>
       </div>
 
-      {/* ── Expanded Content ── */}
       {isExpanded && (
-        <AgeGroupExpandedView summary={summary} targetView1={targetView1} targetView2={targetView2} fiscalYear={fiscalYear} />
+        <AgeGroupExpandedView summary={summary} targetView1={targetView1} targetView2={targetView2} fiscalYear={fiscalYear} quarter={quarter} />
       )}
     </section>
   );
@@ -191,9 +193,14 @@ export function Dashboard() {
 
   // ดึง summary ของแต่ละกลุ่มอายุจาก Array ที่ได้กลับมา
   const getSummary = (table: string) => {
-    const found = summaries.find(s => s.targetTable === table);
-    if (found && found.summaryData) {
-      return { data: found.summaryData, updatedAt: found.updated_at };
+    const tableSummaries = summaries.filter(s => s.targetTable === table);
+    if (tableSummaries.length > 0) {
+      // Sort by updated_at descending to prioritize the latest synced cache (e.g. over legacy cache)
+      tableSummaries.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
+      const found = tableSummaries[0];
+      if (found && found.summaryData) {
+        return { data: found.summaryData, updatedAt: found.updated_at };
+      }
     }
     // ส่งค่า Default กลับไปถ้ายังไม่มีข้อมูล Cache
     return {
@@ -221,19 +228,23 @@ export function Dashboard() {
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <p className="text-zinc-500 font-medium">ภาพรวมผลการดำเนินงานสร้างเสริมภูมิคุ้มกันโรค ปีงบประมาณ {currentYear}</p>
           
-          <div className="flex items-center gap-2">
-            <span className="text-[14px] text-zinc-500 font-medium">ไตรมาส:</span>
-            <select 
-              value={quarter}
-              onChange={e => setQuarter(e.target.value === 'all' ? 'all' : Number(e.target.value))}
-              className="px-3 py-1.5 bg-white border border-[#e0e0e0] rounded-lg text-[14px] text-[#1d1d1f] focus:ring-2 focus:ring-[#0066cc] focus:border-[#0066cc] focus:outline-none transition-colors"
+          <div className="flex items-center gap-3">
+            <span className="text-[14px] text-zinc-500 font-medium whitespace-nowrap">ไตรมาส:</span>
+            <Select 
+              value={quarter.toString()} 
+              onValueChange={val => setQuarter(val === 'all' ? 'all' : Number(val))}
             >
-              <option value="all">ภาพรวมทั้งปีงบประมาณ</option>
-              <option value={1}>ไตรมาส 1 (ต.ค. - ธ.ค.)</option>
-              <option value={2}>ไตรมาส 2 (ม.ค. - มี.ค.)</option>
-              <option value={3}>ไตรมาส 3 (เม.ย. - มิ.ย.)</option>
-              <option value={4}>ไตรมาส 4 (ก.ค. - ก.ย.)</option>
-            </select>
+              <SelectTrigger className="w-[200px] bg-white h-[34px] text-[14px]">
+                <SelectValue placeholder="เลือกไตรมาส" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">ภาพรวมทั้งปีงบประมาณ</SelectItem>
+                <SelectItem value="1">ไตรมาส 1 (ต.ค. - ธ.ค.)</SelectItem>
+                <SelectItem value="2">ไตรมาส 2 (ม.ค. - มี.ค.)</SelectItem>
+                <SelectItem value="3">ไตรมาส 3 (เม.ย. - มิ.ย.)</SelectItem>
+                <SelectItem value="4">ไตรมาส 4 (ก.ค. - ก.ย.)</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </div>
 
@@ -245,6 +256,7 @@ export function Dashboard() {
           targetView1={targetView1}
           targetView2={targetView2}
           fiscalYear={currentYear}
+          quarter={quarter}
           isLoading={isLoading}
           path="/dashboard/epi-1yr"
         />
@@ -256,6 +268,7 @@ export function Dashboard() {
           targetView1={targetView1}
           targetView2={targetView2}
           fiscalYear={currentYear}
+          quarter={quarter}
           isLoading={isLoading}
           path="/dashboard/epi-2yr"
         />
@@ -267,6 +280,7 @@ export function Dashboard() {
           targetView1={targetView1}
           targetView2={targetView2}
           fiscalYear={currentYear}
+          quarter={quarter}
           isLoading={isLoading}
           path="/dashboard/epi-3yr"
         />
@@ -278,6 +292,7 @@ export function Dashboard() {
           targetView1={targetView1}
           targetView2={targetView2}
           fiscalYear={currentYear}
+          quarter={quarter}
           isLoading={isLoading}
           path="/dashboard/epi-5yr"
         />

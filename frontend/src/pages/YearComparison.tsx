@@ -24,16 +24,18 @@ export const YearComparison = () => {
 
   // Prepare chart data
   const chartData = selectedYears.map(year => {
-    const summaryItem = data.find(d => d.targetTable === ageGroup && Number(d.fiscalYear) === year);
+    const matchingItems = data.filter(d => d.targetTable === ageGroup && Number(d.fiscalYear) === year);
+    matchingItems.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
+    const summaryItem = matchingItems[0];
     const summaryData = summaryItem ? summaryItem.summaryData : null;
     
     return {
       name: `ปี ${year}`,
-      total: summaryData?.totalTarget || 0,
-      passedV1: summaryData?.passedV1 || 0,
-      passedV2: summaryData?.passedV2 || 0,
-      percentV1: summaryData ? ((summaryData.passedV1 / summaryData.totalTarget) * 100).toFixed(2) : 0,
-      percentV2: summaryData ? ((summaryData.passedV2 / summaryData.totalTarget) * 100).toFixed(2) : 0,
+      total: summaryData?.total || 0,
+      passedV1: summaryData?.view1PassedDoses || 0,
+      passedV2: summaryData?.view2Passed || 0,
+      percentV1: summaryData?.view1Coverage?.toFixed(2) || 0,
+      percentV2: summaryData?.view2Coverage?.toFixed(2) || 0,
     };
   });
 

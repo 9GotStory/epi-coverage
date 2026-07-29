@@ -7,6 +7,7 @@ import { useEpiData } from '../../../shared/hooks/useEpiData';
 import { useAvailableYears } from '../../../shared/hooks/useAvailableYears';
 import { useVaccineRules } from '../../../shared/hooks/useVaccineRules';
 import { getCurrentFiscalYear } from '../../../shared/utils/dateUtils';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../../shared/components/ui/select';
 
 export function EpiDashboard() {
   const [activeTab, setActiveTab] = useState<'view1' | 'view2' | 'view3'>('view1');
@@ -71,31 +72,43 @@ export function EpiDashboard() {
           </div>
           
           {activeTab !== 'view3' && (
-            <div className="flex items-center gap-2">
-            <span className="text-[14px] text-[#7a7a7a] font-medium tracking-[-0.224px]">ปีงบประมาณ:</span>
-            <select 
-              value={fiscalYear}
-              onChange={e => setFiscalYear(Number(e.target.value))}
-              className="px-3 py-1.5 bg-white border border-[#e0e0e0] rounded-lg text-[14px] text-[#1d1d1f] focus:ring-2 focus:ring-[#0066cc] focus:border-[#0066cc] focus:outline-none transition-colors"
-            >
-              {availableFiscalYears.map(year => (
-                <option key={year} value={year}>{year}</option>
-              ))}
-            </select>
+            <div className="flex flex-col sm:flex-row items-center gap-3">
+              <div className="flex items-center gap-2">
+                <span className="text-[14px] text-[#7a7a7a] font-medium tracking-[-0.224px] whitespace-nowrap">ปีงบประมาณ:</span>
+                <Select 
+                  value={fiscalYear.toString()} 
+                  onValueChange={val => setFiscalYear(Number(val))}
+                >
+                  <SelectTrigger className="w-[120px] bg-white h-[34px] text-[14px]">
+                    <SelectValue placeholder="เลือกปีงบประมาณ" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableFiscalYears.map(year => (
+                      <SelectItem key={year} value={year.toString()}>{year}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
-            <span className="text-[14px] text-[#7a7a7a] font-medium tracking-[-0.224px] ml-3">ไตรมาส:</span>
-            <select 
-              value={quarter}
-              onChange={e => setQuarter(e.target.value === 'all' ? 'all' : Number(e.target.value))}
-              className="px-3 py-1.5 bg-white border border-[#e0e0e0] rounded-lg text-[14px] text-[#1d1d1f] focus:ring-2 focus:ring-[#0066cc] focus:border-[#0066cc] focus:outline-none transition-colors"
-            >
-              <option value="all">ภาพรวมทั้งปีงบประมาณ</option>
-              <option value={1}>ไตรมาส 1 (ต.ค. - ธ.ค.)</option>
-              <option value={2}>ไตรมาส 2 (ม.ค. - มี.ค.)</option>
-              <option value={3}>ไตรมาส 3 (เม.ย. - มิ.ย.)</option>
-              <option value={4}>ไตรมาส 4 (ก.ค. - ก.ย.)</option>
-            </select>
-          </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[14px] text-[#7a7a7a] font-medium tracking-[-0.224px] whitespace-nowrap">ไตรมาส:</span>
+                <Select 
+                  value={quarter.toString()} 
+                  onValueChange={val => setQuarter(val === 'all' ? 'all' : Number(val))}
+                >
+                  <SelectTrigger className="w-[200px] bg-white h-[34px] text-[14px]">
+                    <SelectValue placeholder="เลือกไตรมาส" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">ภาพรวมทั้งปีงบประมาณ</SelectItem>
+                    <SelectItem value="1">ไตรมาส 1 (ต.ค. - ธ.ค.)</SelectItem>
+                    <SelectItem value="2">ไตรมาส 2 (ม.ค. - มี.ค.)</SelectItem>
+                    <SelectItem value="3">ไตรมาส 3 (เม.ย. - มิ.ย.)</SelectItem>
+                    <SelectItem value="4">ไตรมาส 4 (ก.ค. - ก.ย.)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
           )}
         </div>
 
