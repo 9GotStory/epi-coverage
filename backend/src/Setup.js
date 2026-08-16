@@ -217,14 +217,9 @@ function migrateVaccineRulesTargetAge() {
     return { success: false, error: 'Sheet vaccine_rules not found' };
   }
 
-  const TARGET_AGE_MONTHS_MAP = {
-    bcg_date: 0, hbv1_date: 0, hbv2_date: 1, hbv3_date: 2,
-    dtp1_date: 2, dtp2_date: 4, dtp3_date: 6, dtp4_date: 18, dtp5_date: 48,
-    opv1_date: 2, opv2_date: 4, opv3_date: 6, opv4_date: 18, opv5_date: 48,
-    ipv1_date: 2, ipv2_date: 4, hbv4_date: 6,
-    mmr1_date: 9, mmr2_date: 18,
-    je1_date: 12, je2_date: 13, je3_date: 30, j11_date: 12, j12_date: 30,
-  };
+  // ใช้แผนที่กลางแหล่งเดียวจาก VaccineRules.js (TARGET_AGE_MONTHS_BY_FIELD)
+  // ไม่เก็บ map ซ้ำในไฟล์นี้อีกต่อไป — แก้ที่เดียว ใช้ได้ทั้ง seed / migration / ปุ่ม Auto ในหน้า Rules Engine
+  const TARGET_AGE_MONTHS_MAP = TARGET_AGE_MONTHS_BY_FIELD;
 
   const data = sheet.getDataRange().getValues();
   const headers = data[0];

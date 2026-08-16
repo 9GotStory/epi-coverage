@@ -9,6 +9,78 @@
 const VACCINE_RULES_SHEET = 'vaccine_rules';
 
 /**
+ * ──────────────────────────────────────────────────────────
+ * TARGET_AGE_MONTHS_BY_FIELD — แหล่งเดียว (Single Source of Truth)
+ * ของ "ค่าเริ่มต้นอายุเป้าหมาย (เดือน)" ราย field ของวัคซีน
+ *
+ * ใช้โดย: seedVaccineRules, migrateVaccineRulesTargetAge (Setup.js),
+ * และ suggestRuleTargetAges (ปุ่ม "อัปเดตอายุเป้าหมาย (Auto)" ในหน้า Rules Engine)
+ *
+ * หมายเหตุ: นี่คือ "ค่าเริ่มต้น" เท่านั้น — Admin แก้ค่าจริงของแต่ละ rule ได้
+ * ผ่านช่อง "อายุเป้าหมาย (เดือน)" ในหน้าจัดการเกณฑ์ (คอลัมน์ target_age_months)
+ * ใช้ var เพื่อให้ปลอดภัยต่อการอ้างอิงข้ามไฟล์ใน Google Apps Script
+ * ──────────────────────────────────────────────────────────
+ */
+var TARGET_AGE_MONTHS_BY_FIELD = {
+  // แรกเกิด (0 เดือน)
+  bcg_date: 0, hbv1_date: 0,
+  // 2 เดือน
+  // หมายเหตุ OPV: ปฏิทิน 2569 ให้ IPV ที่ 2, 4 เดือน และ OPV เพียงเข็มเดียวที่ 6 เดือน
+  // opv1/opv2 เหมาะกับรุ่นเก่า (หยอด 2/4/6 เดือน) — รอยืนยันรหัส HDC ของโดส 6 เดือนรุ่นใหม่ (081 หรือ 083)
+  // ก่อนปรับ rules ของปีงบประมาณที่เด็กเกิดตามปฏิทินใหม่ (ตัดสินใจ ส.ค. 2569: รอตรวจสอบกับ HDC/สสอ.)
+  hbv2_date: 2, dtp1_date: 2, opv1_date: 2, ipv1_date: 2, hib1_date: 2,
+  rv21_date: 2, rv31_date: 2, pcv1_date: 2,
+  // 4 เดือน
+  hbv3_date: 4, dtp2_date: 4, opv2_date: 4, ipv2_date: 4, hib2_date: 4,
+  rv22_date: 4, rv32_date: 4, pcv2_date: 4,
+  // 6 เดือน
+  hbv4_date: 6, dtp3_date: 6, opv3_date: 6, hib3_date: 6,
+  rv33_date: 6, pcv3_date: 6,
+  // 9 เดือน (ขอบล่างของช่วงแนะนำ 9-12 เดือน — สอดคล้องกับ MMR1)
+  mmr1_date: 9, j11_date: 9,
+  // 12-13 เดือน
+  je1_date: 12, je2_date: 13,
+  // 1 ปีครึ่ง (18 เดือน)
+  dtp4_date: 18, opv4_date: 18, mmr2_date: 18,
+  // 2 ปีครึ่ง (30 เดือน)
+  je3_date: 30, j12_date: 30,
+  // 4 ปี (48 เดือน)
+  dtp5_date: 48, opv5_date: 48,
+};
+
+/**
+ * คำนวณอายุเป้าหมายของ rule จาก field ทั้งหมด (ใช้ค่าสูงสุด)
+ * @returns {number|null} null ถ้าไม่รู้จัก field ใดเลย
+ */
+function computeTargetAgeMonths(rule) {
+  const fields = [...(rule.required_fields || []), ...(rule.branch_alt_fields || [])];
+  let max = null;
+  for (const f of fields) {
+    if (TARGET_AGE_MONTHS_BY_FIELD[f] !== undefined) {
+      max = max === null ? TARGET_AGE_MONTHS_BY_FIELD[f] : Math.max(max, TARGET_AGE_MONTHS_BY_FIELD[f]);
+    }
+  }
+  return max;
+}
+
+/**
+ * คำนวณ "ค่าเริ่มต้นอายุเป้าหมาย" ของ rules ที่ส่งมา (ใช้โดยปุ่ม Auto ในหน้า Rules Engine)
+ * เพื่อไม่ให้ frontend ต้องฮาร์ดโค้ด map ไว้เอง — แหล่งเดียวคือ TARGET_AGE_MONTHS_BY_FIELD
+ * @param {object[]} rules - rule objects ที่มี rule_id + required_fields (+ branch_alt_fields)
+ * @returns {{suggestions: {rule_id: string, target_age_months: number|null}[]}}
+ */
+function suggestRuleTargetAges(rules) {
+  if (!rules || !Array.isArray(rules)) {
+    return { suggestions: [] };
+  }
+  const suggestions = rules.map(rule => ({
+    rule_id: rule.rule_id,
+    target_age_months: computeTargetAgeMonths(rule)
+  }));
+  return { suggestions };
+}
+
+/**
  * ดึง Vaccine Rules สำหรับปีงบประมาณและกลุ่มอายุที่ระบุ
  * @param {string|number} fiscalYear - ปีงบประมาณ เช่น 2568
  * @param {string} ageGroup - กลุ่มอายุ ('1yr', '2yr', '3yr', '5yr')
@@ -442,26 +514,30 @@ function seedVaccineRules(fiscalYear, adminEmail, force = false) {
   ];
 
   const now = new Date();
-  const rows = rules.map(r => headers.map(header => {
-    switch (header) {
-      case 'rule_id': return Utilities.getUuid();
-      case 'fiscal_year': return fiscalYear;
-      case 'age_group': return r.age_group;
-      case 'view_type': return r.view_type;
-      case 'vaccine_group': return r.vaccine_group || '';
-      case 'display_name': return r.display_name || '';
-      case 'hdc_code': return r.hdc_code || '';
-      case 'required_fields': return JSON.stringify(r.required_fields || []);
-      case 'logic_type': return r.logic_type;
-      case 'branch_alt_fields': return JSON.stringify(r.branch_alt_fields || []);
-      case 'is_required_for_v2': return r.is_required_for_v2 !== false;
-      case 'is_active': return true;
-      case 'note': return '';
-      case 'updated_at': return now;
-      case 'updated_by': return adminEmail || 'system';
-      default: return '';
-    }
-  }));
+  const rows = rules.map(r => {
+    const targetAge = computeTargetAgeMonths(r);
+    return headers.map(header => {
+      switch (header) {
+        case 'rule_id': return Utilities.getUuid();
+        case 'fiscal_year': return fiscalYear;
+        case 'age_group': return r.age_group;
+        case 'view_type': return r.view_type;
+        case 'vaccine_group': return r.vaccine_group || '';
+        case 'display_name': return r.display_name || '';
+        case 'hdc_code': return r.hdc_code || '';
+        case 'required_fields': return JSON.stringify(r.required_fields || []);
+        case 'logic_type': return r.logic_type;
+        case 'branch_alt_fields': return JSON.stringify(r.branch_alt_fields || []);
+        case 'is_required_for_v2': return r.is_required_for_v2 !== false;
+        case 'is_active': return true;
+        case 'target_age_months': return targetAge !== null ? targetAge : '';
+        case 'note': return '';
+        case 'updated_at': return now;
+        case 'updated_by': return adminEmail || 'system';
+        default: return '';
+      }
+    });
+  });
 
   const startRow = sheet.getLastRow() + 1;
   

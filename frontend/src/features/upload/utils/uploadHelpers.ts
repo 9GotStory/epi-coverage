@@ -1,15 +1,27 @@
 // Date parser helper
+
+/**
+ * บางแหล่งข้อมูลส่งวันที่เป็น พ.ศ. (เช่น "2567-10-08") — ระบบเก็บ ค.ศ. ทั้งหมด
+ * ปี >= 2400 ถือว่าเป็น พ.ศ. ให้แปลงเป็น ค.ศ. (ลบ 543)
+ * ก่อนแก้จุดนี้: วันเกิด พ.ศ. จะทำให้การเทียบ string กับวัคซีน ค.ศ. พัง (ฟ้อง "ก่อนวันเกิด")
+ * และเด็กหายจากการกรองโคฮอร์ตรายไตรมาสโดยเงียบ
+ */
+const toGregorianYear = (year: number): number => (year >= 2400 ? year - 543 : year);
+
 export const parseDate = (val: any): string | null => {
   if (!val) return null;
-  if (typeof val === 'string' && val.match(/^\d{4}-\d{2}-\d{2}$/)) return val;
-  
+  if (typeof val === 'string' && val.match(/^\d{4}-\d{2}-\d{2}$/)) {
+    const year = toGregorianYear(parseInt(val.slice(0, 4), 10));
+    return `${year}${val.slice(4)}`;
+  }
+
   // If it's a serial number from Excel
   if (typeof val === 'number') {
     // Excel dates are days since Dec 30, 1899
     const d = new Date(Math.round((val - 25569) * 86400 * 1000));
     // When using UTC offsets, we should just extract UTC date because the math above produces UTC time
     if (!isNaN(d.getTime())) {
-      const year = d.getUTCFullYear();
+      const year = d.getUTCFullYear(); // serial เป็น ค.ศ. อยู่แล้ว
       const month = String(d.getUTCMonth() + 1).padStart(2, '0');
       const day = String(d.getUTCDate()).padStart(2, '0');
       return `${year}-${month}-${day}`;
@@ -21,7 +33,7 @@ export const parseDate = (val: any): string | null => {
     if (val instanceof Date || typeof val === 'string') {
       const d = new Date(val);
       if (!isNaN(d.getTime())) {
-        const year = d.getFullYear();
+        const year = toGregorianYear(d.getFullYear());
         const month = String(d.getMonth() + 1).padStart(2, '0');
         const day = String(d.getDate()).padStart(2, '0');
         return `${year}-${month}-${day}`;
@@ -30,8 +42,9 @@ export const parseDate = (val: any): string | null => {
   } catch {
     // Ignore parse error
   }
-  
-  return String(val); // Fallback
+
+  // แปลงไม่ได้ = ไม่มีข้อมูล (null) — ไม่เก็บ string ขยะไว้ให้การเปรียบเทียบวันที่พัง
+  return null;
 };
 
 export const cleanData = (data: any[]): any[] => {

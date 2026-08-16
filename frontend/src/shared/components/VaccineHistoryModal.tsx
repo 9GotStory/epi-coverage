@@ -51,18 +51,20 @@ export function VaccineHistoryModal({
       let dates: string[] = [];
       const fields = rule.required_fields || [];
       const altFields = rule.branch_alt_fields || [];
+      // อนุญาตให้วันที่ตรงวันเกิดได้ เฉพาะ rule ที่ config ไว้ (target_age_months = 0) — ไม่มี fallback
+      const allowOnBirth = rule.target_age_months === 0;
 
       if (rule.logic_type === 'ALL') {
-        passed = fields.every((field: string) => hasDose(record, field as keyof EpiRecord, record.birth));
+        passed = fields.every((field: string) => hasDose(record, field as keyof EpiRecord, allowOnBirth));
         dates = fields.map((f: string) => (record[f as keyof EpiRecord] ? formatDateStr(String(record[f as keyof EpiRecord])) : '-'));
       } else if (rule.logic_type === 'ANY') {
-        passed = fields.some((field: string) => hasDose(record, field as keyof EpiRecord, record.birth));
+        passed = fields.some((field: string) => hasDose(record, field as keyof EpiRecord, allowOnBirth));
         dates = fields.map((f: string) => (record[f as keyof EpiRecord] ? formatDateStr(String(record[f as keyof EpiRecord])) : '-'));
       } else if (rule.logic_type === 'BRANCH') {
-        const path1Passed = fields.every((field: string) => hasDose(record, field as keyof EpiRecord, record.birth));
+        const path1Passed = fields.every((field: string) => hasDose(record, field as keyof EpiRecord, allowOnBirth));
         const path2Passed =
           altFields.length > 0
-            ? altFields.every((field: string) => hasDose(record, field as keyof EpiRecord, record.birth))
+            ? altFields.every((field: string) => hasDose(record, field as keyof EpiRecord, allowOnBirth))
             : false;
 
         passed = path1Passed || path2Passed;
@@ -120,9 +122,9 @@ export function VaccineHistoryModal({
       }).join('\n');
 
       const ageGroup = rules[0]?.age_group;
-      const ageText = ageGroup === '1Yr' ? '1 ปี' : 
-                      ageGroup === '2Yr' ? '2 ปี' : 
-                      ageGroup === '3Yr' ? '3 ปี' : '5 ปี';
+      const ageText = ageGroup === '1yr' ? '1 ปี' :
+                      ageGroup === '2yr' ? '2 ปี' :
+                      ageGroup === '3yr' ? '3 ปี' : '5 ปี';
 
       const prompt = `คุณคือผู้เชี่ยวชาญด้านงานข้อมูลระบาดวิทยา (EPI) และระบบ HDC ของกระทรวงสาธารณสุขไทย หน้าที่ของคุณคือวิเคราะห์สาเหตุที่ข้อมูลการรับวัคซีนของเด็กรายนี้ "ไม่ผ่านเกณฑ์การประเมินความครอบคลุมวัคซีน (Fully Immunized)" หรือพบความผิดปกติของข้อมูล
 
@@ -150,9 +152,9 @@ ${datesContext}
 - ไม่ต้องเกริ่นนำหรือลงท้ายยาวๆ ตอบเข้าประเด็นได้เลย`;
 
       let targetTable = 'Epi_1_Year';
-      if (ageGroup === '2Yr') targetTable = 'Epi_2_Year';
-      else if (ageGroup === '3Yr') targetTable = 'Epi_3_Year';
-      else if (ageGroup === '5Yr') targetTable = 'Epi_5_Year';
+      if (ageGroup === '2yr') targetTable = 'Epi_2_Year';
+      else if (ageGroup === '3yr') targetTable = 'Epi_3_Year';
+      else if (ageGroup === '5yr') targetTable = 'Epi_5_Year';
 
       const response = await fetchApi('analyzeVaccineData', {
         prompt,

@@ -49,7 +49,7 @@ export function View1Individual5Yr({ fiscalYear, quarter, data, isLoading, error
   const [selectedPatient, setSelectedPatient] = useState<EpiRecord | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const { rules } = useVaccineRules(fiscalYear, '5yr');
-  const v1RulesCount = rules && rules.length > 0 ? rules.filter(r => r.view_type === 1 && r.is_active).length : 2;
+  const v1RulesCount = rules.filter(r => r.view_type === 1 && r.is_active).length;
 
   const processedData = useMemo(() => {
     // 1. Filter cohort by Fiscal Year and Quarter
@@ -60,7 +60,7 @@ export function View1Individual5Yr({ fiscalYear, quarter, data, isLoading, error
       return bDate >= start && bDate <= end;
     });
 
-    const evalFn = (r: EpiRecord) => evaluateDynamicV1(r, rules || []);
+    const evalFn = (r: EpiRecord) => evaluateDynamicV1(r, rules);
 
     return cohort.map(record => {
       const evaluation = evalFn(record);
@@ -70,8 +70,8 @@ export function View1Individual5Yr({ fiscalYear, quarter, data, isLoading, error
       if (missing.length > 0) status = 'FAIL';
       else if (pending.length > 0) status = 'PENDING';
       
-      const v1Rules = rules ? rules.filter(r => r.view_type === 1 && r.is_active) : [];
-      const dataErrors = getDataErrors(record, v1Rules.length > 0 ? v1Rules : []);
+      const v1Rules = rules.filter(r => r.view_type === 1 && r.is_active);
+      const dataErrors = getDataErrors(record, v1Rules);
       
       return {
         ...record,

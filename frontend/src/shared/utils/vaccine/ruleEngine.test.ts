@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { hasDose, evaluateDynamicV1, evaluateDynamicV2 } from './ruleEngine';
+import { hasDose, getDataErrors, evaluateDynamicV1, evaluateDynamicV2 } from './ruleEngine';
 import type { VaccineRule } from './ruleEngine';
 import type { EpiRecord } from '../../types';
 
@@ -32,13 +32,77 @@ describe('ruleEngine', () => {
       expect(hasDose(mockRecord, 'je1_date')).toBe(false);
     });
 
-    it('returns false if date matches birthDate (wrong entry)', () => {
-      // bcg_date equals birth date, it should still be valid actually, 
-      // wait, in the implementation we check if cleanVal === cleanBirth, we return false.
-      // Usually BCG is at birth, but let's test the logic we implemented.
-      expect(hasDose(mockRecord, 'bcg_date', '2022-01-01')).toBe(false); 
-      // If we don't pass birthDate, it returns true
-      expect(hasDose(mockRecord, 'bcg_date')).toBe(true);
+    it('returns true for a birth-dose vaccine given on the birth date when allowOnBirth=true (จาก config)', () => {
+      // allowOnBirth มาจาก rule.target_age_months === 0 เท่านั้น — ไม่มีการเดาจากชื่อ field
+      expect(hasDose(mockRecord, 'bcg_date', true)).toBe(true);
+      expect(hasDose(mockRecord, 'hbv1_date', true)).toBe(true);
+    });
+
+    it('returns false for a dose on the birth date when allowOnBirth=false (ไม่มี fallback)', () => {
+      // rule ไม่ได้ตั้ง target_age_months = 0 → วันที่ตรงวันเกิด = ข้อมูลผิด = ยังไม่ได้รับ
+      expect(hasDose(mockRecord, 'bcg_date', false)).toBe(false);
+      expect(hasDose(mockRecord, 'bcg_date')).toBe(false);
+    });
+
+    it('returns false for a NON-birth-dose vaccine entered as the birth date (HDC ไม่นับ)', () => {
+      const rec: EpiRecord = { ...mockRecord, dtp1_date: '2022-01-01' };
+      expect(hasDose(rec, 'dtp1_date')).toBe(false);
+    });
+
+    it('returns false when the date is before the birth date', () => {
+      const rec: EpiRecord = { ...mockRecord, dtp1_date: '2021-12-31' };
+      expect(hasDose(rec, 'dtp1_date')).toBe(false);
+    });
+  });
+
+  describe('getDataErrors (birth-dose vaccines)', () => {
+    // จำลอง rule ของ BCG/HBV1 ที่ config target_age_months = 0 (birth dose) ตาม seed จริง
+    const birthDoseRules: VaccineRule[] = [
+      { rule_id: 'bcg', fiscal_year: 2568, age_group: '1yr', view_type: 1,
+        vaccine_group: 'BCG', display_name: 'BCG (010)', hdc_code: '010',
+        required_fields: ['bcg_date'], logic_type: 'ALL', is_required_for_v2: true, is_active: true, target_age_months: 0 },
+      { rule_id: 'hbv1', fiscal_year: 2568, age_group: '1yr', view_type: 1,
+        vaccine_group: 'HBV', display_name: 'HBV เข็ม 1 (041)', hdc_code: '041',
+        required_fields: ['hbv1_date'], logic_type: 'ALL', is_required_for_v2: true, is_active: true, target_age_months: 0 },
+      { rule_id: 'dtp1', fiscal_year: 2568, age_group: '1yr', view_type: 1,
+        vaccine_group: 'DTP', display_name: 'DTP1 (031)', hdc_code: '031',
+        required_fields: ['dtp1_date'], logic_type: 'ALL', is_required_for_v2: true, is_active: true },
+    ];
+
+    it('does NOT flag BCG/HBV1 when given on the birth date (birth-dose)', () => {
+      // เด็กเกิดและได้ BCG+HBV1 วันเดียวกัน → ถูกต้อง ห้ามฟ้อง "ข้อมูลวันที่ผิด"
+      const rec: EpiRecord = {
+        ...mockRecord,
+        birth: '2024-10-08', bcg_date: '2024-10-08', hbv1_date: '2024-10-08',
+        dtp1_date: undefined as unknown as string, // กัน dtp1 เก่าของ mock ตอนแปลงเป็น before-birth
+      };
+      const errors = getDataErrors(rec, birthDoseRules);
+      expect(errors).not.toContain('BCG (010)');
+      expect(errors).not.toContain('HBV เข็ม 1 (041)');
+      expect(errors).toEqual([]);
+    });
+
+    it('flags a non-birth-dose vaccine (DTP1) when entered as the birth date', () => {
+      // DTP1 ไม่ใช่วัคซีนแรกเกิด ถ้าลงเป็นวันเกิด = ผิด
+      const rec: EpiRecord = { ...mockRecord, birth: '2024-10-08', dtp1_date: '2024-10-08' };
+      const errors = getDataErrors(rec, birthDoseRules);
+      expect(errors).toContain('DTP1 (031)');
+    });
+
+    it('flags any vaccine when the date is before the birth date', () => {
+      const rec: EpiRecord = { ...mockRecord, birth: '2024-10-08', bcg_date: '2024-10-07' };
+      const errors = getDataErrors(rec, birthDoseRules);
+      expect(errors).toContain('BCG (010)');
+    });
+
+    it('flags a birth-date dose when the rule does NOT config target_age_months=0 (config คือความจริงเดียว)', () => {
+      // อธิบาย contract: ถ้าไม่ config ระบบจะไม่เดาให้ — ต้องตั้ง target_age_months ใน rule เสมอ
+      const noConfigRules: VaccineRule[] = [
+        { ...birthDoseRules[0], rule_id: 'bcg-noconf', target_age_months: undefined },
+      ];
+      const rec: EpiRecord = { ...mockRecord, birth: '2024-10-08', bcg_date: '2024-10-08' };
+      const errors = getDataErrors(rec, noConfigRules);
+      expect(errors).toContain('BCG (010)');
     });
   });
 
@@ -96,18 +160,45 @@ describe('ruleEngine', () => {
       expect(result.isFullyImmunized).toBe(false);
     });
 
-    it('HDC Override - result = "ผ่าน"', () => {
+    it('suppresses missing when the rule has a data error (แสดงเฉพาะ data error)', () => {
+      // dtp1 ลงเป็นวันเกิด → rule ไม่ผ่าน และมี data error → ต้องไม่โผล่ใน missingVaccines ซ้ำ
+      const rec: EpiRecord = { ...mockRecord, dtp1_date: '2022-01-01' };
+      const result = evaluateDynamicV1(rec, rules);
+      expect(result.results['DTP1']).toBe(false);
+      expect(result.missingVaccines).not.toContain('DTP1');
+      expect(getDataErrors(rec, rules)).toContain('DTP1');
+    });
+
+    it('classifies a not-yet-due child as PENDING and reports pendingRuleNames', () => {
+      // MMR1 เกณฑ์อายุ 9 เดือน — เด็กอายุ 4 เดือน (ณ evaluationDate) ต้องเป็น pending ไม่ใช่ missing
+      const mmrRule: VaccineRule = {
+        rule_id: '5', fiscal_year: 2568, age_group: '1yr', view_type: 1,
+        vaccine_group: 'MMR', display_name: 'MMR1', hdc_code: '061',
+        required_fields: ['mmr1_date'], logic_type: 'ALL', is_required_for_v2: true,
+        is_active: true, target_age_months: 9
+      };
+      const result = evaluateDynamicV1({ ...mockRecord, mmr1_date: undefined as unknown as string }, [mmrRule], new Date('2022-05-01'));
+      expect(result.missingVaccines).toEqual([]);
+      expect(result.pendingVaccines).toContain('MMR1');
+      expect(result.pendingRuleNames).toContain('MMR1');
+    });
+
+    it('HDC Override - result = "ผ่าน" clears missing and backfills passedVaccines', () => {
       const overrideRecord = { ...mockRecord, dtp3_date: '-', result: 'ผ่าน' };
       const result = evaluateDynamicV2(overrideRecord, rules);
       expect(result.isFullyImmunized).toBe(true);
-      expect(result.passedVaccines).toContain('HDC: ผ่าน');
+      expect(result.status).toBe('PASS');
+      expect(result.missingVaccines).toEqual([]);
+      // กลุ่มที่ local ไม่ผ่านถูกย้ายเข้า passedVaccines เพื่อให้ breakdown รวมเท่า headline
+      expect(result.passedVaccines).toContain('DTP ครบ 3 เข็ม');
     });
 
     it('HDC Override - result = "ไม่ผ่าน"', () => {
       const overrideRecord = { ...mockRecord, result: 'ไม่ผ่าน' };
       const result = evaluateDynamicV2(overrideRecord, rules);
       expect(result.isFullyImmunized).toBe(false);
-      expect(result.missingVaccines).toContain('HDC: ไม่ผ่าน');
+      expect(result.status).toBe('FAIL');
+      expect(result.missingVaccines).toContain('ไม่ผ่านเกณฑ์ HDC (ตรวจสอบรายละเอียดในระบบ)');
     });
   });
 });

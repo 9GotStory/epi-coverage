@@ -125,18 +125,19 @@ export function useUploadManager() {
       setProgress(90);
       
       const fullDataRes = await fetchApi('getEpiData', { targetTable, fiscalYear: Number(fiscalYear), hoscode: '00588' });
-      const fullData = fullDataRes.data.data || fullDataRes.data || [];
-      
+      const fullData = fullDataRes.data; // getEpiData คืน array ตรงๆ (ถ้าไม่มี sheet คืน [])
+
       let evalV1, evalV2;
-      
+
       // ดึง Rules จาก Database สำหรับปีงบประมาณและกลุ่มอายุนี้
       const ageGroup = getAgeGroupFromTable(targetTable);
       const rulesRes = await fetchApi('getVaccineRules', { fiscalYear, ageGroup });
-      const rules: VaccineRule[] = rulesRes?.data?.data || rulesRes?.data || [];
+      const rules: VaccineRule[] = rulesRes.data;
+      if (!Array.isArray(rules)) throw new Error('รูปแบบข้อมูล vaccine rules ไม่ถูกต้อง (ต้องเป็น array)');
       
       // ใช้ Dynamic Rule Engine เสมอ หากไม่มี Rules ระบบจะคำนวณเป็นว่างเปล่าตามที่ควรจะเป็น
-      evalV1 = (r: EpiRecord) => evaluateDynamicV1(r, rules || []);
-      evalV2 = (r: EpiRecord) => evaluateDynamicV2(r, rules || []);
+      evalV1 = (r: EpiRecord) => evaluateDynamicV1(r, rules);
+      evalV2 = (r: EpiRecord) => evaluateDynamicV2(r, rules);
       
       const summaryAll = calcGroupSummary(fullData, evalV1, evalV2, Number(fiscalYear));
       await fetchApi('saveDashboardSummary', { targetTable, fiscalYear, quarter: 'all', summaryData: JSON.stringify(summaryAll) });
@@ -187,16 +188,17 @@ export function useUploadManager() {
       const tables: TargetTable[] = ['Epi_1_Year', 'Epi_2_Year', 'Epi_3_Year', 'Epi_5_Year'];
       for (const t of tables) {
         const fullDataRes = await fetchApi('getEpiData', { targetTable: t, fiscalYear: Number(fiscalYear), hoscode: '00588' });
-        const fullData = fullDataRes.data.data || fullDataRes.data || [];
-        
+        const fullData = fullDataRes.data; // getEpiData คืน array ตรงๆ (ถ้าไม่มี sheet คืน [])
+
         let evalV1, evalV2;
-        
+
         const ageGroup = getAgeGroupFromTable(t);
         const rulesRes = await fetchApi('getVaccineRules', { fiscalYear, ageGroup });
-        const rules: VaccineRule[] = rulesRes?.data?.data || rulesRes?.data || [];
+        const rules: VaccineRule[] = rulesRes.data;
+        if (!Array.isArray(rules)) throw new Error('รูปแบบข้อมูล vaccine rules ไม่ถูกต้อง (ต้องเป็น array)');
         
-        evalV1 = (r: EpiRecord) => evaluateDynamicV1(r, rules || []);
-        evalV2 = (r: EpiRecord) => evaluateDynamicV2(r, rules || []);
+        evalV1 = (r: EpiRecord) => evaluateDynamicV1(r, rules);
+        evalV2 = (r: EpiRecord) => evaluateDynamicV2(r, rules);
         
         const summaryAll = calcGroupSummary(fullData, evalV1, evalV2, Number(fiscalYear));
         await fetchApi('saveDashboardSummary', { targetTable: t, fiscalYear: Number(fiscalYear), quarter: 'all', summaryData: JSON.stringify(summaryAll) });

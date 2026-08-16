@@ -48,7 +48,8 @@ export function calcGroupSummary(
 
     if (v1.passedCount !== undefined && v1.results) {
       view1PassedDoses += v1.passedCount;
-      const applicableCount = Object.keys(v1.results).length - (v1.pendingVaccines?.length || 0);
+      // ตัดเฉพาะ rule ที่ pending ออกจากตัวหาร — ใช้ pendingRuleNames (display_name) เทียบกับ key ของ results ให้ตรงกัน
+      const applicableCount = Object.keys(v1.results).length - (v1.pendingRuleNames?.length || 0);
       view1TotalDoses += applicableCount;
       facilityMap[hoscode].passedV1 += v1.passedCount;
       facilityMap[hoscode].totalV1 += applicableCount;
@@ -58,8 +59,8 @@ export function calcGroupSummary(
         if (!view1Details[vac]) view1Details[vac] = 0;
         if (!view1TargetDetails[vac]) view1TargetDetails[vac] = 0;
         
-        // ถ้าเป็น pending จะไม่เอามาคิดเป็นตัวหาร
-        if (v1.pendingVaccines?.includes(vac)) continue;
+        // ถ้าเป็น pending จะไม่เอามาคิดเป็นตัวหาร (เทียบด้วย display_name ให้ตรง key ของ results)
+        if (v1.pendingRuleNames?.includes(vac)) continue;
         
         view1TargetDetails[vac]++;
         if (passed) view1Details[vac]++;

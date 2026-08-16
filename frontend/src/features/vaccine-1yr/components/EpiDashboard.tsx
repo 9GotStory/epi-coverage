@@ -20,7 +20,7 @@ export function EpiDashboard() {
   const { data, isLoading, error, asOfDate } = useEpiData('Epi_1_Year', fiscalYear);
   const { years: availableFiscalYears } = useAvailableYears();
   const { rules } = useVaccineRules(fiscalYear, '1yr');
-  const v1RulesCount = rules && rules.length > 0 ? rules.filter(r => r.view_type === 1 && r.is_active).length : 17;
+  const v1RulesCount = rules.filter(r => r.view_type === 1 && r.is_active).length;
 
   // Remove old availableFiscalYears logic
 

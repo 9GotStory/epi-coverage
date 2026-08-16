@@ -66,7 +66,7 @@ export function exportToPdf(data: any[], filename: string, title: string) {
   doc.setFontSize(16);
   doc.text(title, 14, 15);
   doc.setFontSize(10);
-  doc.text(`วันที่ดึงข้อมูล: ${new Date().toLocaleString('th-TH')}`, 14, 22);
+  doc.text(`ออกรายงานเมื่อ: ${new Date().toLocaleString('th-TH')}`, 14, 22);
 
   // Extract headers from the first object
   const headers = Object.keys(data[0]);

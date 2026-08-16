@@ -47,7 +47,7 @@ export function View2FullyImmunized({ fiscalYear, quarter, data, isLoading, erro
   const [selectedPatient, setSelectedPatient] = useState<EpiRecord | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const { rules } = useVaccineRules(fiscalYear, '1yr');
-  const v2RulesCount = rules && rules.length > 0 ? rules.filter(r => r.view_type === 2 && r.is_active && r.is_required_for_v2).length : 8;
+  const v2RulesCount = rules.filter(r => r.view_type === 2 && r.is_active && r.is_required_for_v2).length;
 
   const processedData = useMemo(() => {
     // 1. Filter cohort by Fiscal Year and Quarter
@@ -58,14 +58,14 @@ export function View2FullyImmunized({ fiscalYear, quarter, data, isLoading, erro
       return bDate >= start && bDate <= end;
     });
 
-    const evalFn = (r: EpiRecord) => evaluateDynamicV2(r, rules || []);
+    const evalFn = (r: EpiRecord) => evaluateDynamicV2(r, rules);
     
     return cohort.map(record => {
-      const v2Rules = rules ? rules.filter(r => r.view_type === 2 && r.is_active && r.is_required_for_v2) : [];
+      const v2Rules = rules.filter(r => r.view_type === 2 && r.is_active && r.is_required_for_v2);
       return {
         ...record,
         evaluation: evalFn(record),
-        dataErrors: getDataErrors(record, v2Rules.length > 0 ? v2Rules : [])
+        dataErrors: getDataErrors(record, v2Rules)
       };
     });
   }, [data, fiscalYear, quarter, rules]);
@@ -87,11 +87,13 @@ export function View2FullyImmunized({ fiscalYear, quarter, data, isLoading, erro
     return Array.from(facilities).sort();
   }, [processedData]);
 
-  // Statistics
+  // Statistics — แยก pending ออกจากตัวหาร coverage ให้สอดคล้องกับ Dashboard (calcGroupSummary)
   const total = filteredData.length;
-  const passed = filteredData.filter(d => d.evaluation.isFullyImmunized).length;
-  const failed = total - passed;
-  const coverageRate = total > 0 ? ((passed / total) * 100).toFixed(2) : '0.00';
+  const passed = filteredData.filter(d => d.evaluation.status === 'PASS').length;
+  const pending = filteredData.filter(d => d.evaluation.status === 'PENDING').length;
+  const failed = filteredData.filter(d => d.evaluation.status === 'FAIL').length;
+  const applicable = passed + failed; // pending ยังไม่ถึงเกณฑ์อายุ ไม่นับเป็นตัวหาร
+  const coverageRate = applicable > 0 ? ((passed / applicable) * 100).toFixed(2) : '0.00';
 
   const columns = useMemo<ColumnDef<ProcessedFullyImmunizedRecord, any>[]>(() => [
     {
@@ -430,7 +432,7 @@ export function View2FullyImmunized({ fiscalYear, quarter, data, isLoading, erro
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mt-6">
         <div className="bg-white p-5 rounded-[16px] border border-[#e0e0e0] flex flex-col">
           <span className="text-[14px] font-medium text-[#7a7a7a] tracking-[-0.224px]">จำนวนเด็กทั้งหมด (คน)</span>
           <span className="text-[28px] font-semibold text-[#1d1d1f] mt-1 tracking-[-0.56px]">{total.toLocaleString()}</span>
@@ -442,6 +444,10 @@ export function View2FullyImmunized({ fiscalYear, quarter, data, isLoading, erro
         <div className="bg-[#ffe2e5] p-5 rounded-[16px] border-0 flex flex-col">
           <span className="text-[14px] font-medium text-[#d91f2a] tracking-[-0.224px]">จำนวนเด็กที่ไม่ผ่านเกณฑ์ (คน)</span>
           <span className="text-[28px] font-semibold text-[#d91f2a] mt-1 tracking-[-0.56px]">{failed.toLocaleString()}</span>
+        </div>
+        <div className="bg-[#fff0d6] p-5 rounded-[16px] border-0 flex flex-col">
+          <span className="text-[14px] font-medium text-[#b06100] tracking-[-0.224px]">ยังไม่ถึงเกณฑ์อายุ (คน)</span>
+          <span className="text-[28px] font-semibold text-[#b06100] mt-1 tracking-[-0.56px]">{pending.toLocaleString()}</span>
         </div>
         <div className="bg-[#f0f9ff] p-5 rounded-[16px] border-0 flex flex-col">
           <span className="text-[14px] font-medium text-[#0066cc] tracking-[-0.224px]">ร้อยละความครอบคลุม</span>

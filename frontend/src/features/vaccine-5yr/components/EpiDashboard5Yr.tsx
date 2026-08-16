@@ -20,7 +20,7 @@ export function EpiDashboard5Yr() {
   const { data, isLoading, error, asOfDate } = useEpiData('Epi_5_Year', fiscalYear);
   const { years: availableFiscalYears } = useAvailableYears();
   const { rules } = useVaccineRules(fiscalYear, '5yr');
-  const v1RulesCount = rules && rules.length > 0 ? rules.filter(r => r.view_type === 1 && r.is_active).length : 2;
+  const v1RulesCount = rules.filter(r => r.view_type === 1 && r.is_active).length;
 
   useEffect(() => {
     if (availableFiscalYears.length > 0 && !availableFiscalYears.includes(fiscalYear)) {

@@ -14,39 +14,9 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Link, useBlocker } from 'react-router-dom';
 import { AlertCircle, CheckCircle2, RotateCw, RotateCcw } from 'lucide-react';
 
-const TARGET_AGE_MONTHS_MAP: Record<string, number> = {
-  // แรกเกิด (0 เดือน)
-  '010': 0, '011': 0, // BCG
-  '041': 0, // HBV1
-  
-  // 2 เดือน
-  '031': 2, '081': 2, 'D21': 2, 'I11': 2, '042': 2, // DTP1, OPV1, Penta1 (D21), IPV1, HBV2
-  'R11': 2, 'R21': 2, 'R31': 2, 'P11': 2, // Rota1, PCV1
-  
-  // 4 เดือน
-  '032': 4, '082': 4, 'D22': 4, 'I12': 4, // DTP2, OPV2, Penta2, IPV2
-  'R12': 4, 'R22': 4, 'R32': 4, 'P12': 4,
-  
-  // 6 เดือน
-  '033': 6, '083': 6, 'D23': 6, '043': 6, '044': 6, // DTP3, OPV3, Penta3, HBV3
-  'R13': 6, 'R33': 6, 'P13': 6,
-  
-  // 9-12 เดือน
-  '061': 9, // MMR1
-  'J11': 12, '051': 12, // LAJE1, JE1 (เชื้อตาย 1)
-  
-  // 1 ปีครึ่ง (18 เดือน)
-  '034': 18, '084': 18, // DTP4, OPV4
-  '073': 18, // MMR2
-  '052': 18, // JE เชื้อตาย 2
-  
-  // 2 ปีครึ่ง (30 เดือน)
-  '074': 30, 'J12': 30, // LAJE2, MRC
-  '053': 30, // JE เชื้อตาย 3
-  
-  // 4 ปี (48 เดือน)
-  '035': 48, '085': 48, 'D35': 48, 'D45': 48, 'D55': 48, 'T11': 48, 'I15': 48, // DTP5, OPV5 และรหัสทางเลือก
-};
+// หมายเหตุ: "ค่าเริ่มต้นอายุเป้าหมาย" ไม่ได้ฮาร์ดโค้ดที่นี่อีกต่อไป
+// แหล่งเดียวคือ TARGET_AGE_MONTHS_BY_FIELD ฝั่ง Backend (VaccineRules.js)
+// ปุ่ม "อัปเดตอายุเป้าหมาย (Auto)" ดึงค่าผ่าน endpoint suggestRuleTargetAges
 
 interface VaccineRuleManagerProps {
   onDirtyChange?: (isDirty: boolean) => void;
@@ -179,37 +149,41 @@ export const VaccineRuleManager = ({ onDirtyChange }: VaccineRuleManagerProps) =
     setEditingRule(null);
   };
 
-  const handleAutoSetTargetAge = () => {
+  const handleAutoSetTargetAge = async () => {
     const currentRules = draftRules || rules;
-    let hasChanges = false;
-    const newRules = currentRules.map(rule => {
-      // Safely convert to string before splitting, as some APIs might return numbers
-      const hdcCodeStr = rule.hdc_code ? String(rule.hdc_code) : '';
-      const codes = hdcCodeStr.split(/[-,\/\s]+/).map(c => c.trim().padStart(3, '0')).filter(Boolean);
-      
-      let maxAge = -1;
-      for (const code of codes) {
-        if (TARGET_AGE_MONTHS_MAP[code] !== undefined) {
-          maxAge = Math.max(maxAge, TARGET_AGE_MONTHS_MAP[code]);
-        }
-      }
-      
-      if (maxAge === -1) return rule;
-      const targetAge = maxAge;
-      
-      if (rule.target_age_months !== targetAge) {
-        hasChanges = true;
-        return { ...rule, target_age_months: targetAge };
-      }
-      return rule;
-    });
+    if (!currentRules || currentRules.length === 0) return;
 
-    if (hasChanges) {
-      setDraftRules(newRules);
-      setHasUnsavedChanges(true);
-      toast.success('อัปเดตอายุเป้าหมายจากค่าเริ่มต้นสำเร็จ! โปรดกดยืนยันบันทึกเพื่อบันทึกลงฐานข้อมูล');
-    } else {
-      toast.info('อายุเป้าหมายทุกเกณฑ์ถูกตั้งค่าไว้ตรงกับค่าเริ่มต้นอยู่แล้ว');
+    try {
+      setIsProcessing(true);
+      // ขอค่าเริ่มต้นจาก Backend (แหล่งเดียว: TARGET_AGE_MONTHS_BY_FIELD ใน VaccineRules.js)
+      const res = await fetchApi('suggestRuleTargetAges', { rules: currentRules });
+      const suggestions: { rule_id: string; target_age_months: number | null }[] = res.data?.suggestions || [];
+
+      const byId = new Map(suggestions.map(s => [s.rule_id, s.target_age_months]));
+      let hasChanges = false;
+      const newRules = currentRules.map(rule => {
+        const suggested = byId.get(rule.rule_id);
+        // ไม่มีค่าเริ่มต้น (null) → ไม่แตะ ให้ Admin ตั้งค่าเองผ่านหน้าแก้ไข
+        if (suggested === null || suggested === undefined) return rule;
+        if (rule.target_age_months !== suggested) {
+          hasChanges = true;
+          return { ...rule, target_age_months: suggested };
+        }
+        return rule;
+      });
+
+      if (hasChanges) {
+        setDraftRules(newRules);
+        setHasUnsavedChanges(true);
+        toast.success('อัปเดตอายุเป้าหมายจากค่าเริ่มต้นสำเร็จ! โปรดกดยืนยันบันทึกเพื่อบันทึกลงฐานข้อมูล');
+      } else {
+        toast.info('อายุเป้าหมายทุกเกณฑ์ถูกตั้งค่าไว้ตรงกับค่าเริ่มต้นอยู่แล้ว');
+      }
+    } catch (err: any) {
+      console.error(err);
+      toast.error('ดึงค่าเริ่มต้นอายุเป้าหมายไม่สำเร็จ: ' + (err.message || 'Unknown error'));
+    } finally {
+      setIsProcessing(false);
     }
   };
 

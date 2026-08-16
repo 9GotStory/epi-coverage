@@ -1,17 +1,9 @@
-import { differenceInMonths, isValid, intervalToDuration } from 'date-fns';
+import { isValid, intervalToDuration } from 'date-fns';
 
 export function getCurrentFiscalYear(): number {
   const date = new Date();
   // Thai fiscal year starts in October (month 9 in 0-indexed Date)
   return date.getFullYear() + 543 + (date.getMonth() >= 9 ? 1 : 0);
-}
-
-export function getAgeInMonths(birthDate: Date | string | null | undefined, referenceDate?: Date | string | null): number {
-  if (!birthDate) return 0;
-  const date = new Date(birthDate);
-  const ref = referenceDate ? new Date(referenceDate) : new Date();
-  if (!isValid(date) || !isValid(ref)) return 0;
-  return Math.max(0, differenceInMonths(ref, date));
 }
 
 export function formatAgeStr(birthDate: Date | string | null | undefined, referenceDate?: Date | string | null): string {
@@ -100,63 +92,4 @@ export function getBirthDateRangeForQuarter(fiscalYear: number, quarter: number 
     start: new Date(startStr),
     end: new Date(`${endStr}T23:59:59.999Z`)
   };
-}
-
-/**
- * คำนวณวันสิ้นสุดไตรมาสที่ประเมินผล (อ้างอิงตาม HDC)
- * เด็กเกิดไตรมาสไหน จะประเมินผลเมื่อสิ้นสุดไตรมาสนั้นในปีถัดไป
- */
-export function getEvaluationDeadline(birthDate: string | Date, targetAge: number = 1): Date {
-  let year: number;
-  let month: number;
-
-  if (typeof birthDate === 'string' && birthDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
-    const parts = birthDate.split('-');
-    year = parseInt(parts[0], 10);
-    month = parseInt(parts[1], 10);
-  } else {
-    const bDate = new Date(birthDate);
-    year = bDate.getFullYear();
-    month = bDate.getMonth() + 1; // 1-12
-  }
-  
-  // เด็ก 1 ขวบ จะถูกประเมินใน 1 ปีถัดไป, เด็ก 2 ขวบ ประเมินใน 2 ปีถัดไป
-  const endYear = year + targetAge;
-  let endMonth = 12;
-  let endDay = 31;
-  
-  if (month >= 10 && month <= 12) { // ไตรมาส 1 (ต.ค. - ธ.ค.)
-    endMonth = 12; endDay = 31;
-  } else if (month >= 1 && month <= 3) { // ไตรมาส 2 (ม.ค. - มี.ค.)
-    endMonth = 3; endDay = 31;
-  } else if (month >= 4 && month <= 6) { // ไตรมาส 3 (เม.ย. - มิ.ย.)
-    endMonth = 6; endDay = 30;
-  } else if (month >= 7 && month <= 9) { // ไตรมาส 4 (ก.ค. - ก.ย.)
-    endMonth = 9; endDay = 30;
-  }
-  
-  // กำหนดเวลาเป็น 23:59:59 ของวันสุดท้ายของไตรมาส
-  return new Date(endYear, endMonth - 1, endDay, 23, 59, 59, 999);
-}
-
-/**
- * ตรวจสอบว่าวันที่ฉีดวัคซีน อยู่ภายในกำหนดเวลาประเมินผลของ HDC หรือไม่
- * @param birthDate วันเกิดเด็ก
- * @param vaccineDate วันที่ได้รับวัคซีน
- * @param targetAge อายุของเด็ก (ค่าเริ่มต้นคือ 1 ปี)
- * @returns boolean
- */
-export function isValidVaccineDate(birthDate: string | Date | undefined, vaccineDate: string | undefined, targetAge: number = 1): boolean {
-  if (!birthDate || !vaccineDate) return false;
-  
-  const bDate = new Date(birthDate);
-  const vDate = new Date(vaccineDate);
-  
-  if (isNaN(bDate.getTime()) || isNaN(vDate.getTime())) return false;
-  
-  // HDC กำหนดเส้นตายคือ "วันสิ้นสุดของไตรมาสประเมินผล"
-  const deadline = getEvaluationDeadline(bDate, targetAge);
-  
-  // วันที่ฉีดต้องน้อยกว่าหรือเท่ากับวันเดดไลน์ และต้องไม่ก่อนวันเกิด
-  return vDate <= deadline && vDate >= bDate;
 }

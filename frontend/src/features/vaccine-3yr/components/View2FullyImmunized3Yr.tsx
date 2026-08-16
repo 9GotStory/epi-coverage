@@ -47,7 +47,7 @@ export function View2FullyImmunized3Yr({ fiscalYear, quarter, data, isLoading, e
   const [selectedPatient, setSelectedPatient] = useState<EpiRecord | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const { rules } = useVaccineRules(fiscalYear, '3yr');
-  const v2RulesCount = rules && rules.length > 0 ? rules.filter(r => r.view_type === 2 && r.is_active && r.is_required_for_v2).length : 9;
+  const v2RulesCount = rules.filter(r => r.view_type === 2 && r.is_active && r.is_required_for_v2).length;
 
   const processedData = useMemo(() => {
     // 1. Filter cohort by Fiscal Year and Quarter
@@ -58,14 +58,14 @@ export function View2FullyImmunized3Yr({ fiscalYear, quarter, data, isLoading, e
       return bDate >= start && bDate <= end;
     });
 
-    const evalFn = (r: EpiRecord) => evaluateDynamicV2(r, rules || []);
+    const evalFn = (r: EpiRecord) => evaluateDynamicV2(r, rules);
     
     return cohort.map(record => {
-      const v2Rules = rules ? rules.filter(r => r.view_type === 2 && r.is_active && r.is_required_for_v2) : [];
+      const v2Rules = rules.filter(r => r.view_type === 2 && r.is_active && r.is_required_for_v2);
       return {
         ...record,
         evaluation: evalFn(record),
-        dataErrors: getDataErrors(record, v2Rules.length > 0 ? v2Rules : [])
+        dataErrors: getDataErrors(record, v2Rules)
       };
     });
   }, [data, fiscalYear, quarter, rules]);
@@ -75,8 +75,9 @@ export function View2FullyImmunized3Yr({ fiscalYear, quarter, data, isLoading, e
       // 1. Facility filter
       if (filterFacility !== 'all' && row.hoscode !== filterFacility) return false;
       // 2. Status filter
-      if (filterStatus === 'passed' && !row.evaluation.isFullyImmunized) return false;
-      if (filterStatus === 'failed' && row.evaluation.isFullyImmunized) return false;
+      if (filterStatus === 'passed' && row.evaluation.status !== 'PASS') return false;
+      if (filterStatus === 'pending' && row.evaluation.status !== 'PENDING') return false;
+      if (filterStatus === 'failed' && row.evaluation.status !== 'FAIL') return false;
       return true;
     });
   }, [processedData, filterFacility, filterStatus]);
@@ -86,11 +87,13 @@ export function View2FullyImmunized3Yr({ fiscalYear, quarter, data, isLoading, e
     return Array.from(facilities).sort();
   }, [processedData]);
 
-  // Statistics
+  // Statistics — แยก pending ออกจากตัวหาร coverage ให้สอดคล้องกับ Dashboard (calcGroupSummary)
   const total = filteredData.length;
-  const passed = filteredData.filter(d => d.evaluation.isFullyImmunized).length;
-  const failed = total - passed;
-  const coverageRate = total > 0 ? ((passed / total) * 100).toFixed(2) : '0.00';
+  const passed = filteredData.filter(d => d.evaluation.status === 'PASS').length;
+  const pending = filteredData.filter(d => d.evaluation.status === 'PENDING').length;
+  const failed = filteredData.filter(d => d.evaluation.status === 'FAIL').length;
+  const applicable = passed + failed; // pending ยังไม่ถึงเกณฑ์อายุ ไม่นับเป็นตัวหาร
+  const coverageRate = applicable > 0 ? ((passed / applicable) * 100).toFixed(2) : '0.00';
 
   const columns = useMemo<ColumnDef<ProcessedFullyImmunizedRecord, any>[]>(() => [
     {
@@ -339,6 +342,7 @@ export function View2FullyImmunized3Yr({ fiscalYear, quarter, data, isLoading, e
           >
             <option value="all">ผลการประเมินทั้งหมด</option>
             <option value="passed">ผ่านเกณฑ์ (Fully Immunized)</option>
+            <option value="pending">ยังไม่ถึงเกณฑ์ (รอรับบริการ)</option>
             <option value="failed">ยังไม่ผ่านเกณฑ์ (ตกหล่น)</option>
           </select>
 
@@ -429,7 +433,7 @@ export function View2FullyImmunized3Yr({ fiscalYear, quarter, data, isLoading, e
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mt-6">
         <div className="bg-white p-4 rounded-xl border border-zinc-200 shadow-sm flex flex-col">
           <span className="text-sm font-medium text-zinc-500">จำนวนเด็กทั้งหมด (คน)</span>
           <span className="text-2xl font-bold text-zinc-900 mt-1">{total.toLocaleString()}</span>
@@ -441,6 +445,10 @@ export function View2FullyImmunized3Yr({ fiscalYear, quarter, data, isLoading, e
         <div className="bg-red-50 p-4 rounded-xl border border-red-100 shadow-sm flex flex-col">
           <span className="text-sm font-medium text-red-700">จำนวนเด็กที่ไม่ผ่านเกณฑ์ (คน)</span>
           <span className="text-2xl font-bold text-red-800 mt-1">{failed.toLocaleString()}</span>
+        </div>
+        <div className="bg-amber-50 p-4 rounded-xl border border-amber-100 shadow-sm flex flex-col">
+          <span className="text-sm font-medium text-amber-700">ยังไม่ถึงเกณฑ์อายุ (คน)</span>
+          <span className="text-2xl font-bold text-amber-800 mt-1">{pending.toLocaleString()}</span>
         </div>
         <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 shadow-sm flex flex-col">
           <span className="text-sm font-medium text-blue-700">ร้อยละความครอบคลุม</span>
