@@ -232,7 +232,7 @@ export function View1Individual({ fiscalYear, quarter, data, isLoading, error, a
         );
       },
     }
-  ], []);
+  ], [v1RulesCount]);
 
   if (isLoading) {
     return (

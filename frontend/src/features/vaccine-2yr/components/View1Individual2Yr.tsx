@@ -228,7 +228,7 @@ export function View1Individual2Yr({ fiscalYear, quarter, data, isLoading, error
         );
       },
     }
-  ], []);
+  ], [v1RulesCount]);
 
   if (isLoading) {
     return (

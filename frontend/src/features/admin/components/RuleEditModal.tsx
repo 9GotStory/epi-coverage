@@ -154,9 +154,9 @@ export function RuleEditModal({ rule, isOpen, onClose, onSave, fiscalYear, ageGr
   useEffect(() => {
     if (blocker.state === "blocked") {
       if (window.confirm("คุณมีการพิมพ์แก้ไขค้างไว้ใน Popup ต้องการทิ้งการเปลี่ยนแปลงและเปลี่ยนหน้าหรือไม่?")) {
-        blocker.proceed && blocker.proceed();
+        blocker.proceed?.();
       } else {
-        blocker.reset && blocker.reset();
+        blocker.reset?.();
       }
     }
   }, [blocker]);

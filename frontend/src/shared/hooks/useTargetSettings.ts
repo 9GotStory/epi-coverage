@@ -29,9 +29,9 @@ export function useTargetSettings(): UseTargetSettingsResult {
 
   const config = configData || {};
 
-  // ✅ useCallback ให้ getTarget มี stable reference ไม่สร้างใหม่ทุก render
   const getTarget = useCallback(
     (quarter: number | 'all', view?: 1 | 2, vaccineKey?: string, fiscalYear?: number): number | undefined => {
+      const config = configData || {};
       const q = quarter === 'all' ? 'q4' : `q${quarter}`;
       const yearSuffix = fiscalYear ? `_${fiscalYear}` : '';
 
@@ -65,7 +65,7 @@ export function useTargetSettings(): UseTargetSettingsResult {
       // หากไม่มีกำหนดในระบบเลย จะไม่แสดงเส้นเป้าหมาย
       return undefined;
     },
-    [config]
+    [configData]
   );
 
   return { config, isLoading, isError, getTarget };

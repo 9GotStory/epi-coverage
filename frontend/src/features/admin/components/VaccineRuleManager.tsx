@@ -430,12 +430,12 @@ export const VaccineRuleManager = ({ onDirtyChange }: VaccineRuleManagerProps) =
               หากเปลี่ยนหน้าตอนนี้ข้อมูลที่แก้ไว้จะหายไปทั้งหมด ต้องการดำเนินการต่อหรือไม่?
             </p>
             <div className="flex justify-end gap-3 mt-2">
-              <Button variant="outline" size="lg" onClick={() => blocker.reset && blocker.reset()} className="font-medium">
+              <Button variant="outline" size="lg" onClick={() => blocker.reset?.()} className="font-medium">
                 ยกเลิก (อยู่หน้านี้ต่อ)
               </Button>
               <Button size="lg" className="bg-red-600 hover:bg-red-700 text-white font-medium" onClick={() => {
                 queryClient.resetQueries({ queryKey: ['vaccineRules'] }); // Clear optimistic cache
-                blocker.proceed && blocker.proceed();
+                blocker.proceed?.();
               }}>
                 ยืนยันที่จะทิ้งการเปลี่ยนแปลง
               </Button>

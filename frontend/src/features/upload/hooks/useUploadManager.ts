@@ -171,7 +171,7 @@ export function useUploadManager() {
     } finally {
       setIsUploading(false);
     }
-  }, [file, fiscalYear, targetTable]);
+  }, [file, fiscalYear, targetTable, queryClient]);
 
   const handleReset = useCallback(() => {
     setFile(null);
@@ -228,7 +228,7 @@ export function useUploadManager() {
     } finally {
       setIsSyncing(false);
     }
-  }, [fiscalYear]);
+  }, [fiscalYear, queryClient]);
 
   return {
     file,
