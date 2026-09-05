@@ -424,6 +424,8 @@ function seedVaccineRules(fiscalYear, adminEmail, force = false) {
     { age_group: '1yr', view_type: 2, vaccine_group: 'IPV', display_name: 'IPV เข็ม 1 (I11)', hdc_code: 'I11', required_fields: ['ipv1_date'], logic_type: 'ALL', is_required_for_v2: true },
     { age_group: '1yr', view_type: 2, vaccine_group: 'IPV', display_name: 'IPV เข็ม 2 (I12)', hdc_code: 'I12', required_fields: ['ipv2_date'], logic_type: 'ALL', is_required_for_v2: true },
 
+    { age_group: '1yr', view_type: 2, vaccine_group: 'OPV', display_name: 'OPV เข็ม 1 (081)', hdc_code: '081', required_fields: ['opv1_date'], logic_type: 'ALL', is_required_for_v2: true },
+    { age_group: '1yr', view_type: 2, vaccine_group: 'OPV', display_name: 'OPV เข็ม 2 (082)', hdc_code: '082', required_fields: ['opv2_date'], logic_type: 'ALL', is_required_for_v2: true },
     { age_group: '1yr', view_type: 2, vaccine_group: 'OPV', display_name: 'OPV เข็ม 3 (083)', hdc_code: '083', required_fields: ['opv3_date'], logic_type: 'ALL', is_required_for_v2: true },
     { age_group: '1yr', view_type: 2, vaccine_group: 'MMR', display_name: 'MMR เข็ม 1 (061)', hdc_code: '061', required_fields: ['mmr1_date'], logic_type: 'ALL', is_required_for_v2: true },
     { age_group: '1yr', view_type: 2, vaccine_group: 'Rota', display_name: 'Rota เข็ม 1', hdc_code: 'R11/R21', required_fields: ['rv21_date'], branch_alt_fields: ['rv31_date'], logic_type: 'BRANCH', is_required_for_v2: true },
@@ -451,6 +453,8 @@ function seedVaccineRules(fiscalYear, adminEmail, force = false) {
     { age_group: '2yr', view_type: 2, vaccine_group: 'IPV', display_name: 'IPV เข็ม 1', hdc_code: 'I11', required_fields: ['ipv1_date'], logic_type: 'ALL', is_required_for_v2: true },
     { age_group: '2yr', view_type: 2, vaccine_group: 'IPV', display_name: 'IPV เข็ม 2', hdc_code: 'I12', required_fields: ['ipv2_date'], logic_type: 'ALL', is_required_for_v2: true },
 
+    { age_group: '2yr', view_type: 2, vaccine_group: 'OPV', display_name: 'OPV เข็ม 1', hdc_code: '081', required_fields: ['opv1_date'], logic_type: 'ALL', is_required_for_v2: true },
+    { age_group: '2yr', view_type: 2, vaccine_group: 'OPV', display_name: 'OPV เข็ม 2', hdc_code: '082', required_fields: ['opv2_date'], logic_type: 'ALL', is_required_for_v2: true },
     { age_group: '2yr', view_type: 2, vaccine_group: 'OPV', display_name: 'OPV เข็ม 3 (083)', hdc_code: '083', required_fields: ['opv3_date'], logic_type: 'ALL', is_required_for_v2: true },
     { age_group: '2yr', view_type: 2, vaccine_group: 'OPV', display_name: 'OPV เข็ม 4 (084)', hdc_code: '084', required_fields: ['opv4_date'], logic_type: 'ALL', is_required_for_v2: true },
     { age_group: '2yr', view_type: 2, vaccine_group: 'MMR', display_name: 'MMR เข็ม 1', hdc_code: '061', required_fields: ['mmr1_date'], logic_type: 'ALL', is_required_for_v2: true },
@@ -478,6 +482,8 @@ function seedVaccineRules(fiscalYear, adminEmail, force = false) {
     { age_group: '3yr', view_type: 2, vaccine_group: 'IPV', display_name: 'IPV เข็ม 1', hdc_code: 'I11', required_fields: ['ipv1_date'], logic_type: 'ALL', is_required_for_v2: true },
     { age_group: '3yr', view_type: 2, vaccine_group: 'IPV', display_name: 'IPV เข็ม 2', hdc_code: 'I12', required_fields: ['ipv2_date'], logic_type: 'ALL', is_required_for_v2: true },
 
+    { age_group: '3yr', view_type: 2, vaccine_group: 'OPV', display_name: 'OPV เข็ม 1', hdc_code: '081', required_fields: ['opv1_date'], logic_type: 'ALL', is_required_for_v2: true },
+    { age_group: '3yr', view_type: 2, vaccine_group: 'OPV', display_name: 'OPV เข็ม 2', hdc_code: '082', required_fields: ['opv2_date'], logic_type: 'ALL', is_required_for_v2: true },
     { age_group: '3yr', view_type: 2, vaccine_group: 'OPV', display_name: 'OPV เข็ม 3 (083)', hdc_code: '083', required_fields: ['opv3_date'], logic_type: 'ALL', is_required_for_v2: true },
     { age_group: '3yr', view_type: 2, vaccine_group: 'OPV', display_name: 'OPV เข็ม 4 (084)', hdc_code: '084', required_fields: ['opv4_date'], logic_type: 'ALL', is_required_for_v2: true },
     { age_group: '3yr', view_type: 2, vaccine_group: 'MMR', display_name: 'MMR เข็ม 1', hdc_code: '061', required_fields: ['mmr1_date'], logic_type: 'ALL', is_required_for_v2: true },
@@ -504,8 +510,11 @@ function seedVaccineRules(fiscalYear, adminEmail, force = false) {
     { age_group: '5yr', view_type: 2, vaccine_group: 'Hib', display_name: 'Hib เข็ม 1', hdc_code: 'D21', required_fields: ['hib1_date'], logic_type: 'ALL', is_required_for_v2: true },
     { age_group: '5yr', view_type: 2, vaccine_group: 'Hib', display_name: 'Hib เข็ม 2', hdc_code: 'D22', required_fields: ['hib2_date'], logic_type: 'ALL', is_required_for_v2: true },
     { age_group: '5yr', view_type: 2, vaccine_group: 'Hib', display_name: 'Hib เข็ม 3', hdc_code: 'D23', required_fields: ['hib3_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '5yr', view_type: 2, vaccine_group: 'IPV', display_name: 'IPV เข็ม 4 เดือน', hdc_code: 'I12', required_fields: ['ipv2_date'], logic_type: 'ALL', is_required_for_v2: true },
+    { age_group: '5yr', view_type: 2, vaccine_group: 'IPV', display_name: 'IPV เข็ม 1', hdc_code: 'I11', required_fields: ['ipv1_date'], logic_type: 'ALL', is_required_for_v2: true },
+    { age_group: '5yr', view_type: 2, vaccine_group: 'IPV', display_name: 'IPV เข็ม 2', hdc_code: 'I12', required_fields: ['ipv2_date'], logic_type: 'ALL', is_required_for_v2: true },
 
+    { age_group: '5yr', view_type: 2, vaccine_group: 'OPV', display_name: 'OPV เข็ม 1', hdc_code: '081', required_fields: ['opv1_date'], logic_type: 'ALL', is_required_for_v2: true },
+    { age_group: '5yr', view_type: 2, vaccine_group: 'OPV', display_name: 'OPV เข็ม 2', hdc_code: '082', required_fields: ['opv2_date'], logic_type: 'ALL', is_required_for_v2: true },
     { age_group: '5yr', view_type: 2, vaccine_group: 'OPV', display_name: 'OPV เข็ม 3 (083)', hdc_code: '083', required_fields: ['opv3_date'], logic_type: 'ALL', is_required_for_v2: true },
     { age_group: '5yr', view_type: 2, vaccine_group: 'OPV', display_name: 'OPV เข็ม 4 (084)', hdc_code: '084', required_fields: ['opv4_date'], logic_type: 'ALL', is_required_for_v2: true },
     { age_group: '5yr', view_type: 2, vaccine_group: 'OPV', display_name: 'OPV เข็ม 5 (085)', hdc_code: '085', required_fields: ['opv5_date'], logic_type: 'ALL', is_required_for_v2: true },

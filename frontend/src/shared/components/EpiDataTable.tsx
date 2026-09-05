@@ -47,7 +47,7 @@ export function EpiDataTable<TData>({ data, columns }: EpiDataTableProps<TData>)
         className="overflow-auto max-h-[560px]"
       >
         <Table>
-          <TableHeader className="bg-[#f5f5f7]/80 sticky top-0 z-10 backdrop-blur-md shadow-[0_1px_0_#e0e0e0]">
+          <TableHeader className="hidden md:table-header bg-[#f5f5f7]/80 sticky top-0 z-10 backdrop-blur-md shadow-[0_1px_0_#e0e0e0]">
             {table.getHeaderGroups().map((headerGroup) => (
               <TableRow key={headerGroup.id} className="hover:bg-transparent border-b-0">
                 {headerGroup.headers.map((header) => {
@@ -90,14 +90,21 @@ export function EpiDataTable<TData>({ data, columns }: EpiDataTableProps<TData>)
                       data-index={virtualRow.index}
                       ref={rowVirtualizer.measureElement}
                       data-state={row.getIsSelected() && "selected"}
-                      className="hover:bg-[#f5f5f7] transition-colors duration-200 border-b border-[#e0e0e0]/50 last:border-b-0"
+                      className="block md:table-row hover:bg-[#f5f5f7] transition-colors duration-200 border-b border-[#e0e0e0] md:border-[#e0e0e0]/50 last:border-b-0 p-4 md:p-0 relative bg-white md:bg-transparent mb-4 md:mb-0 rounded-xl md:rounded-none shadow-sm md:shadow-none"
                     >
                       {row.getVisibleCells().map((cell) => (
                         <TableCell
                           key={cell.id}
-                          className="py-3.5 px-4 text-[14px] text-[#1d1d1f] align-top tracking-[-0.224px]"
+                          className="block md:table-cell py-2 md:py-3.5 px-0 md:px-4 text-[14px] text-[#1d1d1f] align-top tracking-[-0.224px] border-b border-[#f0f0f0] md:border-b-0 last:border-b-0 flex justify-between items-center md:block"
                         >
-                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                          <span className="md:hidden font-medium text-[#7a7a7a] text-[12px] mr-4">
+                            {typeof cell.column.columnDef.header === 'string' 
+                              ? cell.column.columnDef.header 
+                              : cell.column.id}
+                          </span>
+                          <div className="text-right md:text-left">
+                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                          </div>
                         </TableCell>
                       ))}
                     </TableRow>

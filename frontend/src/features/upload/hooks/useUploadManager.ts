@@ -8,7 +8,7 @@ import { calcGroupSummary } from '../../../shared/utils/dashboardLogic';
 
 import { evaluateDynamicV1, evaluateDynamicV2 } from '../../../shared/utils/vaccine/ruleEngine';
 import type { VaccineRule } from '../../../shared/utils/vaccine/ruleEngine';
-import { cleanData, getAgeGroupFromTable, getAgeFromTable } from '../utils/uploadHelpers';
+import { cleanData, uploadRowSchema , getAgeGroupFromTable, getAgeFromTable } from '../utils/uploadHelpers';
 import { getBirthDateRangeForQuarter } from '../../../shared/utils/dateUtils';
 import type { EpiRecord } from '../../../shared/types';
 const CHUNK_SIZE = 500;
@@ -52,6 +52,7 @@ export function useUploadManager() {
         throw new Error('ไฟล์ว่างเปล่า (ไม่พบข้อมูลในชีตแรก)');
       }
       
+
       // Smart File Validation
       const firstRow = data[0] as any;
       const columns = Object.keys(firstRow).map(k => k.toLowerCase());
@@ -67,6 +68,18 @@ export function useUploadManager() {
       }
 
       const cleaned = cleanData(data);
+      
+      // Phase B.1 Zod Validation: ตรวจสอบความถูกต้องของข้อมูลเบื้องต้น
+      const sampleToValidate = cleaned.slice(0, 50); // Validate first 50 rows
+      for (let i = 0; i < sampleToValidate.length; i++) {
+        const row = sampleToValidate[i];
+        const validation = uploadRowSchema.safeParse(row);
+        if (!validation.success) {
+          const firstError = validation.error.issues[0];
+          throw new Error(`ข้อมูลผิดพลาดที่แถว ${i + 2} (ใน Excel): คอลัมน์ ${firstError.path.join('.')} - ${firstError.message}`);
+        }
+      }
+
       
       setTotalRows(cleaned.length);
       setPreviewData(cleaned.slice(0, 10)); // Show 10 rows

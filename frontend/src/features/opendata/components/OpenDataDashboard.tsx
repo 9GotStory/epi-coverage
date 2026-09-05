@@ -1,6 +1,6 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useFacilities } from '../../../shared/hooks/useFacilities';
+import { useState, useMemo } from 'react';
 import { useOpenData } from '../hooks/useOpenData';
-import { fetchApi } from '../../../shared/lib/api';
 import { CoverageBarChart } from './CoverageBarChart';
 import { formatEpiDataForChart, formatEpiAllVaccines, formatCompleteDataForChart } from '../utils/chartUtils';
 import { VaccineGaugeGrid } from './VaccineGaugeGrid';
@@ -53,16 +53,8 @@ export function OpenDataDashboard({ targetTable = 's_epi1' }: OpenDataDashboardP
   const [isSyncing, setIsSyncing] = useState(false);
 
   const isAdmin = user?.role === 'admin' || user?.hoscode === '00588';
-  const [facilities, setFacilities] = useState<any[]>([]);
+  const { data: facilities = [] } = useFacilities();
   const [selectedHosp, setSelectedHosp] = useState<string>(isAdmin ? 'all' : (user?.hoscode || 'all'));
-
-  useEffect(() => {
-    if (isAdmin) {
-      fetchApi('getFacilities').then(res => {
-        if (res.data) setFacilities(res.data);
-      }).catch(console.error);
-    }
-  }, [isAdmin]);
 
   // Use dynamically fetched years instead of hardcoded 5 years
   const yearOptions = availableYears.map(y => y.toString());
@@ -164,7 +156,7 @@ export function OpenDataDashboard({ targetTable = 's_epi1' }: OpenDataDashboardP
   }
   const activeFacilities = Array.from(activeHospcodes)
     .map(code => {
-      const fac = facilities.find(f => f.hoscode === code);
+      const fac = facilities.find((f: any) => f.hoscode === code);
       return {
         hoscode: code,
         hosname: fac ? fac.hosname : code

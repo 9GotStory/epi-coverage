@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { SubNav } from '../../../widgets/layout/SubNav';
 import { View1Individual } from './View1Individual';

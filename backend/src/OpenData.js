@@ -63,7 +63,6 @@ function syncOpenData() {
   const ss = getSpreadsheet();
   let sheet = ss.getSheetByName('opendata_cache');
   if (!sheet) {
-    // Create sheet if it doesn't exist
     sheet = ss.insertSheet('opendata_cache');
     const headers = ['sync_id', 'table_name', 'fiscal_year', 'hospcode', 'areacode', 'raw_json', 'updated_at'];
     sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
@@ -72,76 +71,101 @@ function syncOpenData() {
   }
   
   const targetTables = ['s_epi1', 's_epi2', 's_epi3', 's_epi5', 's_epi_complete'];
-  // Current fiscal year for sync
-  const d = new Date();
-  const year = String(d.getFullYear() + 543 + (d.getMonth() >= 9 ? 1 : 0));
+  
+  // Best Practice 1: Sync multiple years (current and previous) or based on active years
+  // Fallback if getAvailableYears doesn't exist
+  let yearsToSync = [];
+  try {
+    yearsToSync = getAvailableYears(); // Set object
+    yearsToSync = Array.from(yearsToSync).map(String);
+  } catch (e) {
+    const d = new Date();
+    const currentYear = d.getFullYear() + 543 + (d.getMonth() >= 9 ? 1 : 0);
+    yearsToSync = [String(currentYear), String(currentYear - 1)];
+  }
+  
   const province = "54"; // แพร่
   const targetAreacodePrefix = "5406"; // อำเภอสอง
   
-  const allNewRows = [];
   const syncId = Utilities.getUuid();
   const updatedAt = new Date().toISOString();
   
-  // 1. Extract & Transform
-  for (const tableName of targetTables) {
-    try {
-      const url = "https://opendata.moph.go.th/api/report_data";
-      const payload = {
-        tableName: tableName,
-        year: year,
-        province: province,
-        type: "json",
-        limit: 10000 // บังคับดึงมาให้หมด (ไม่ให้โดนตัดที่ 1000)
-      };
-      
-      const options = {
-        method: "POST",
-        contentType: "application/json",
-        payload: JSON.stringify(payload),
-        muteHttpExceptions: true
-      };
-      
-      const response = UrlFetchApp.fetch(url, options);
-      const resultData = JSON.parse(response.getContentText());
-      
-      if (!resultData.error && Array.isArray(resultData.data)) {
-        // กรองเฉพาะอำเภอสอง
-        const filteredData = resultData.data.filter(row => row.areacode && String(row.areacode).startsWith(targetAreacodePrefix));
+  // Best Practice 2: Resilient ETL - Keep old data if fetch fails
+  const oldDataRows = sheet.getLastRow() > 1 ? sheet.getRange(2, 1, sheet.getLastRow() - 1, sheet.getLastColumn()).getValues() : [];
+  let finalRows = [];
+  let totalFetched = 0;
+  
+  for (const year of yearsToSync) {
+    for (const tableName of targetTables) {
+      let fetchSuccess = false;
+      try {
+        const url = "https://opendata.moph.go.th/api/report_data";
+        const payload = {
+          tableName: tableName,
+          year: year,
+          province: province,
+          type: "json",
+          limit: 10000 
+        };
         
-        for (const row of filteredData) {
-          allNewRows.push([
-            syncId,
-            tableName,
-            year,
-            row.hospcode || "",
-            row.areacode || "",
-            JSON.stringify(row),
-            updatedAt
-          ]);
+        const options = {
+          method: "POST",
+          contentType: "application/json",
+          payload: JSON.stringify(payload),
+          muteHttpExceptions: true
+        };
+        
+        const response = UrlFetchApp.fetch(url, options);
+        const resultData = JSON.parse(response.getContentText());
+        
+        if (!resultData.error && Array.isArray(resultData.data)) {
+          const filteredData = resultData.data.filter(row => row.areacode && String(row.areacode).startsWith(targetAreacodePrefix));
+          
+          for (const row of filteredData) {
+            finalRows.push([
+              syncId,
+              tableName,
+              year,
+              row.hospcode || "",
+              row.areacode || "",
+              JSON.stringify(row),
+              updatedAt
+            ]);
+          }
+          fetchSuccess = true;
+          totalFetched += filteredData.length;
         }
+      } catch (e) {
+        console.error(`Error syncing ${tableName} (${year}): ${e.toString()}`);
       }
-    } catch (e) {
-      console.error(`Error syncing ${tableName}: ${e.toString()}`);
+      
+      // If fetch failed, retain old data for this specific table and year
+      if (!fetchSuccess && oldDataRows.length > 0) {
+        const retainedRows = oldDataRows.filter(row => row[1] === tableName && String(row[2]) === String(year));
+        finalRows = finalRows.concat(retainedRows);
+        console.log(`Retained ${retainedRows.length} old rows for ${tableName} (${year}) due to fetch failure.`);
+      }
     }
   }
   
   // 2. Load (Batch Write)
-  if (allNewRows.length > 0) {
-    // Clear old data (keep headers)
+  if (finalRows.length > 0) {
     if (sheet.getLastRow() > 1) {
       sheet.getRange(2, 1, sheet.getLastRow() - 1, sheet.getLastColumn()).clearContent();
     }
     
-    // Write new data
-    // setValues is highly optimized for performance (batch write)
-    sheet.getRange(2, 1, allNewRows.length, allNewRows[0].length).setValues(allNewRows);
-    SpreadsheetApp.flush(); // Force changes immediately
+    // Best Practice 3: setValues (Batch Write) is highly optimized
+    sheet.getRange(2, 1, finalRows.length, finalRows[0].length).setValues(finalRows);
+    SpreadsheetApp.flush(); 
     
-    logAction('SYSTEM', 'Cron', 'sync_opendata', `Synced ${allNewRows.length} rows for year ${year}`);
-    return { success: true, count: allNewRows.length, syncedAt: updatedAt };
+    try {
+      logAction('SYSTEM', 'Cron', 'sync_opendata', `Synced ${totalFetched} new rows (Total cache: ${finalRows.length})`);
+    } catch(e) {}
+    
+    return { success: true, count: finalRows.length, newFetched: totalFetched, syncedAt: updatedAt };
   }
   
-  return { success: false, error: "No data synced" };
+  return { success: false, error: "No data synced and no old data retained" };
 }
 
 /**

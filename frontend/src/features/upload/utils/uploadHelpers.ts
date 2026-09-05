@@ -1,3 +1,4 @@
+import { z } from 'zod';
 // Date parser helper
 
 /**
@@ -57,23 +58,29 @@ export const cleanData = (data: any[]): any[] => {
       }
       
       // Force string and pad for specific columns
-      if (val !== null && ['hoscode', 'pid', 'cid', 'check_vhid'].includes(key.toLowerCase())) {
+      let normalizedKey = key.toLowerCase();
+      // Normalize hosp or hospcode to hoscode so Zod validation and Backend can rely on it
+      if (normalizedKey === 'hosp' || normalizedKey === 'hospcode') {
+        normalizedKey = 'hoscode';
+      }
+
+      if (val !== null && ['hoscode', 'pid', 'cid', 'check_vhid'].includes(normalizedKey)) {
         val = String(val).trim();
         
         // Preserve leading zeros in case Excel parsed them as pure numbers
-        if (key.toLowerCase() === 'hoscode' || key.toLowerCase() === 'hosp') {
+        if (normalizedKey === 'hoscode') {
           val = val.padStart(5, '0');
-        } else if (key.toLowerCase() === 'cid') {
+        } else if (normalizedKey === 'cid') {
           val = val.padStart(13, '0');
         }
       }
       
       // Parse dates
-      if (val !== null && (key.toLowerCase().includes('date') || key.toLowerCase() === 'birth')) {
+      if (val !== null && (normalizedKey.includes('date') || normalizedKey === 'birth')) {
         val = parseDate(val);
       }
       
-      cleanRow[key.toLowerCase()] = val;
+      cleanRow[normalizedKey] = val;
     });
     return cleanRow;
   });
@@ -119,3 +126,12 @@ export const getAgeString = (birthDateString: string): string => {
   if (y > 0) return `${y} ปี`;
   return `${m} เดือน`;
 };
+
+
+export const uploadRowSchema = z.object({
+  hoscode: z.string().min(5, "ต้องมีรหัสสถานบริการ 5 หลัก"),
+  cid: z.string().min(13, "ต้องมีเลขบัตรประชาชน 13 หลัก"),
+  birth: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "ต้องมีวันเกิดในรูปแบบ YYYY-MM-DD"),
+  name: z.string().min(1, "ต้องมีชื่อ"),
+  lname: z.string().min(1, "ต้องมีนามสกุล")
+}).passthrough(); // Allow other columns
