@@ -12,5 +12,6 @@ export async function fetchOpenData(payload: OpenDataPayload) {
   if (response.data && response.data.error) {
     throw new Error(response.data.error);
   }
-  return response.data;
+  // MOPH OpenData returns data inside a 'data' array property
+  return Array.isArray(response.data) ? response.data : (response.data?.data || []);
 }
