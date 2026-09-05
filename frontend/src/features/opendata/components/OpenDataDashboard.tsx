@@ -97,7 +97,7 @@ export function OpenDataDashboard({ targetTable = 's_epi1' }: OpenDataDashboardP
   const chartData = useMemo(() => {
     if (!data || !Array.isArray(data)) return [];
     const filteredData = selectedHosp === 'all' 
-      ? data 
+      ? data.filter(d => d.areacode && String(d.areacode).startsWith('5406'))
       : data.filter(d => d.hospcode === selectedHosp);
 
     if (viewMode === 'complete') {
@@ -111,7 +111,7 @@ export function OpenDataDashboard({ targetTable = 's_epi1' }: OpenDataDashboardP
   const allVaccinesData = useMemo(() => {
     if (!data || !Array.isArray(data)) return [];
     const filteredData = selectedHosp === 'all' 
-      ? data 
+      ? data.filter(d => d.areacode && String(d.areacode).startsWith('5406'))
       : data.filter(d => d.hospcode === selectedHosp);
     
     if (viewMode === 'complete') {
