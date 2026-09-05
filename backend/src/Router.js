@@ -26,7 +26,7 @@ function handleRequest(method, e) {
     // 4. Public Actions (ไม่ใช้ Token)
     const publicActions = [
       'setup', 'verifyToken', 'loginWithGoogle', 'createUser', 'updateLastLogin',
-      'getTargetConfig', 'getDashboardSummaries', 'getDashboardSummariesMultiYear', 'getVaccineRules', 'getAvailableYears'
+      'getTargetConfig', 'getDashboardSummaries', 'getDashboardSummariesMultiYear', 'getVaccineRules', 'getAvailableYears', 'getEpiData'
     ];
     if (publicActions.includes(action)) {
       switch (action) {
@@ -40,6 +40,7 @@ function handleRequest(method, e) {
         case 'getDashboardSummariesMultiYear': return responseJson(getDashboardSummariesMultiYear(body.fiscalYears));
         case 'getVaccineRules': return responseJson(getVaccineRules(body.fiscalYear || e.parameter.fiscalYear, body.ageGroup || e.parameter.ageGroup));
         case 'getAvailableYears': return responseJson(getAvailableYears());
+        case 'getEpiData': return responseJson(getEpiData(e.parameter.hoscode || body.hoscode, e.parameter.targetTable || body.targetTable, body.fiscalYear || e.parameter.fiscalYear));
       }
     }
 
