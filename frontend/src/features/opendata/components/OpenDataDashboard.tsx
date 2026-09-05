@@ -2,10 +2,10 @@ import { useState, useEffect, useMemo } from 'react';
 import { useOpenData } from '../hooks/useOpenData';
 import { fetchApi } from '../../../shared/lib/api';
 import { CoverageBarChart } from './CoverageBarChart';
-import { formatEpiDataForChart, formatEpiAllVaccines } from '../utils/chartUtils';
+import { formatEpiDataForChart, formatEpiAllVaccines, formatCompleteDataForChart } from '../utils/chartUtils';
 import { VaccineGaugeGrid } from './VaccineGaugeGrid';
 import { VaccineRadarChart } from './VaccineRadarChart';
-import { RefreshCwIcon, AlertCircleIcon, DatabaseIcon } from 'lucide-react';
+import { RefreshCwIcon, AlertCircleIcon, DatabaseIcon, ListIcon, ShieldCheckIcon } from 'lucide-react';
 import { useAuth } from '../../../shared/contexts/AuthContext';
 import { useTargetSettings } from '../../../shared/hooks/useTargetSettings';
 import { useAvailableYears } from '../../../shared/hooks/useAvailableYears';
@@ -25,6 +25,14 @@ export interface OpenDataDashboardProps {
   targetTable?: 's_epi1' | 's_epi2' | 's_epi3' | 's_epi5';
 }
 
+
+  const completeIdMap: Record<string, string> = {
+    's_epi1': '28dd2c7955ce926456240b2ff0100bde',
+    's_epi2': '35f4a8d465e6e1edc05f3d8ab658c551',
+    's_epi3': 'd1fe173d08e959397adf34b1d77e88d7',
+    's_epi5': 'f033ab37c30201f73f142449d037028d'
+  };
+
 export function OpenDataDashboard({ targetTable = 's_epi1' }: OpenDataDashboardProps) {
   const { user } = useAuth();
   const { getTarget } = useTargetSettings();
@@ -40,6 +48,7 @@ export function OpenDataDashboard({ targetTable = 's_epi1' }: OpenDataDashboardP
   const isEpi5 = targetTable === 's_epi5';
   const [vaccine, setVaccine] = useState(isEpi1 ? 'bcg' : (isEpi3 ? 'je3' : (isEpi5 ? 'dtp5' : 'dtp4')));
   const [quarter, setQuarter] = useState<1|2|3|4|'all'>('all');
+  const [viewMode, setViewMode] = useState<'individual' | 'complete'>('individual');
 
   const isAdmin = user?.role === 'admin' || user?.hoscode === '00588';
   const [facilities, setFacilities] = useState<any[]>([]);
@@ -79,7 +88,7 @@ export function OpenDataDashboard({ targetTable = 's_epi1' }: OpenDataDashboardP
   ];
 
   const { data, isLoading, isError, error, refetch } = useOpenData({
-    tableName: targetTable,
+    tableName: viewMode === 'complete' ? 's_epi_complete' : targetTable,
     year,
     province,
     amp
@@ -91,8 +100,12 @@ export function OpenDataDashboard({ targetTable = 's_epi1' }: OpenDataDashboardP
       ? data 
       : data.filter(d => d.hospcode === selectedHosp);
 
+    if (viewMode === 'complete') {
+      const filterId = completeIdMap[targetTable];
+      return formatCompleteDataForChart(filteredData, filterId);
+    }
     return formatEpiDataForChart(filteredData, vaccine);
-  }, [data, selectedHosp, vaccine]);
+  }, [data, selectedHosp, vaccine, viewMode, targetTable]);
 
   // Aggregate stats for gauge and radar (ALL vaccines)
   const allVaccinesData = useMemo(() => {
@@ -101,6 +114,23 @@ export function OpenDataDashboard({ targetTable = 's_epi1' }: OpenDataDashboardP
       ? data 
       : data.filter(d => d.hospcode === selectedHosp);
     
+    if (viewMode === 'complete') {
+      const filterId = completeIdMap[targetTable];
+      const monthlyData = formatCompleteDataForChart(filteredData, filterId);
+      const totalTarget = monthlyData.reduce((sum: number, item: any) => sum + item.target, 0);
+      const totalResult = monthlyData.reduce((sum: number, item: any) => sum + item.result, 0);
+      const coverage = totalTarget > 0 ? (totalResult / totalTarget) * 100 : 0;
+      
+      return [{
+        vaccine: 'complete',
+        label: 'รับวัคซีนครบชุด (Fully Immunized)',
+        target: totalTarget,
+        result: totalResult,
+        coverage: parseFloat(coverage.toFixed(2)),
+        goal: getTarget(quarter, 2, undefined, Number(year)) // Use View 2 target
+      }];
+    }
+    
     return formatEpiAllVaccines(filteredData, targetTable).map(item => {
       const vaccineKeyForTarget = item.vaccine === 'mmr' || item.vaccine === 'mmr1' || item.vaccine === 'mmr2' ? 'mmr' : item.vaccine;
       return {
@@ -108,7 +138,7 @@ export function OpenDataDashboard({ targetTable = 's_epi1' }: OpenDataDashboardP
         goal: getTarget(quarter, 1, vaccineKeyForTarget, Number(year))
       };
     });
-  }, [data, selectedHosp, targetTable, quarter, getTarget, year]);
+  }, [data, selectedHosp, targetTable, quarter, getTarget, year, viewMode]);
 
   // Calculate total summary for the selected year
   const summary = useMemo(() => {
@@ -140,11 +170,11 @@ export function OpenDataDashboard({ targetTable = 's_epi1' }: OpenDataDashboardP
     })
     .sort((a, b) => a.hosname.localeCompare(b.hosname));
 
-  const selectedVaccineLabel = vaccineOptions.find(v => v.value === vaccine)?.label || vaccine;
+  const selectedVaccineLabel = viewMode === 'complete' ? 'รับวัคซีนครบชุด (Fully Immunized)' : (vaccineOptions.find(v => v.value === vaccine)?.label || vaccine);
 
   // คำนวณเป้าหมายแบบ Dynamic ตามไตรมาส + ชนิดวัคซีน (มุมมอง 1 = view1)
   const vaccineKeyForTarget = vaccine === 'mmr' || vaccine === 'mmr1' || vaccine === 'mmr2' ? 'mmr' : undefined;
-  const dynamicTarget = getTarget(quarter, 1, vaccineKeyForTarget, Number(year));
+  const dynamicTarget = getTarget(quarter, viewMode === 'complete' ? 2 : 1, viewMode === 'complete' ? undefined : vaccineKeyForTarget, Number(year));
   // เป้าหมายสำหรับ Radar (ใช้ค่าพื้นฐานของไตรมาส ไม่แยกวัคซีน)
   const radarTarget = getTarget(quarter, 1, undefined, Number(year));
 
@@ -267,6 +297,24 @@ export function OpenDataDashboard({ targetTable = 's_epi1' }: OpenDataDashboardP
         </div>
       )}
 
+      
+        <div className="flex bg-zinc-100 p-1 rounded-lg mb-6 w-fit">
+          <button
+            onClick={() => setViewMode('individual')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${viewMode === 'individual' ? 'bg-white shadow-sm text-zinc-900' : 'text-zinc-500 hover:text-zinc-700'}`}
+          >
+            <ListIcon className="w-4 h-4" />
+            รายชนิดวัคซีน (View 1)
+          </button>
+          <button
+            onClick={() => setViewMode('complete')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${viewMode === 'complete' ? 'bg-white shadow-sm text-primary' : 'text-zinc-500 hover:text-zinc-700'}`}
+          >
+            <ShieldCheckIcon className="w-4 h-4" />
+            รับวัคซีนครบชุด (View 2)
+          </button>
+        </div>
+
       {isLoading ? (
         <div className="h-96 w-full flex flex-col items-center justify-center text-zinc-400 bg-white rounded-xl shadow-sm border border-zinc-200">
           <RefreshCwIcon className="w-8 h-8 animate-spin mb-4" />
@@ -292,6 +340,7 @@ export function OpenDataDashboard({ targetTable = 's_epi1' }: OpenDataDashboardP
                 <p className="text-sm text-zinc-500 mt-1">ดูแนวโน้มความครอบคลุมรายเดือนของแต่ละวัคซีน</p>
               </div>
               
+              {viewMode === 'individual' && (
               <div className="bg-white p-2 rounded-xl border border-zinc-200">
                 <div className="px-3">
                   <label className="text-xs text-zinc-500 block mb-1">เลือกวัคซีนที่ต้องการดู</label>
@@ -306,6 +355,8 @@ export function OpenDataDashboard({ targetTable = 's_epi1' }: OpenDataDashboardP
                   </select>
                 </div>
               </div>
+              )
+            }
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">

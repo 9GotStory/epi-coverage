@@ -110,3 +110,35 @@ export function formatEpiAllVaccines(data: any[], targetTable: string = 's_epi1'
     };
   });
 }
+
+export function formatCompleteDataForChart(data: any[], filterId: string) {
+  // filter by id to match the age group
+  const filteredData = data.filter(d => d.id === filterId);
+
+  const monthlyTotals: Record<string, { target: number; result: number }> = {};
+  MONTH_KEYS.forEach(m => {
+    monthlyTotals[m] = { target: 0, result: 0 };
+  });
+
+  filteredData.forEach(row => {
+    MONTH_KEYS.forEach(m => {
+      const t = parseInt(row[`target${m}`] as string || '0', 10);
+      const r = parseInt(row[`result${m}`] as string || '0', 10);
+      monthlyTotals[m].target += isNaN(t) ? 0 : t;
+      monthlyTotals[m].result += isNaN(r) ? 0 : r;
+    });
+  });
+
+  return MONTH_KEYS.map(m => {
+    const target = monthlyTotals[m].target;
+    const result = monthlyTotals[m].result;
+    const coverage = target > 0 ? (result / target) * 100 : 0;
+    
+    return {
+      name: MONTHS_MAP[m],
+      target,
+      result,
+      coverage: parseFloat(coverage.toFixed(2))
+    };
+  });
+}

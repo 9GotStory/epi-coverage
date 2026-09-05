@@ -1,7 +1,7 @@
 import { fetchApi } from '../../../shared/lib/api';
 
 export interface OpenDataPayload {
-  tableName: 's_epi1' | 's_epi2' | 's_epi3' | 's_epi5';
+  tableName: 's_epi1' | 's_epi2' | 's_epi3' | 's_epi5' | 's_epi_complete';
   year: string; // e.g., '2569'
   province: string; // '54'
   amp?: string; // '06'
