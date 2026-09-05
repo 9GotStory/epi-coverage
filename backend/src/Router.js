@@ -26,7 +26,7 @@ function handleRequest(method, e) {
     // 4. Public Actions (ไม่ใช้ Token)
     const publicActions = [
       'setup', 'verifyToken', 'loginWithGoogle', 'createUser', 'updateLastLogin',
-      'getTargetConfig', 'getDashboardSummaries', 'getDashboardSummariesMultiYear', 'getVaccineRules', 'getAvailableYears', 'getEpiData'
+      'getTargetConfig', 'getDashboardSummaries', 'getDashboardSummariesMultiYear', 'getVaccineRules', 'getAvailableYears', 'getEpiData', 'debugBounds', 'debugGetEpiData', 'forceSyncOpenData', 'setupOpenDataTrigger', 'getOpenData'
     ];
     if (publicActions.includes(action)) {
       switch (action) {
@@ -40,7 +40,36 @@ function handleRequest(method, e) {
         case 'getDashboardSummariesMultiYear': return responseJson(getDashboardSummariesMultiYear(body.fiscalYears));
         case 'getVaccineRules': return responseJson(getVaccineRules(body.fiscalYear || e.parameter.fiscalYear, body.ageGroup || e.parameter.ageGroup));
         case 'getAvailableYears': return responseJson(getAvailableYears());
+        case 'forceSyncOpenData': return responseJson(syncOpenData());
+        case 'setupOpenDataTrigger': return responseJson(setupOpenDataTrigger());
+        case 'getOpenData': return responseJson(getCachedOpenData(body.payload.tableName, body.payload.year, body.payload.amp ? 'all' : 'all'));
+        case 'debugBounds': {
+          const ss = getSpreadsheet();
+          return responseJson({ 
+            sample: ss.getSheetByName('Epi_1_Year') ? (function() { const v = ss.getSheetByName('Epi_1_Year').getRange(1, 1, 2, 42).getValues(); const h = v[0]; const d = v[1]; const o = {}; for(let i=0; i<h.length; i++) o[h[i]] = d[i]; return o; })() : {},
+            1: ss.getSheetByName('Epi_1_Year') ? ss.getSheetByName('Epi_1_Year').getLastRow() : -1,
+            2: ss.getSheetByName('Epi_2_Year') ? ss.getSheetByName('Epi_2_Year').getLastRow() : -1,
+            3: ss.getSheetByName('Epi_3_Year') ? ss.getSheetByName('Epi_3_Year').getLastRow() : -1,
+            5: ss.getSheetByName('Epi_5_Year') ? ss.getSheetByName('Epi_5_Year').getLastRow() : -1
+          });
+        }
         case 'getEpiData': return responseJson(getEpiData(e.parameter.hoscode || body.hoscode, e.parameter.targetTable || body.targetTable, body.fiscalYear || e.parameter.fiscalYear));
+        case 'debugGetEpiData': {
+          const ss = getSpreadsheet();
+          const sheet = ss.getSheetByName('Epi_1_Year');
+          const data = sheet.getDataRange().getValues();
+          const headers = data[0];
+          let records = [];
+          for (let i = 1; i < Math.min(5, data.length); i++) {
+            records.push(arrayToObj(headers, data[i]));
+          }
+          return responseJson({ rawRecords: records });
+        }
+        case 'debugBounds': {
+          const ss = getSpreadsheet();
+          const sheet = ss.getSheetByName('Epi_1_Year');
+          return responseJson({ rows: sheet ? sheet.getLastRow() : -1, cols: sheet ? sheet.getLastColumn() : -1, name: ss.getName() });
+        }
       }
     }
 
@@ -66,7 +95,7 @@ function handleRequest(method, e) {
       case 'getAllUsers': return responseJson(getAllUsers());
       case 'upsertEpiData': return responseJson(upsertEpiData(body.chunk, body.batchId, body.adminEmail, body.fiscalYear, body.targetTable));
       case 'cleanupEpiData': return responseJson(cleanupEpiData(body.batchId, body.touchedHoscodes, body.adminEmail, body.fiscalYear, body.targetTable));
-      case 'getOpenData': return responseJson(fetchOpenDataProxy(body.payload || {}));
+
       case 'getUsers': return responseJson(getUsers());
       case 'getFacilities': return responseJson(getFacilities());
       case 'getAuditLogs': return responseJson(getAuditLogs(e.parameter.email, e.parameter.actionType));

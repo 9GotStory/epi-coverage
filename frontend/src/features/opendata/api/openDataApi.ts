@@ -15,3 +15,11 @@ export async function fetchOpenData(payload: OpenDataPayload) {
   // MOPH OpenData returns data inside a 'data' array property
   return Array.isArray(response.data) ? response.data : (response.data?.data || []);
 }
+
+export async function forceSyncOpenData() {
+  const response = await fetchApi('forceSyncOpenData', {});
+  if (response.data && response.data.error) {
+    throw new Error(response.data.error);
+  }
+  return response.data;
+}

@@ -7,6 +7,7 @@ import { VaccineGaugeGrid } from './VaccineGaugeGrid';
 import { VaccineRadarChart } from './VaccineRadarChart';
 import { RefreshCwIcon, AlertCircleIcon, DatabaseIcon, ListIcon, ShieldCheckIcon } from 'lucide-react';
 import { useAuth } from '../../../shared/contexts/AuthContext';
+import { forceSyncOpenData } from '../api/openDataApi';
 import { useTargetSettings } from '../../../shared/hooks/useTargetSettings';
 import { useAvailableYears } from '../../../shared/hooks/useAvailableYears';
 import { ExportButtonGroup } from '../../../shared/components/ExportButtonGroup';
@@ -49,6 +50,7 @@ export function OpenDataDashboard({ targetTable = 's_epi1' }: OpenDataDashboardP
   const [vaccine, setVaccine] = useState(isEpi1 ? 'bcg' : (isEpi3 ? 'je3' : (isEpi5 ? 'dtp5' : 'dtp4')));
   const [quarter, setQuarter] = useState<1|2|3|4|'all'>('all');
   const [viewMode, setViewMode] = useState<'individual' | 'complete'>('individual');
+  const [isSyncing, setIsSyncing] = useState(false);
 
   const isAdmin = user?.role === 'admin' || user?.hoscode === '00588';
   const [facilities, setFacilities] = useState<any[]>([]);
@@ -272,12 +274,24 @@ export function OpenDataDashboard({ targetTable = 's_epi1' }: OpenDataDashboardP
             <>
               <div className="h-8 w-px bg-zinc-200"></div>
               <button 
-                onClick={() => refetch()}
-                disabled={isLoading}
-                className="p-2 text-zinc-500 hover:text-primary hover:bg-zinc-50 rounded-lg transition-colors disabled:opacity-50"
-                title="รีเฟรชข้อมูล (ดึงใหม่แบบไม่ผ่าน Cache)"
+                onClick={async () => {
+                  try {
+                    setIsSyncing(true);
+                    await forceSyncOpenData();
+                    await refetch();
+                  } catch (e) {
+                    console.error("Sync failed:", e);
+                    alert("ซิงค์ข้อมูลล้มเหลว กรุณาลองใหม่");
+                  } finally {
+                    setIsSyncing(false);
+                  }
+                }}
+                disabled={isLoading || isSyncing}
+                className="p-2 text-zinc-500 hover:text-primary hover:bg-zinc-50 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2 text-sm font-medium"
+                title="ดึงข้อมูลจากกระทรวงใหม่ล่าสุด"
               >
-                <RefreshCwIcon className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`} />
+                <RefreshCwIcon className={`w-5 h-5 ${(isLoading || isSyncing) ? 'animate-spin' : ''}`} />
+                {isSyncing ? 'กำลังซิงค์ (ใช้เวลาประมาณ 10-20 วินาที)...' : 'ซิงค์ข้อมูลใหม่'}
               </button>
             </>
           )}
