@@ -86,7 +86,13 @@ function upsertEpiData(chunk, batchId, adminEmail, fiscalYear, targetTable = 'Ep
       existingData[update.rowIdx] = update.newRowData;
     });
 
-    sheet.getRange(1, 1, existingData.length, headers.length).setValues(existingData);
+    const updateRange = sheet.getRange(1, 1, existingData.length, headers.length);
+    headers.forEach((h, idx) => {
+      if (h.includes('hosc') || h.includes('hosp') || h === 'cid' || h.includes('hdc_code') || h === 'config_value') {
+        sheet.getRange(1, idx + 1, existingData.length, 1).setNumberFormat('@');
+      }
+    });
+    updateRange.setValues(existingData);
   }
 
   // Apply inserts
@@ -99,7 +105,13 @@ function upsertEpiData(chunk, batchId, adminEmail, fiscalYear, targetTable = 'Ep
       sheet.insertRowsAfter(sheet.getMaxRows(), totalReqRows - sheet.getMaxRows());
     }
 
-    sheet.getRange(startRow, 1, rowsToInsert.length, headers.length).setValues(rowsToInsert);
+    const insertRange = sheet.getRange(startRow, 1, rowsToInsert.length, headers.length);
+    headers.forEach((h, idx) => {
+      if (h.includes('hosc') || h.includes('hosp') || h === 'cid' || h.includes('hdc_code') || h === 'config_value') {
+        sheet.getRange(startRow, idx + 1, rowsToInsert.length, 1).setNumberFormat('@');
+      }
+    });
+    insertRange.setValues(rowsToInsert);
   }
 
   return { 

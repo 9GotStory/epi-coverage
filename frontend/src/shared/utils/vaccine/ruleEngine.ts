@@ -84,11 +84,43 @@ export const hasDose = (record: EpiRecord, field: keyof EpiRecord, allowOnBirth:
 /** rule นี้อนุญาตให้ฉีดตรงวันเกิดได้ไหม — อ่านตรงจาก config ไม่มีการเดา */
 const ruleAllowsOnBirth = (rule: VaccineRule): boolean => rule.target_age_months === 0;
 
-/** rule นี้มี field ใดมีวันที่ผิดปกติหรือไม่ */
-const ruleHasDataError = (record: EpiRecord, rule: VaccineRule): boolean => {
-  const check = (fields?: string[]) =>
-    (fields || []).some(f => hasFieldDataError(record, f as keyof EpiRecord, ruleAllowsOnBirth(rule)));
-  return check(rule.required_fields) || check(rule.branch_alt_fields);
+const ruleHasDataError = (record: EpiRecord, rule: VaccineRule, allRules?: VaccineRule[]): boolean => {
+  const checkField = (f: string) => hasFieldDataError(record, f as keyof EpiRecord, ruleAllowsOnBirth(rule));
+  
+  if ((rule.required_fields || []).some(checkField) || (rule.branch_alt_fields || []).some(checkField)) {
+    return true;
+  }
+
+  // Check duplicate dates within the same vaccine group
+  if (allRules && rule.vaccine_group) {
+    const groupFields = new Set<string>();
+    for (const r of allRules) {
+      if (r.vaccine_group === rule.vaccine_group) {
+        (r.required_fields || []).forEach(f => groupFields.add(f));
+        (r.branch_alt_fields || []).forEach(f => groupFields.add(f));
+      }
+    }
+    
+    const ruleFields = [...(rule.required_fields || []), ...(rule.branch_alt_fields || [])];
+    for (const f of ruleFields) {
+      const val = record[f as keyof EpiRecord];
+      if (!val || typeof val !== 'string') continue;
+      const cleanVal = val.split('T')[0].trim();
+      if (cleanVal === '' || cleanVal === '-') continue;
+
+      for (const otherF of groupFields) {
+        if (f !== otherF) {
+          const otherVal = record[otherF as keyof EpiRecord];
+          if (otherVal && typeof otherVal === 'string') {
+            const cleanOtherVal = otherVal.split('T')[0].trim();
+            if (cleanVal === cleanOtherVal) return true;
+          }
+        }
+      }
+    }
+  }
+
+  return false;
 };
 
 export const getDataErrors = (record: EpiRecord, rules: VaccineRule[]): string[] => {
@@ -96,7 +128,7 @@ export const getDataErrors = (record: EpiRecord, rules: VaccineRule[]): string[]
   if (!record.birth || !rules) return errors;
 
   for (const rule of rules) {
-    if (ruleHasDataError(record, rule)) {
+    if (ruleHasDataError(record, rule, rules)) {
       errors.push(rule.display_name);
     }
   }
@@ -182,6 +214,12 @@ export const evaluateDynamicV1 = (record: EpiRecord, rules: VaccineRule[], evalu
   let passedCount = 0;
 
   for (const rule of v1Rules) {
+    if (ruleHasDataError(record, rule, rules)) {
+      results[rule.display_name] = false;
+      missingVaccines.push(rule.display_name);
+      continue;
+    }
+
     const allowOnBirth = ruleAllowsOnBirth(rule);
     let passed = false;
 
@@ -204,10 +242,6 @@ export const evaluateDynamicV1 = (record: EpiRecord, rules: VaccineRule[], evalu
 
     results[rule.display_name] = passed;
     if (!passed) {
-      // ถ้า rule นี้มีวันที่ผิดปกติ ให้แสดงเฉพาะ data error (ผู้ใช้เห็นผ่าน getDataErrors)
-      // ไม่ผนึกซ้ำเป็น missing/pending — กันชื่อ smart-name (เช่น "Rota เข็ม 2") ไม่ตรง display_name ทำ dedup ใน UI พัง
-      if (ruleHasDataError(record, rule)) continue;
-
       const { names, isPending } = resolveSmartVaccineNames(record, rule, currentAgeMonths);
       if (isPending) {
         pendingVaccines.push(...names);
@@ -237,6 +271,11 @@ export const evaluateDynamicV2 = (record: EpiRecord, rules: VaccineRule[], evalu
   const v2Rules = rules.filter(r => r.view_type === 2 && r.is_active);
 
   for (const rule of v2Rules) {
+    if (ruleHasDataError(record, rule, rules)) {
+      missingVaccines.push(rule.display_name);
+      continue;
+    }
+
     const allowOnBirth = ruleAllowsOnBirth(rule);
     let passed = false;
     if (rule.logic_type === 'ALL') {
@@ -252,8 +291,6 @@ export const evaluateDynamicV2 = (record: EpiRecord, rules: VaccineRule[], evalu
     }
 
     if (!passed) {
-      // ถ้า rule นี้มีวันที่ผิดปกติ ให้แสดงเฉพาะ data error — เหตุผลเดียวกับ evaluateDynamicV1
-      if (ruleHasDataError(record, rule)) continue;
 
       const { names, isPending } = resolveSmartVaccineNames(record, rule, currentAgeMonths);
       if (isPending) {

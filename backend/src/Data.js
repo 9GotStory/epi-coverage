@@ -30,10 +30,12 @@ function upsertFacility(hoscode, hosname, isActive, adminEmail) {
       const existingName = data[i][headers.indexOf('hosname')];
       
       // Update
-      if (hosname) sheet.getRange(i + 1, headers.indexOf('hosname') + 1).setValue(hosname);
-      if (isActive !== undefined) sheet.getRange(i + 1, headers.indexOf('is_active') + 1).setValue(isActive);
-      
       const finalName = hosname || existingName;
+      const finalIsActive = isActive !== undefined ? isActive : data[i][headers.indexOf('is_active')];
+      
+      const updateRange = sheet.getRange(i + 1, headers.indexOf('hosname') + 1, 1, 2);
+      updateRange.setValues([[finalName, finalIsActive]]);
+      
       const statusText = isActive !== undefined ? ` (Active: ${isActive})` : '';
       
       logAction('SYSTEM', adminEmail || 'Admin', 'update_facility', `Updated facility ${hoscode} - ${finalName}${statusText}`);
@@ -144,9 +146,9 @@ function saveAiAnalysis(recordKey, targetTable, aiAnalysis, adminEmail) {
       rowBirth === targetBirth &&
       String(row[iCheckVhid] || '') === String(recordKey.check_vhid || '')
     ) {
-      sheet.getRange(i + 1, aiAnalysisCol + 1).setValue(aiAnalysis);
-      sheet.getRange(i + 1, aiAnalyzedAtCol + 1).setValue(now.toISOString());
+      sheet.getRange(i + 1, aiAnalysisCol + 1, 1, 2).setValues([[aiAnalysis, now.toISOString()]]);
       updatedCount++;
+      break;
     }
   }
   
