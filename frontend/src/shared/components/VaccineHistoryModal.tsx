@@ -51,38 +51,49 @@ export function VaccineHistoryModal({
     if (!record) return [];
     return rules.map((rule) => {
       let passed = false;
-      let dates: string[] = [];
       const fields = rule.required_fields || [];
       const altFields = rule.branch_alt_fields || [];
-      // อนุญาตให้วันที่ตรงวันเกิดได้ เฉพาะ rule ที่ config ไว้ (target_age_months = 0) — ไม่มี fallback
       const allowOnBirth = rule.target_age_months === 0;
 
       if (rule.logic_type === 'ALL') {
         passed = fields.every((field: string) => hasDose(record, field as keyof EpiRecord, allowOnBirth));
-        dates = fields.map((f: string) => (record[f as keyof EpiRecord] ? formatDateStr(String(record[f as keyof EpiRecord])) : '-'));
       } else if (rule.logic_type === 'ANY') {
         passed = fields.some((field: string) => hasDose(record, field as keyof EpiRecord, allowOnBirth));
-        dates = fields.map((f: string) => (record[f as keyof EpiRecord] ? formatDateStr(String(record[f as keyof EpiRecord])) : '-'));
       } else if (rule.logic_type === 'BRANCH') {
         const path1Passed = fields.every((field: string) => hasDose(record, field as keyof EpiRecord, allowOnBirth));
-        const path2Passed =
-          altFields.length > 0
-            ? altFields.every((field: string) => hasDose(record, field as keyof EpiRecord, allowOnBirth))
-            : false;
-
+        const path2Passed = altFields.length > 0 ? altFields.every((field: string) => hasDose(record, field as keyof EpiRecord, allowOnBirth)) : false;
         passed = path1Passed || path2Passed;
-
-        if (path2Passed && !path1Passed) {
-          dates = altFields.map((f: string) => (record[f as keyof EpiRecord] ? formatDateStr(String(record[f as keyof EpiRecord])) : '-'));
-        } else {
-          dates = fields.map((f: string) => (record[f as keyof EpiRecord] ? formatDateStr(String(record[f as keyof EpiRecord])) : '-'));
-        }
       }
 
+      // 1. DATA ERROR OVERRIDE: If ruleHasDataError finds a duplicate date, etc., it fails.
+      const dataErr = ruleHasDataError(record, rule, rules);
+      if (dataErr) passed = false;
+
+      // 2. RAW DATA DISPLAY: The user explicitly requested to see raw database columns
+      // Show every field that this rule checks (both path 1 and path 2)
+      const allRuleFields = [...fields, ...altFields];
+      const dateStringWithFields = allRuleFields.map((f: string) => {
+        const val = record[f as keyof EpiRecord];
+        // We'll show the raw YYYY-MM-DD or whatever is in the DB
+        const rawDate = val ? String(val).split('T')[0] : '-';
+        return `${f}: ${rawDate}`;
+      }).join(' | ');
+
+      // 3. CLEAN NAME DISPLAY: Strip "ขาด" from rule.display_name if present
+      let cleanName = rule.display_name;
+      if (cleanName.startsWith('ขาด ')) {
+        cleanName = cleanName.substring(4);
+      } else if (cleanName.startsWith('ขาด')) {
+        cleanName = cleanName.substring(3);
+      }
+      
+      // Append data error reason to the name if there is one
+      const finalName = dataErr ? `${cleanName} (${dataErr})` : cleanName;
+
       return {
-        name: rule.display_name,
+        name: finalName,
         passed,
-        dateString: dates.join(', '),
+        dateString: dateStringWithFields,
       };
     });
   }, [record, rules]);
