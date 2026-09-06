@@ -48,7 +48,7 @@ export function EpiDataTable<TData>({ data, columns }: EpiDataTableProps<TData>)
         className="overflow-auto max-h-[560px] min-h-[300px]"
       >
         <Table>
-          <TableHeader className="hidden md:table-header bg-[#f5f5f7]/80 sticky top-0 z-10 backdrop-blur-md shadow-[0_1px_0_#e0e0e0]">
+          <TableHeader className="hidden md:table-header-group bg-[#f5f5f7]/80 sticky top-0 z-10 backdrop-blur-md shadow-[0_1px_0_#e0e0e0]">
             {table.getHeaderGroups().map((headerGroup) => (
               <TableRow key={headerGroup.id} className="hover:bg-transparent border-b-0">
                 {headerGroup.headers.map((header) => {
