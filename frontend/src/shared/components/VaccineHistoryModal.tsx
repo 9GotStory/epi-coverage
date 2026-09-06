@@ -17,7 +17,7 @@ import {
 } from './ui/table';
 import { Button } from './ui/button';
 import { formatDateStr } from '../utils/dateUtils';
-import { hasDose, getDataErrors, getAgeInMonths } from '../utils/vaccine/ruleEngine';
+import { hasDose, getDataErrors, getAgeInMonths, ruleHasDataError } from '../utils/vaccine/ruleEngine';
 import { Bot, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
 import { fetchApi } from '../lib/api';
 

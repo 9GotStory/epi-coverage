@@ -60,7 +60,7 @@ export const hasFieldDataError = (record: EpiRecord, field: keyof EpiRecord, all
     return true;
   }
 
-  return false;
+  return null;
 };
 
 /**
@@ -84,11 +84,12 @@ export const hasDose = (record: EpiRecord, field: keyof EpiRecord, allowOnBirth:
 /** rule นี้อนุญาตให้ฉีดตรงวันเกิดได้ไหม — อ่านตรงจาก config ไม่มีการเดา */
 const ruleAllowsOnBirth = (rule: VaccineRule): boolean => rule.target_age_months === 0;
 
-const ruleHasDataError = (record: EpiRecord, rule: VaccineRule, allRules?: VaccineRule[]): boolean => {
+export const ruleHasDataError = (record: EpiRecord, rule: VaccineRule, allRules?: VaccineRule[]): string | null => {
   const checkField = (f: string) => hasFieldDataError(record, f as keyof EpiRecord, ruleAllowsOnBirth(rule));
   
-  if ((rule.required_fields || []).some(checkField) || (rule.branch_alt_fields || []).some(checkField)) {
-    return true;
+  const invalidField = [...(rule.required_fields || []), ...(rule.branch_alt_fields || [])].find(checkField);
+  if (invalidField) {
+    return 'ข้อมูลวันที่ก่อนวันเกิด';
   }
 
   // Check duplicate dates within the same vaccine group
@@ -113,7 +114,7 @@ const ruleHasDataError = (record: EpiRecord, rule: VaccineRule, allRules?: Vacci
           const otherVal = record[otherF as keyof EpiRecord];
           if (otherVal && typeof otherVal === 'string') {
             const cleanOtherVal = otherVal.split('T')[0].trim();
-            if (cleanVal === cleanOtherVal) return true;
+            if (cleanVal === cleanOtherVal) return 'วันที่ซ้ำซ้อนกับเข็มอื่น';
           }
         }
       }
@@ -128,8 +129,9 @@ export const getDataErrors = (record: EpiRecord, rules: VaccineRule[]): string[]
   if (!record.birth || !rules) return errors;
 
   for (const rule of rules) {
-    if (ruleHasDataError(record, rule, rules)) {
-      errors.push(rule.display_name);
+    const err = ruleHasDataError(record, rule, rules);
+    if (err) {
+      errors.push(`${rule.display_name} (${err})`);
     }
   }
 
@@ -214,9 +216,10 @@ export const evaluateDynamicV1 = (record: EpiRecord, rules: VaccineRule[], evalu
   let passedCount = 0;
 
   for (const rule of v1Rules) {
-    if (ruleHasDataError(record, rule, rules)) {
+    const dataError = ruleHasDataError(record, rule, rules);
+    if (dataError) {
       results[rule.display_name] = false;
-      missingVaccines.push(rule.display_name);
+      missingVaccines.push(`${rule.display_name} (${dataError})`);
       continue;
     }
 
@@ -271,8 +274,9 @@ export const evaluateDynamicV2 = (record: EpiRecord, rules: VaccineRule[], evalu
   const v2Rules = rules.filter(r => r.view_type === 2 && r.is_active);
 
   for (const rule of v2Rules) {
-    if (ruleHasDataError(record, rule, rules)) {
-      missingVaccines.push(rule.display_name);
+    const dataError = ruleHasDataError(record, rule, rules);
+    if (dataError) {
+      missingVaccines.push(`${rule.display_name} (${dataError})`);
       continue;
     }
 
