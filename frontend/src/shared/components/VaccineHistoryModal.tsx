@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { EpiRecord } from '../types';
 import type { VaccineRule } from '../utils/vaccine/ruleEngine';
 import {

@@ -60,7 +60,7 @@ export const hasFieldDataError = (record: EpiRecord, field: keyof EpiRecord, all
     return true;
   }
 
-  return null;
+  return false;
 };
 
 /**
@@ -121,7 +121,7 @@ export const ruleHasDataError = (record: EpiRecord, rule: VaccineRule, allRules?
     }
   }
 
-  return false;
+  return null;
 };
 
 export const getDataErrors = (record: EpiRecord, rules: VaccineRule[]): string[] => {
