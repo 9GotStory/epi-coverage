@@ -312,6 +312,7 @@ export function View1Individual5Yr({ fiscalYear, quarter, data, isLoading, error
           onClose={() => setIsModalOpen(false)}
           record={selectedPatient}
           rules={rules.filter(r => r.view_type === 1 && r.is_active)}
+          allRules={rules}
         />
         
       {/* Header section */}

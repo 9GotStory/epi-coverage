@@ -26,6 +26,7 @@ interface VaccineHistoryModalProps {
   onClose: () => void;
   record: EpiRecord | null;
   rules: VaccineRule[];
+  allRules?: VaccineRule[];
 }
 
 export function VaccineHistoryModal({
@@ -33,6 +34,7 @@ export function VaccineHistoryModal({
   onClose,
   record,
   rules,
+  allRules = rules,
 }: VaccineHistoryModalProps) {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [localAiAnalysis, setLocalAiAnalysis] = useState<string | null>(null);
@@ -66,7 +68,7 @@ export function VaccineHistoryModal({
       }
 
       // 1. DATA ERROR OVERRIDE: If ruleHasDataError finds a duplicate date, etc., it fails.
-      const dataErr = ruleHasDataError(record, rule, rules);
+      const dataErr = ruleHasDataError(record, rule, allRules);
       if (dataErr) passed = false;
 
       // 2. RAW DATA DISPLAY: The user explicitly requested to see raw database columns
@@ -100,7 +102,7 @@ export function VaccineHistoryModal({
 
   if (!record) return null;
 
-  const dataErrors = getDataErrors(record, rules);
+  const dataErrors = getDataErrors(record, allRules);
   
   // A record is fully immunized only if all local rules pass, no data errors exist,
   // AND the HDC result (if any) does not explicitly say "ไม่ผ่าน"
