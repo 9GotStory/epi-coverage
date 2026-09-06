@@ -38,11 +38,14 @@ export function VaccineHistoryModal({
   const [localAiAnalysis, setLocalAiAnalysis] = useState<string | null>(null);
   const [localAiAnalyzedAt, setLocalAiAnalyzedAt] = useState<string | null>(null);
 
-  // Clear local analysis when record changes
-  React.useEffect(() => {
+  const [prevRecord, setPrevRecord] = useState<EpiRecord | null>(null);
+
+  // Better: Adjust the state while rendering (React Best Practice: "You Might Not Need an Effect")
+  if (record?.cid !== prevRecord?.cid) {
+    setPrevRecord(record);
     setLocalAiAnalysis(null);
     setLocalAiAnalyzedAt(null);
-  }, [record]);
+  }
 
   const rows = useMemo(() => {
     if (!record) return [];
