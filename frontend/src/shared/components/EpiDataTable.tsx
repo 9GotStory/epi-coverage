@@ -44,7 +44,7 @@ export function EpiDataTable<TData>({ data, columns }: EpiDataTableProps<TData>)
     <div className="border border-[#e0e0e0] rounded-xl overflow-hidden bg-white">
       <div 
         ref={tableContainerRef}
-        className="overflow-auto max-h-[560px]"
+        className="overflow-auto max-h-[560px] min-h-[300px]"
       >
         <Table>
           <TableHeader className="hidden md:table-header bg-[#f5f5f7]/80 sticky top-0 z-10 backdrop-blur-md shadow-[0_1px_0_#e0e0e0]">
@@ -95,7 +95,7 @@ export function EpiDataTable<TData>({ data, columns }: EpiDataTableProps<TData>)
                       {row.getVisibleCells().map((cell) => (
                         <TableCell
                           key={cell.id}
-                          className="block md:table-cell py-2 md:py-3.5 px-0 md:px-4 text-[14px] text-[#1d1d1f] align-top tracking-[-0.224px] border-b border-[#f0f0f0] md:border-b-0 last:border-b-0 flex justify-between items-center md:block"
+                          className="flex md:table-cell py-2 md:py-3.5 px-0 md:px-4 text-[14px] text-[#1d1d1f] align-top tracking-[-0.224px] border-b border-[#f0f0f0] md:border-b-0 last:border-b-0 justify-between items-center md:justify-normal md:items-start"
                         >
                           <span className="md:hidden font-medium text-[#7a7a7a] text-[12px] mr-4">
                             {typeof cell.column.columnDef.header === 'string' 
