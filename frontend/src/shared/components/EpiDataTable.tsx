@@ -32,6 +32,7 @@ export function EpiDataTable<TData>({ data, columns }: EpiDataTableProps<TData>)
     getScrollElement: () => tableContainerRef.current,
     estimateSize: () => 56, // estimated row height
     overscan: 5,
+    initialRect: { width: 800, height: 600 },
   });
 
   const virtualItems = rowVirtualizer.getVirtualItems();
