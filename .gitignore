@@ -129,3 +129,6 @@ Thumbs.db
 # Data files / PDFs (Exclude PII data)
 *.xlsx
 *.pdf
+
+# Local HDC source records contain personal data
+EPI-*YEAR.json

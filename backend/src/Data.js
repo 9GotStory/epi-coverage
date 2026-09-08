@@ -93,7 +93,7 @@ function getEpiData(hoscode, targetTable = 'Epi_1_Year', fiscalYear = null) {
     // 3. กรองตามปีงบประมาณ (fiscalYear) ถ้ามีการระบุ
     const isHoscodeMatch = hoscode === '00588' || obj.hoscode === hoscode;
     const isActiveMatch = String(obj.is_active).toUpperCase() !== 'FALSE';
-    const isFiscalYearMatch = !fiscalYear || !obj.fiscal_year || String(obj.fiscal_year) === String(fiscalYear);
+    const isFiscalYearMatch = !fiscalYear || String(obj.fiscal_year) === String(fiscalYear);
 
     if (isHoscodeMatch && isActiveMatch && isFiscalYearMatch) {
       records.push(obj);
@@ -322,4 +322,13 @@ function getAvailableYears() {
   }
   
   return Array.from(years).sort((a, b) => a - b);
+}
+
+/** Facility access is derived from the authenticated account. */
+function getAuthorizedEpiData(auth, requestedHoscode, targetTable, fiscalYear) {
+  if (!getEpiSchemas()[targetTable]) throw new Error('Unknown EPI table');
+  const district = ['admin', 'superadmin'].includes(auth.role) || auth.hoscode === '00588';
+  if (!district && !auth.hoscode) throw new Error('No facility assigned');
+  const scope = district ? (requestedHoscode || '00588') : auth.hoscode;
+  return getEpiData(scope, targetTable, fiscalYear);
 }

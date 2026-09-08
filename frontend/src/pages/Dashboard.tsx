@@ -90,16 +90,17 @@ const AgeGroupSection = memo(function AgeGroupSection({
               </div>
               <p className="text-xs text-zinc-500 mt-1">ได้รับวัคซีนครบถ้วนตามเกณฑ์รายวัคซีน</p>
             </div>
-            <span className={`inline-flex items-center px-2 py-1 rounded text-[10px] font-bold tracking-wide uppercase ${v1TargetMet ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-              {v1TargetMet ? 'PASS' : 'FAIL'}
+            <span className={`inline-flex items-center px-2 py-1 rounded text-[10px] font-bold tracking-wide uppercase ${summary.view1TotalDoses === 0 ? 'bg-zinc-100 text-zinc-600' : v1TargetMet ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+              {summary.view1TotalDoses === 0 ? 'ยังประเมินไม่ได้' : v1TargetMet ? 'PASS' : 'FAIL'}
             </span>
           </div>
 
           <div className="mt-4 flex items-end justify-between">
             <div>
-              <p className="text-3xl font-bold text-zinc-900 tracking-tight">{summary.view1Coverage.toFixed(2)}<span className="text-xl text-zinc-400 font-medium ml-0.5">%</span></p>
+              <p className="text-3xl font-bold text-zinc-900 tracking-tight">{summary.view1TotalDoses === 0 ? '—' : summary.view1Coverage.toFixed(2)}<span className="text-xl text-zinc-400 font-medium ml-0.5">%</span></p>
               <p className="text-sm text-zinc-500 mt-1">
                 ได้รับแล้ว <strong className="text-zinc-800">{summary.view1PassedDoses.toLocaleString()}</strong> จาก <strong className="text-zinc-800">{summary.view1TotalDoses.toLocaleString()}</strong> โดส
+                {!!summary.view1UnknownDoses && <span className="block">ข้อมูลไม่พอประเมิน {summary.view1UnknownDoses.toLocaleString()} รายการ (ไม่นับในตัวหาร)</span>}
               </p>
             </div>
             <div className="text-right">

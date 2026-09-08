@@ -40,6 +40,15 @@ export interface EpiRecord {
   birth: Date | string;
   check_vhid?: string;
   
+  addr?: string | null;
+  check_typearea?: string | null;
+  nation?: string | null;
+  discharge?: string | null;
+  source_columns?: string;
+  [field: `${string}_hospcode`]: string | null | undefined;
+  [field: `${string}_input_hosp`]: string | null | undefined;
+  [field: `g_${string}`]: string | number | null | undefined;
+
   // Vaccines
   bcg_date?: string;
   bcg_hospcode?: string;

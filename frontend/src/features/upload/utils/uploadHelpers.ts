@@ -53,22 +53,24 @@ export const cleanData = (data: any[]): any[] => {
     const cleanRow: any = {};
     Object.keys(row).forEach(key => {
       let val = row[key];
+      if (typeof val === 'string') val = val.trim();
       if (val === '<NA>' || val === 'NA' || val === '' || val === undefined) {
         val = null;
       }
       
       // Force string and pad for specific columns
-      let normalizedKey = key.toLowerCase();
+      let normalizedKey = key.trim().toLowerCase();
       // Normalize hosp or hospcode to hoscode so Zod validation and Backend can rely on it
+      if (normalizedKey === 'heck_typearea') normalizedKey = 'check_typearea';
       if (normalizedKey === 'hosp' || normalizedKey === 'hospcode') {
         normalizedKey = 'hoscode';
       }
 
-      if (val !== null && ['hoscode', 'pid', 'cid', 'check_vhid'].includes(normalizedKey)) {
+      if (val !== null && (['hoscode', 'pid', 'cid', 'check_vhid', 'addr', 'check_typearea', 'nation', 'discharge'].includes(normalizedKey) || normalizedKey.endsWith('_hospcode') || normalizedKey.endsWith('_input_hosp'))) {
         val = String(val).trim();
         
         // Preserve leading zeros in case Excel parsed them as pure numbers
-        if (normalizedKey === 'hoscode') {
+        if ((normalizedKey === 'hoscode' || normalizedKey.endsWith('_hospcode') || normalizedKey.endsWith('_input_hosp')) && /^\d+$/.test(val)) {
           val = val.padStart(5, '0');
         } else if (normalizedKey === 'cid') {
           val = val.padStart(13, '0');
@@ -76,8 +78,10 @@ export const cleanData = (data: any[]): any[] => {
       }
       
       // Parse dates
-      if (val !== null && (normalizedKey.includes('date') || normalizedKey === 'birth')) {
-        val = parseDate(val);
+      if (val !== null && (normalizedKey.endsWith('_date') || normalizedKey === 'birth')) {
+        const parsed = parseDate(val);
+        if (parsed === null) throw new Error(`วันที่ไม่ถูกต้อง: ${normalizedKey}`);
+        val = parsed;
       }
       
       cleanRow[normalizedKey] = val;
@@ -129,8 +133,8 @@ export const getAgeString = (birthDateString: string): string => {
 
 
 export const uploadRowSchema = z.object({
-  hoscode: z.string().min(5, "ต้องมีรหัสสถานบริการ 5 หลัก"),
-  cid: z.string().min(13, "ต้องมีเลขบัตรประชาชน 13 หลัก"),
+  hoscode: z.string().regex(/^\d{5}$/, "ต้องมีรหัสสถานบริการ 5 หลัก"),
+  cid: z.string().regex(/^[\d*]{13}$/, "CID ต้องมี 13 ตำแหน่ง (รองรับ * จาก HDC)"),
   birth: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "ต้องมีวันเกิดในรูปแบบ YYYY-MM-DD"),
   name: z.string().min(1, "ต้องมีชื่อ"),
   lname: z.string().min(1, "ต้องมีนามสกุล")

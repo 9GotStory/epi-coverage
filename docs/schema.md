@@ -2,6 +2,8 @@
 
 ระบบใช้ Google Sheets เป็นฐานข้อมูลหลัก โดยแบ่งออกเป็นหลาย Sheet ดังนี้:
 
+คอลัมน์ HDC เพิ่มเติมทุกอายุ, source_columns, epi_import_batches และคีย์อัปเดตปัจจุบันดู [HDC column upgrade](hdc-column-upgrade.md) ทุก `*_date` มีคู่ `*_hospcode` และ `*_input_hosp` เก็บเป็นข้อความ รวม `addr`, `check_typearea`, `nation`, `discharge`, `g_*` ด้วย
+
 ## 1. `Users` (จัดการผู้ใช้งาน)
 | Column | Type | Description |
 | :--- | :--- | :--- |
@@ -22,18 +24,18 @@
 | `hoscode` | String | รหัส รพ.สต. ที่ดูแล (Text) |
 | `hosname` | String | ชื่อ รพ.สต. |
 | `pid` | String | รหัสบุคคล (PID) จากฐานข้อมูล HDC/JHCIS |
-| `cid` | String | รหัสบัตร ปชช. (Masked) ใช้ร่วมเป็น Composite Key |
+| `cid` | String | CID ต้นทาง อาจมี * ปิดบังและซ้ำกัน จับคู่หลักด้วย PID ในหน่วยบริการและปี |
 | `name` | String | ชื่อผู้ป่วย (Masked) |
 | `lname` | String | นามสกุล (Masked) |
 | `sex` | String | เพศ |
-| `birth` | Date | วันเกิด (YYYY-MM-DD) สำหรับคำนวณอายุและยืนยันตัวตน |
+| `birth` | Date | วันเกิด (YYYY-MM-DD) สำหรับคำนวณอายุ ไม่ใช้เป็นคีย์อัปเดต |
 | `check_vhid` | String | รหัสบ้าน (ถ้ามี) |
 | `bcg_date`, `bcg_hospcode` | Date, String | วันที่ฉีด BCG และรหัสสถานพยาบาลที่ฉีด |
 | `hbv1_date` ... `hbv4_date` | Date | วันที่ฉีด HBV 1-4 |
 | `dtp1_date` ... `dtp3_date` | Date | วันที่ฉีด DTP 1-3 |
 | `hib1_date` ... `hib3_date` | Date | วันที่ฉีด Hib 1-3 |
 | `ipv1_date`, `ipv2_date` | Date | วันที่ฉีด IPV 1-2 |
-| `opv1_date` ... `opv3_date` | Date | วันที่หยอด OPV (`opv1_date` = 2 เดือน, `opv2_date` = 4 เดือน, `opv3_date` = 6 เดือน ตามลำดับเข็ม) |
+| `opv1_date` ... `opv3_date` | Date | วันที่หยอด OPV ต้นทาง; mapping OPV 6 เดือนยังรอยืนยัน ดูเอกสาร upgrade |
 | `mmr1_date` | Date | วันที่ฉีด MMR 1 |
 | `rv21_date` ... `rv33_date` | Date | วันที่ฉีด Rota (`rv21, rv22` = ชนิด 2 เข็ม หรือ `rv31, rv32, rv33` = ชนิด 3 เข็ม) |
 | `pcv1_date` ... `pcv3_date` | Date | วันที่ฉีด PCV 1-3 |
@@ -41,7 +43,7 @@
 | `fiscal_year` | String | ปีงบประมาณของข้อมูลชุดนี้ (ระบุตอนอัปโหลด เพื่อกำหนด Scope) |
 | `last_seen_batch` | String | รหัสอ้างอิงรอบการอัปโหลดล่าสุด (ใช้ตรวจสอบเด็กที่ย้ายออกโดยสร้าง Soft Delete) |
 | `is_active` | Boolean | สถานะยังอยู่ในพื้นที่หรือไม่ (TRUE/FALSE) |
-| `ai_analysis` | String | ผลการวิเคราะห์จาก AI (Gemini) สำหรับเคสที่มีปัญหา (ล้างข้อมูลอัตโนมัติเมื่ออัปโหลดไฟล์ใหม่) |
+| `ai_analysis` | String | ผลการวิเคราะห์จาก AI (Gemini) สำหรับเคสที่มีปัญหา (รักษาค่าเดิมเมื่ออัปโหลด แต่ไม่ถือว่าเป็นผลวิเคราะห์ใหม่) |
 | `ai_analyzed_at` | DateTime | วันเวลาที่ AI ทำการประมวลผล |
 
 ## 3. `Epi_2_Year` (ข้อมูลวัคซีนเด็ก 2 ปี)
@@ -117,3 +119,7 @@
 - กฎเก่าที่คอลัมน์ว่างใช้ค่าเริ่มต้นจากคอลัมน์เข็ม: เปรียบเทียบในชุดเดียวกันและอนุญาตวันเกิดเมื่อ target_age_months = 0 เมื่อบันทึกจากหน้าแก้ไขจะเก็บค่ารายคู่ชัดเจน; array ว่างหมายถึงปิดการตรวจคู่ ไม่ย้อนใช้ค่าเริ่มต้น
 - รูปแบบวันที่ที่ไม่ใช่วันที่จริงยังแจ้งเสมอ; ก่อน/ตรงวันเกิดและคู่วันซ้ำ/ลำดับใช้ค่าของแต่ละ rule
 - การแก้ต้องส่งผ่าน endpoint ที่ตรวจสิทธิ์ admin เดิม ไม่ต้อง reset หรือ seed กฎเพื่อเพิ่มคอลัมน์นี้
+
+## `Epi_5_Year`
+
+เก็บข้อมูลพื้นฐานและวัคซีนเช่นกลุ่ม 3 ปี เพิ่ม `dtp5_date`, `opv5_date`, `pcv4_date` พร้อม `*_hospcode` และ `*_input_hosp` ของทุกเข็ม รองรับ `je3_date` แม้ไฟล์ตัวอย่างไม่มีคอลัมน์นี้ มุมมองที่ 1 แสดงเฉพาะ DTP/OPV 4 ปี

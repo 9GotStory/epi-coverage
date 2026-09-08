@@ -14,7 +14,7 @@ describe('HDC source data', () => {
     const rows = getHdcVaccineRows(record);
     expect(rows).toHaveLength(3);
     expect(rows.find(row => row.field === 'j12_date')).toEqual({
-      field: 'j12_date', name: 'LAJE เข็ม 2', date: '2024-01-23', facility: '—',
+      id: 'j12_date', inputFacility: '—', mappingNote: undefined, field: 'j12_date', name: 'LAJE เข็ม 2', date: '2024-01-23', facility: '—',
     });
     expect(rows.find(row => row.field === 'je3_date')?.date).toBe('—');
     expect(rows.filter(row => row.date === '2024-01-23')).toHaveLength(2);
@@ -30,13 +30,13 @@ describe('HDC source data', () => {
   it('includes new vaccine columns and their facility codes without a rule', () => {
     const rows = getHdcVaccineRows({ ...record, future1_date: '2030-01-01', future1_hospcode: '00002' } as EpiRecord);
     expect(rows.find(row => row.field === 'future1_date')).toEqual({
-      field: 'future1_date', name: 'future1_date', date: '2030-01-01', facility: '00002',
+      id: 'future1_date', inputFacility: '—', mappingNote: undefined, field: 'future1_date', name: 'future1_date', date: '2030-01-01', facility: '00002',
     });
   });
 
   it('exports every source dose column across records with source results and leading zeros', () => {
     const exported = getHdcExportRows([record, { ...record, pcv4_date: '2026-01-01', bcg_hospcode: '00002' }]);
-    expect(exported[0]).toMatchObject({ CID: '0000000000000', 'ผลจาก HDC': 'ไม่ผ่าน', j12_date: '2024-01-23', je3_date: '—', pcv4_date: '—' });
+    expect(exported[0]).toMatchObject({ CID: '0000000000000', 'ผลจาก HDC': 'ไม่ผ่าน', j12_date: '2024-01-23', je3_date: '—', pcv4_date: 'ไม่มีคอลัมน์ต้นทาง' });
     expect(exported[1]).toMatchObject({ pcv4_date: '2026-01-01', bcg_hospcode: '00002' });
     expect(exported[0]).not.toHaveProperty('ai_analysis');
     expect(record.j12_date).toBe('2024-01-23');
@@ -46,6 +46,8 @@ describe('HDC source data', () => {
     expect(hdcValue(null)).toBe('—');
     expect(hdcValue('')).toBe('—');
     expect(hdcValue('ผ่านบางรายการ')).toBe('ผ่านบางรายการ');
-    expect(getHdcVaccineRows({ ...record, j11_date: undefined, j12_date: '', je3_date: null }).every(row => row.date === '—')).toBe(true);
+    const rows = getHdcVaccineRows({ ...record, j11_date: undefined, j12_date: '', je3_date: null });
+    expect(rows.find(row => row.field === 'j11_date')?.date).toContain('ไม่มีคอลัมน์');
+    expect(rows.filter(row => row.field !== 'j11_date').every(row => row.date === '—')).toBe(true);
   });
 });

@@ -4,7 +4,7 @@
  * ──────────────────────────────────────────────────────────
  */
 function getEpiSchemas() {
-  return {
+  const schemas = {
     'Epi_1_Year': [
       'hoscode', 'hosname', 'pid', 'cid', 'name', 'lname', 'sex', 'birth', 'check_vhid',
       'bcg_date', 'bcg_hospcode', 'hbv1_date', 'hbv2_date', 'hbv3_date', 'hbv4_date',
@@ -41,6 +41,15 @@ function getEpiSchemas() {
       'result', 'batch_id', 'fiscal_year', 'last_seen_batch', 'is_active', 'ai_analysis', 'ai_analyzed_at'
     ]
   };
+  const sourceFields = ['addr', 'check_typearea', 'nation', 'discharge',
+    'g_hbv', 'g_dtp', 'g_hib', 'g_opv', 'g_mmr', 'g_rv', 'g_pcv'];
+  Object.keys(schemas).forEach(table => {
+    const doseFields = schemas[table].filter(field => field.endsWith('_date'));
+    schemas[table] = [...new Set([...schemas[table], ...sourceFields,
+      ...doseFields.flatMap(field => [field.replace('_date', '_hospcode'), field.replace('_date', '_input_hosp')]),
+      'source_columns'])];
+  });
+  return schemas;
 }
 
 /**

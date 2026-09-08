@@ -10,6 +10,7 @@ import { useUploadManager } from '../hooks/useUploadManager';
 
 export function UploadDashboard() {
   const {
+    importMode, setImportMode, sourceColumns,
     file,
     previewData,
     totalRows,
@@ -33,8 +34,10 @@ export function UploadDashboard() {
     onDrop: handleDrop,
     accept: {
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
-      'application/vnd.ms-excel': ['.xls']
+      'application/vnd.ms-excel': ['.xls'],
+      'application/json': ['.json']
     },
+    disabled: isUploading || status === 'parsing',
     maxFiles: 1
   });
 
@@ -48,7 +51,7 @@ export function UploadDashboard() {
             นำเข้าข้อมูลวัคซีน (EPI)
           </p>
           <p className="text-[17px] font-normal leading-[1.47] tracking-[-0.374px] text-[#7a7a7a]">
-            อัปโหลดไฟล์ Excel (.xlsx, .xls) ที่ส่งออกจากระบบ HDC เพื่อปรับปรุงฐานข้อมูลความครอบคลุมการได้รับวัคซีน
+            อัปโหลดไฟล์ Excel / JSON (.xlsx, .xls, .json) ที่ส่งออกจากระบบ HDC เพื่อปรับปรุงฐานข้อมูลความครอบคลุมการได้รับวัคซีน
           </p>
         </div>
 
@@ -56,7 +59,7 @@ export function UploadDashboard() {
           <div>
             <h3 className="text-[17px] font-semibold tracking-[-0.374px] text-[#1d1d1f]">1. ระบุปีงบประมาณ (บังคับ)</h3>
             <p className="text-[14px] font-normal tracking-[-0.224px] text-[#7a7a7a] mt-1">
-              โปรดเลือกปีงบประมาณของไฟล์ Excel นี้ก่อนทำการอัปโหลด 
+              โปรดเลือกปีงบประมาณของไฟล์นี้ก่อนทำการอัปโหลด
               (ระบบจะจำกัดขอบเขตการอัปเดตให้อยู่แค่ในโควตาปีนี้เท่านั้น)
             </p>
           </div>
@@ -126,6 +129,18 @@ export function UploadDashboard() {
           </div>
         </div>
 
+        <div className="space-y-2">
+          <label htmlFor="import-mode" className="font-semibold">วิธีปรับปรุงข้อมูล</label>
+          <select id="import-mode" value={importMode} disabled={isUploading || status === 'success'} onChange={event => setImportMode(event.target.value as 'merge' | 'sync')} className="block w-full border rounded-md p-3">
+            <option value="merge">เติม / อัปเดตข้อมูล — คงรายชื่อที่ไม่ได้ส่งมา</option>
+            <option value="sync">ซิงค์ไฟล์เต็ม — ปิดสถานะรายชื่อที่หายจากไฟล์ในหน่วยบริการและปีนี้</option>
+          </select>
+          <p className="text-sm text-muted-foreground">คอลัมน์ที่ไฟล์ไม่มีจะคงค่าเดิม ส่วนเซลล์ว่างในคอลัมน์ที่ส่งมาจะล้างค่านั้น</p>
+          {importMode === 'sync' && <p role="status">ใช้ไฟล์รายชื่อครบทุกคนของหน่วยบริการที่อยู่ในไฟล์เท่านั้น</p>}
+          {sourceColumns.length > 0 && <details className="text-sm"><summary>ตรวจคอลัมน์ก่อนนำเข้า</summary><p className="break-words">{sourceColumns.join(', ')}</p></details>}
+          {sourceColumns.length > 0 && <p role="status">พบ {sourceColumns.length} คอลัมน์ · {['addr', 'check_typearea'].filter(field => !sourceColumns.includes(field)).map(field => `ไม่มี ${field}`).join(' · ')}</p>}
+        </div>
+
       {status === 'error' && (
         <Alert variant="destructive" className="bg-[#fff0f0] border-0 rounded-[16px] animate-in fade-in slide-in-from-top-2 duration-300">
           <AlertTriangle className="h-5 w-5 text-[#ff3b30] mt-0.5" />
@@ -150,7 +165,7 @@ export function UploadDashboard() {
                 <span className="text-[28px] font-semibold text-[#1d1d1f] mt-1">{results.updated.toLocaleString()}</span>
               </div>
               <div className="bg-white p-4 rounded-[16px] border border-[#e0e0e0] flex flex-col">
-                <span className="text-[12px] text-[#7a7a7a] font-medium uppercase tracking-[0.231px]">ลบ/ซ่อนข้อมูลเก่า</span>
+                <span className="text-[12px] text-[#7a7a7a] font-medium uppercase tracking-[0.231px]">ปิดสถานะจากการซิงค์</span>
                 <span className="text-[28px] font-semibold text-[#1d1d1f] mt-1">{results.deactivated.toLocaleString()}</span>
               </div>
             </div>
@@ -160,7 +175,7 @@ export function UploadDashboard() {
 
       {(!file || status === 'success') && (
         <div className="space-y-3">
-          <h3 className="text-[17px] font-semibold tracking-[-0.374px] text-[#1d1d1f] ml-2">3. อัปโหลดไฟล์ Excel</h3>
+          <h3 className="text-[17px] font-semibold tracking-[-0.374px] text-[#1d1d1f] ml-2">3. อัปโหลดไฟล์ HDC</h3>
           <div
             {...getRootProps()}
             className={`border border-[#e0e0e0] rounded-[32px] p-16 text-center cursor-pointer transition-all duration-300 ease-in-out
@@ -171,10 +186,10 @@ export function UploadDashboard() {
           <input {...getInputProps()} />
           <UploadCloud className={`mx-auto h-16 w-16 mb-6 transition-colors duration-300 ${isDragActive ? 'text-[#0066cc] animate-bounce' : 'text-[#cccccc]'}`} />
           <h3 className="text-[21px] font-semibold text-[#1d1d1f] mb-2 tracking-[0.231px]">
-            ลากไฟล์ Excel มาวางที่นี่
+            ลากไฟล์ Excel หรือ JSON มาวางที่นี่
           </h3>
           <p className="text-[17px] font-normal text-[#7a7a7a] tracking-[-0.374px]">
-            หรือคลิกเพื่อเลือกไฟล์ (รองรับเฉพาะ .xlsx หรือ .xls)
+            หรือคลิกเพื่อเลือกไฟล์ (รองรับ .xlsx, .xls และ .json)
           </p>
           </div>
         </div>
@@ -237,7 +252,8 @@ export function UploadDashboard() {
                         <th className="px-4 py-3 whitespace-nowrap">เพศ</th>
                         <th className="px-4 py-3 whitespace-nowrap">วันเกิด</th>
                         <th className="px-4 py-3 whitespace-nowrap">ผลประเมิน</th>
-                        <th className="px-4 py-3 whitespace-nowrap">บ้านเลขที่</th>
+                        <th className="px-4 py-3 whitespace-nowrap">ที่อยู่</th>
+                        <th className="px-4 py-3 whitespace-nowrap">ประเภทพื้นที่</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[#f0f0f0] bg-white">
@@ -263,8 +279,9 @@ export function UploadDashboard() {
                             ) : '-'}
                           </td>
                           <td className="px-4 py-3 text-[12px] text-[#7a7a7a] max-w-[200px] truncate">
-                            {row.vhid || row.house_id}
+                            {row.addr || '—'}
                           </td>
+                          <td className="px-4 py-3">{row.check_typearea || '—'}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -274,7 +291,7 @@ export function UploadDashboard() {
                 <div className="mt-6 flex justify-end">
                   <ConfirmModal
                     title="ยืนยันการนำเข้าข้อมูล"
-                    description={`คุณกำลังจะนำเข้าข้อมูลจำนวน ${totalRows.toLocaleString()} รายการ ข้อมูลเก่าในปีงบประมาณเดียวกันจะถูกอัปเดต ต้องการดำเนินการต่อหรือไม่?`}
+                    description={`คุณกำลังจะนำเข้าข้อมูลจำนวน ${totalRows.toLocaleString()} รายการ ${importMode === 'sync' ? 'ไฟล์นี้ต้องมีรายชื่อครบทุกคนของหน่วยบริการที่ส่งมา รายชื่อที่หายไปจะถูกปิดสถานะในปีนี้' : 'อัปเดตเฉพาะรายชื่อที่ส่งมาและคงรายชื่ออื่นไว้'} คอลัมน์ที่ส่งค่าว่างจะล้างค่าเดิม ต้องการดำเนินการต่อหรือไม่?`}
                     onConfirm={handleUpload}
                     confirmText="เริ่มนำเข้า"
                   >

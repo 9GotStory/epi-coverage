@@ -134,6 +134,7 @@ export function AgeGroupExpandedView({ summary, targetView1, targetView2, fiscal
         </div>
 
         <TabsContent value="view1" className="space-y-8 outline-none">
+          {!!summary.view1UnknownDoses && <p role="status" className="text-sm text-muted-foreground">ข้อมูลไม่พอประเมิน {summary.view1UnknownDoses.toLocaleString()} รายการ ไม่นับในตัวหารความครอบคลุม</p>}
           {/* View 1 Breakdown */}
           <div>
             <div className="mb-4">
@@ -152,6 +153,7 @@ export function AgeGroupExpandedView({ summary, targetView1, targetView2, fiscal
                 {summary.view1Breakdown.map(item => {
                   const specificTarget = getSpecificTarget(item.name, targetView1, 1) ?? 0;
                   const isPassed = item.coverage >= specificTarget;
+                  if (item.total === 0) return <div key={item.name} className="flex justify-between gap-3 text-xs py-1.5 border-b"><span>{item.name}</span><span className="text-muted-foreground">ยังประเมินไม่ได้</span></div>;
                   return (
                     <div key={item.name} className={`flex justify-between items-center text-xs py-1.5 border-b ${isPassed ? 'border-green-100/30' : 'border-red-100/30'} last:border-0`}>
                       <span className="text-zinc-700 truncate font-medium mr-2" title={item.name}>{item.name}</span>
@@ -192,11 +194,11 @@ export function AgeGroupExpandedView({ summary, targetView1, targetView2, fiscal
             <div className="mb-4">
               <h4 className="text-sm font-bold text-emerald-800 flex items-center gap-2">
                 <div className="w-1.5 h-4 bg-emerald-500 rounded-full" />
-                สัดส่วนผู้ที่ผ่านเกณฑ์แยกตามหมวด (View 2)
+                สัดส่วนตามกฎประเมินภายใน (View 2)
               </h4>
               <p className="text-[11px] text-zinc-500 mt-1.5 ml-3.5 leading-relaxed bg-emerald-50/50 p-2 rounded-md border border-emerald-100/50">
                 <strong className="text-emerald-700 font-semibold mr-1">คำชี้แจง:</strong> 
-                ภาพรวม Fully Immunized คิดแบบ <strong>"ต้องผ่านทุกหมวด" (All or Nothing)</strong> 
+                สรุปนี้คำนวณจากกฎภายในระบบ ส่วนหน้ารายบุคคลมุมมองที่ 2 แสดงผล HDC ต้นทาง ภาพรวม Fully Immunized คิดแบบ <strong>"ต้องผ่านทุกหมวด" (All or Nothing)</strong>
                 หากตกเกณฑ์แค่วัคซีนหมวดเดียวจะถือว่าตกภาพรวมทันที (เปอร์เซ็นต์รวมจึงไม่ใช่การนำกราฟแท่งมาหาค่าเฉลี่ย)
               </p>
             </div>

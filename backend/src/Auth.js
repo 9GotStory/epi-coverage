@@ -49,7 +49,7 @@ function validateTokenAndGetRole(token) {
     const rowExpiresAt = new Date(sessionData[i][5]); // ExpiresAt col
     
     if (rowSessionId === token) {
-      if (now > rowExpiresAt) {
+      if (isNaN(rowExpiresAt.getTime()) || now >= rowExpiresAt) {
         return { valid: false, error: "Token expired" };
       }
       userId = sessionData[i][1]; // UserId (System ID) col
@@ -73,17 +73,13 @@ function validateTokenAndGetRole(token) {
   for (let i = 1; i < userData.length; i++) {
     if (userData[i][idCol] === userId) {
       const status = userData[i][statusCol];
-      if (status !== 'approved' && status !== 'admin') {
-         // Some admins might have status 'approved' and role 'admin', or just check role
-         // Assuming if they are rejected or pending, they shouldn't access most things
-         if (status === 'rejected' || status === 'pending') {
-           return { valid: false, error: `User status is ${status}` };
-         }
-      }
+      if (status !== 'approved' && status !== 'admin') return { valid: false, error: 'Account is not approved' };
       return { 
         valid: true, 
         userId: userId, 
-        role: userData[i][roleCol] 
+        role: userData[i][roleCol],
+        hoscode: String(userData[i][headers.indexOf('hoscode')] || ''),
+        email: String(userData[i][headers.indexOf('email')] || '')
       };
     }
   }

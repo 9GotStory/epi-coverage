@@ -1,8 +1,13 @@
+import { getAgeView1Rules } from './ageVaccines';
+import { hasSourceColumn } from './sourceColumns';
+import type { EpiAge } from '../../types/hdc';
 import type { VaccineDateChecks } from '../../types/vaccineDateChecks';
 import { dateKey, getRuleDateWarnings } from './dateWarnings';
 import { differenceInMonths, isValid } from 'date-fns';
 import type { EpiRecord, VaccineStatus } from '../../types';
 export interface View1Evaluation {
+  unknownVaccines?: string[];
+  unknownRuleNames?: string[];
   passedCount: number;
   missingVaccines: string[];
   pendingVaccines?: string[];
@@ -22,6 +27,9 @@ export const getAgeInMonths = (birthDateStr: string | Date | undefined, evaluati
 };
 
 export interface VaccineRule {
+  source_aware?: boolean;
+  display_only?: boolean;
+  unavailable_reason?: string;
   date_checks?: VaccineDateChecks;
   rule_id: string;
   fiscal_year: number;
@@ -178,10 +186,25 @@ export const evaluateDynamicV1 = (record: EpiRecord, rules: VaccineRule[], evalu
 
   const currentAgeMonths = getAgeInMonths(record.birth, evaluationDate);
 
-  const v1Rules = rules.filter(r => r.view_type === 1 && r.is_active);
+  const v1Rules = rules.filter(rule => rule.view_type === 1 && rule.is_active && !rule.display_only);
+  const unknownVaccines: string[] = [];
+  const unknownRuleNames: string[] = [];
   let passedCount = 0;
 
   for (const rule of v1Rules) {
+    const primaryKnown = rule.required_fields.length > 0 && rule.required_fields.every(field => hasSourceColumn(record, field));
+    const alternativeKnown = (rule.branch_alt_fields?.length || 0) > 0 && rule.branch_alt_fields!.every(field => hasSourceColumn(record, field));
+    const primaryPassed = primaryKnown && rule.required_fields.every(field => Boolean(dateKey(record[field as keyof EpiRecord])));
+    const alternativePassed = alternativeKnown && rule.branch_alt_fields!.every(field => Boolean(dateKey(record[field as keyof EpiRecord])));
+    const incompleteSource = rule.logic_type === 'BRANCH'
+      ? !primaryPassed && !alternativePassed && (!primaryKnown || !alternativeKnown)
+      : !primaryKnown;
+    if (rule.unavailable_reason || (rule.source_aware && incompleteSource)) {
+      results[rule.display_name] = false;
+      unknownRuleNames.push(rule.display_name);
+      unknownVaccines.push(`${rule.display_name}: ${rule.unavailable_reason || 'ไฟล์ไม่มีคอลัมน์ที่จำเป็น'}`);
+      continue;
+    }
     const dataError = ruleHasDataError(record, rule, rules);
     if (dataError) {
       results[rule.display_name] = false;
@@ -222,7 +245,7 @@ export const evaluateDynamicV1 = (record: EpiRecord, rules: VaccineRule[], evalu
     }
   }
 
-  return { missingVaccines, pendingVaccines, pendingRuleNames, passedCount, results };
+  return { missingVaccines, pendingVaccines, pendingRuleNames, unknownVaccines, unknownRuleNames, passedCount, results };
 };
 
 /**
@@ -309,3 +332,8 @@ export const evaluateDynamicV2 = (record: EpiRecord, rules: VaccineRule[], evalu
 
   return { isFullyImmunized, status, missingVaccines, pendingVaccines, passedVaccines };
 };
+
+/** Explicit age projection is used by both View 1 and dashboard summary generation. */
+export function evaluateAgeView1(record: EpiRecord, rules: VaccineRule[], age: EpiAge, evaluationDate: Date = new Date()): View1Evaluation {
+  return evaluateDynamicV1(record, getAgeView1Rules(rules, age), evaluationDate);
+}

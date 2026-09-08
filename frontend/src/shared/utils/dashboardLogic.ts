@@ -3,6 +3,7 @@ import type { View1Evaluation } from './vaccine/ruleEngine';
 // We can define the return type for better type safety
 export interface GroupSummary {
   total: number;
+  view1UnknownDoses?: number;
   view1PassedDoses: number;
   view1TotalDoses: number;
   view1Coverage: number;
@@ -28,6 +29,7 @@ export function calcGroupSummary(
   const filtered = data;
   
   const total = filtered.length;
+  let view1UnknownDoses = 0;
   let view1PassedDoses = 0;
   let view1TotalDoses = 0;
   let view2Passed = 0;
@@ -41,6 +43,7 @@ export function calcGroupSummary(
 
   for (const r of filtered) {
     const v1 = evalView1Fn(r);
+    view1UnknownDoses += v1.unknownRuleNames?.length || 0;
     const hoscode = r.hoscode || 'unknown';
     if (!facilityMap[hoscode]) {
       facilityMap[hoscode] = { hosname: r.hosname || hoscode, totalV2: 0, passedV2: 0, totalV1: 0, passedV1: 0 };
@@ -49,7 +52,7 @@ export function calcGroupSummary(
     if (v1.passedCount !== undefined && v1.results) {
       view1PassedDoses += v1.passedCount;
       // ตัดเฉพาะ rule ที่ pending ออกจากตัวหาร — ใช้ pendingRuleNames (display_name) เทียบกับ key ของ results ให้ตรงกัน
-      const applicableCount = Object.keys(v1.results).length - (v1.pendingRuleNames?.length || 0);
+      const applicableCount = Object.keys(v1.results).length - (v1.pendingRuleNames?.length || 0) - (v1.unknownRuleNames?.length || 0);
       view1TotalDoses += applicableCount;
       facilityMap[hoscode].passedV1 += v1.passedCount;
       facilityMap[hoscode].totalV1 += applicableCount;
@@ -60,7 +63,7 @@ export function calcGroupSummary(
         if (!view1TargetDetails[vac]) view1TargetDetails[vac] = 0;
         
         // ถ้าเป็น pending จะไม่เอามาคิดเป็นตัวหาร (เทียบด้วย display_name ให้ตรง key ของ results)
-        if (v1.pendingRuleNames?.includes(vac)) continue;
+        if (v1.pendingRuleNames?.includes(vac) || v1.unknownRuleNames?.includes(vac)) continue;
         
         view1TargetDetails[vac]++;
         if (passed) view1Details[vac]++;
@@ -153,6 +156,7 @@ export function calcGroupSummary(
 
   return {
     total,
+    view1UnknownDoses,
     view1PassedDoses,
     view1TotalDoses,
     view1Coverage,

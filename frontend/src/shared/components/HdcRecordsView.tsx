@@ -46,6 +46,8 @@ export function HdcRecordsView({ age, fiscalYear, quarter, data, isLoading, erro
   const columns = useMemo<ColumnDef<EpiRecord>[]>(() => [
     { header: 'สถานบริการ', accessorKey: 'hoscode', cell: ({ row }) => <div><div>{row.original.hoscode}</div><div className="text-xs text-zinc-500">{row.original.hosname}</div></div> },
     { header: 'CID', accessorKey: 'cid' },
+    { header: 'ที่อยู่', accessorFn: record => hdcValue(record.addr) },
+    { header: 'ประเภทพื้นที่', accessorFn: record => hdcValue(record.check_typearea) },
     { header: 'ชื่อ-สกุล', accessorFn: record => `${record.name} ${record.lname}` },
     { header: 'วันเกิด', accessorKey: 'birth', cell: ({ row }) => <div>{formatDateStr(row.original.birth)}<div className="text-xs text-zinc-500">(อายุ {formatAgeStr(row.original.birth)})</div></div> },
     { header: 'ผลจาก HDC', accessorFn: record => hdcValue(record.result), cell: info => <span className="whitespace-pre-wrap">{info.getValue<string>()}</span> },
@@ -77,6 +79,8 @@ export function HdcRecordsView({ age, fiscalYear, quarter, data, isLoading, erro
         <Button variant="outline" onClick={() => exportToPdf(filtered.map(record => ({
           'สถานบริการ': `${record.hoscode} ${record.hosname}`,
           'CID': record.cid,
+          'ที่อยู่': hdcValue(record.addr),
+          'ประเภทพื้นที่': hdcValue(record.check_typearea),
           'ชื่อ-สกุล': `${record.name} ${record.lname}`,
           'วันเกิด': formatDateStr(record.birth),
           'ผลจาก HDC': hdcValue(record.result),
