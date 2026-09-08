@@ -4,12 +4,13 @@ import { SubNav } from '../../../widgets/layout/SubNav';
 import { OpenDataDashboard } from '../../opendata/components/OpenDataDashboard';
 import { useEpiData } from '../../../shared/hooks/useEpiData';
 import { useAvailableYears } from '../../../shared/hooks/useAvailableYears';
+import { View1Individual3Yr } from './View1Individual3Yr';
 import { HdcRecordsView } from '../../../shared/components/HdcRecordsView';
 import { getCurrentFiscalYear } from '../../../shared/utils/dateUtils';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../../shared/components/ui/select';
 
 export function EpiDashboard3Yr() {
-  const [activeTab, setActiveTab] = useState<'view1' | 'view3'>('view1');
+  const [activeTab, setActiveTab] = useState<'view1' | 'view2' | 'view3'>('view1');
   
   // Global Filters for Cohort
   const currentYear = getCurrentFiscalYear();
@@ -38,17 +39,27 @@ export function EpiDashboard3Yr() {
               onClick={() => setActiveTab('view1')}
               className={`relative z-10 px-6 py-2 text-[14px] font-medium tracking-[-0.224px] rounded-lg transition-all duration-300 ${
                 activeTab === 'view1' 
-                  ? 'text-[#1d1d1f] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.1)]' 
+                  ? 'text-[#1d1d1f] bg-white'
                   : 'text-[#7a7a7a] hover:text-[#1d1d1f]'
               }`}
             >
-              รายชื่อและประวัติจาก HDC
+              มุมมองที่ 1 (รายชนิดวัคซีน)
+            </button>
+            <button
+              onClick={() => setActiveTab('view2')}
+              className={`relative z-10 px-6 py-2 text-[14px] font-medium tracking-[-0.224px] rounded-lg transition-all duration-300 ${
+                activeTab === 'view2'
+                  ? 'text-[#1d1d1f] bg-white'
+                  : 'text-[#7a7a7a] hover:text-[#1d1d1f]'
+              }`}
+            >
+              มุมมองที่ 2 (Fully Immunized)
             </button>
             <button
               onClick={() => setActiveTab('view3')}
               className={`relative z-10 px-6 py-2 text-[14px] font-medium tracking-[-0.224px] rounded-lg transition-all duration-300 ${
                 activeTab === 'view3'
-                  ? 'text-[#1d1d1f] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.1)]'
+                  ? 'text-[#1d1d1f] bg-white'
                   : 'text-[#7a7a7a] hover:text-[#1d1d1f]'
               }`}
             >
@@ -99,7 +110,8 @@ export function EpiDashboard3Yr() {
 
         {/* Content Area */}
         <div className="bg-white rounded-[24px] p-4 sm:p-8 border border-[#e0e0e0] min-h-[600px]">
-          {activeTab === 'view1' && <HdcRecordsView key={`${fiscalYear}-${quarter}`} age={3} fiscalYear={fiscalYear} quarter={quarter} data={data} isLoading={isLoading} error={error} asOfDate={asOfDate} />}
+          {activeTab === 'view1' && <View1Individual3Yr fiscalYear={fiscalYear} quarter={quarter} data={data} isLoading={isLoading} error={error} asOfDate={asOfDate} />}
+          {activeTab === 'view2' && <HdcRecordsView key={`${fiscalYear}-${quarter}`} age={3} fiscalYear={fiscalYear} quarter={quarter} data={data} isLoading={isLoading} error={error} asOfDate={asOfDate} />}
           {activeTab === 'view3' && <OpenDataDashboard targetTable="s_epi3" />}
         </div>
 
