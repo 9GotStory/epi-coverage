@@ -3,14 +3,15 @@ import { InfoIcon, FileSpreadsheetIcon, FileTextIcon } from 'lucide-react';
 import type { ColumnDef } from '@tanstack/react-table';
 
 import { evaluateDynamicV1, getDataErrors } from '../../../shared/utils/vaccine/ruleEngine';
-import { formatDateTimeStr, getBirthDateRangeForQuarter, formatAgeStr } from '../../../shared/utils/dateUtils';
+import { formatDateStr, formatDateTimeStr, getBirthDateRangeForQuarter, formatAgeStr } from '../../../shared/utils/dateUtils';
 import type { EpiRecord } from '../../../shared/types';
 import { EpiDataTable } from '../../../shared/components/EpiDataTable';
 import { exportToExcel, exportToPdf } from '../../../shared/exportUtils';
 import { useVaccineRules } from '../../../shared/hooks/useVaccineRules';
 import { DynamicVaccineGuide } from '../../../shared/components/DynamicVaccineGuide';
 import { VaccineHistoryModal } from '../../../shared/components/VaccineHistoryModal';
-import { Search } from 'lucide-react';
+import { Button } from '../../../shared/components/ui/button';
+import { getRecordDateWarnings } from '../../../shared/utils/vaccine/dateWarnings';
 
 // Helper for abbreviation
 function shortenFacilityName(name: string) {
@@ -73,7 +74,7 @@ export function View1Individual({ fiscalYear, quarter, data, isLoading, error, a
 
 
       const v1Rules = rules.filter(r => r.view_type === 1 && r.is_active);
-      const dataErrors = getDataErrors(record, v1Rules);
+      const dataErrors = [...new Set([...getDataErrors(record, v1Rules), ...getRecordDateWarnings(record)])];
 
       return {
         ...record,
@@ -104,133 +105,22 @@ export function View1Individual({ fiscalYear, quarter, data, isLoading, error, a
 
   // Statistics
 
-  const columns = useMemo<ColumnDef<ProcessedView1Record, any>[]>(() => [
-    {
-      header: 'สถานบริการ',
-      id: 'facility',
-      size: 180,
-      cell: ({ row }) => {
-        const shortName = shortenFacilityName(row.original.hosname);
-        return (
-          <div className="flex flex-col">
-            <span className="font-medium text-zinc-900">{row.original.hoscode}</span>
-            <span className="text-zinc-500 text-[11px] truncate max-w-[140px]" title={row.original.hosname}>
-              {shortName}
-            </span>
-          </div>
-        );
-      },
-    },
-    {
-      header: 'CID',
-      accessorKey: 'cid',
-      size: 140,
-    },
-    {
-      header: 'ชื่อ-สกุล',
-      accessorFn: row => `${row.name} ${row.lname}`,
-      size: 200,
-      cell: info => <span className="font-medium">{info.getValue() as string}</span>,
-    },
-    {
-      header: 'วันเกิด',
-      accessorKey: 'birth',
-      size: 120,
-      cell: info => {
-        const val = info.getValue() as string;
-        if (!val) return <span className="text-zinc-400">-</span>;
-        const d = new Date(val);
-        const ageStr = formatAgeStr(val);
-
-        return (
-          <div className="flex flex-col">
-            <span className="text-zinc-700">{d.toLocaleDateString('th-TH')}</span>
-            <span className="text-[10px] text-zinc-500">(อายุ {ageStr})</span>
-          </div>
-        );
-      },
-    },
-    {
-      header: 'ผลการประเมินรายชนิด',
-      id: 'status',
-      size: 500,
-      cell: ({ row }) => {
-        const { status, missingVaccines, pendingVaccines, dataErrors = [] } = row.original;
-
-        // Filter missing and pending to NOT include dataErrors
-        const pureMissing = missingVaccines.filter(v => !dataErrors.includes(v));
-        const purePending = pendingVaccines.filter(v => !dataErrors.includes(v));
-
-        return (
-          <div className="flex flex-col gap-1 items-start">
-            {/* Main Status Pill */}
-            {status === 'PASS' ? (
-              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[12px] font-medium tracking-[-0.12px] bg-[#e3f4e1] text-[#1e7e26]">
-                <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
-                ได้รับวัคซีนครบถ้วน ({v1RulesCount} รายการ)
-              </span>
-            ) : status === 'FAIL' ? (
-              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[12px] font-medium tracking-[-0.12px] bg-[#ffe2e5] text-[#d91f2a]">
-                <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" /></svg>
-                ไม่ผ่านเกณฑ์ (ตกหล่น)
-              </span>
-            ) : (
-              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[12px] font-medium tracking-[-0.12px] bg-[#fff0d6] text-[#b06100]">
-                <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                ยังไม่ถึงเกณฑ์
-              </span>
-            )}
-
-            {/* Badges Container */}
-            {(dataErrors.length > 0 || pureMissing.length > 0 || purePending.length > 0) && (
-              <div className="flex flex-wrap gap-1 mt-1">
-                {/* 1. Data Errors (Orange) */}
-                {dataErrors.map((v, i) => (
-                  <span key={`err-${i}`} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium tracking-[-0.1px] bg-[#ffe8d6] text-[#c95d00]" title="ข้อมูลวันที่ผิดปกติ (เช่น ก่อนวันเกิด หรือคีย์ซ้ำซ้อน)">
-                    <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
-                    {v} (ข้อมูลวันที่ผิด)
-                  </span>
-                ))}
-
-                {/* 2. Pure Missing (Red) */}
-                {pureMissing.map((v, i) => (
-                  <span key={`m-${i}`} className="inline-flex px-1.5 py-0.5 rounded text-[11px] font-medium tracking-[-0.1px] bg-[#ffe2e5] text-[#d91f2a]">
-                    {v}
-                  </span>
-                ))}
-
-                {/* 3. Pure Pending (Gray) */}
-                {purePending.map((v, i) => (
-                  <span key={`p-${i}`} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium tracking-[-0.1px] bg-[#e3e3e8] text-[#424245]">
-                    <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                    {v}
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-        );
-      },
-    },
-    {
-      header: 'Actions',
-      id: 'actions',
-      size: 50,
-      cell: ({ row }) => {
-        return (
-          <button
-            onClick={() => {
-              setSelectedPatient(row.original);
-              setIsModalOpen(true);
-            }}
-            className="p-1.5 text-zinc-400 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
-            title="ดูประวัติวัคซีน"
-          >
-            <Search className="w-4 h-4" />
-          </button>
-        );
-      },
-    }
+  const columns = useMemo<ColumnDef<ProcessedView1Record>[]>(() => [
+    { header: 'สถานบริการ', accessorKey: 'hoscode', cell: ({ row }) => <div><div>{row.original.hoscode}</div><div className="text-xs text-zinc-500">{row.original.hosname}</div></div> },
+    { header: 'CID', accessorKey: 'cid' },
+    { header: 'ชื่อ-สกุล', accessorFn: record => `${record.name} ${record.lname}` },
+    { header: 'วันเกิด', accessorKey: 'birth', cell: ({ row }) => <div>{formatDateStr(row.original.birth)}<div className="text-xs text-zinc-500">(อายุ {formatAgeStr(row.original.birth)})</div></div> },
+    { header: 'ผลการประเมินรายชนิด', id: 'status', cell: ({ row }) => {
+      const { status, missingVaccines, pendingVaccines, dataErrors = [] } = row.original;
+      const missing = missingVaccines.filter(value => !dataErrors.includes(value));
+      return <div className="space-y-1 text-sm">
+        <p>{status === 'PASS' ? `ได้รับวัคซีนครบถ้วน (${v1RulesCount} รายการ)` : status === 'PENDING' ? 'ยังไม่ถึงเกณฑ์' : 'ไม่ผ่านเกณฑ์รายชนิด'}</p>
+        {missing.length > 0 && <p>ขาด: {missing.join(', ')}</p>}
+        {pendingVaccines.length > 0 && <p className="text-zinc-500">ยังไม่ถึงเกณฑ์: {pendingVaccines.join(', ')}</p>}
+      </div>;
+    } },
+    { header: 'ข้อสังเกตข้อมูลวันที่', id: 'dateWarnings', cell: ({ row }) => <div className="text-sm whitespace-pre-wrap">{row.original.dataErrors?.join('\n') || '—'}</div> },
+    { header: 'ประวัติวัคซีน', id: 'history', cell: ({ row }) => <Button variant="outline" size="sm" onClick={() => { setSelectedPatient(row.original); setIsModalOpen(true); }}>ดูประวัติ</Button> },
   ], [v1RulesCount]);
 
   if (isLoading) {
@@ -317,6 +207,7 @@ export function View1Individual({ fiscalYear, quarter, data, isLoading, error, a
           isOpen={isModalOpen}
           onClose={() => setIsModalOpen(false)}
           record={selectedPatient}
+          warnings={selectedPatient ? [...new Set([...getDataErrors(selectedPatient, rules.filter(r => r.view_type === 1 && r.is_active)), ...getRecordDateWarnings(selectedPatient)])] : []}
         />
 
       {/* Header section */}

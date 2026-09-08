@@ -1,3 +1,4 @@
+import { getRecordDateWarnings } from '../utils/vaccine/dateWarnings';
 import { useMemo, useState } from 'react';
 import type { ColumnDef } from '@tanstack/react-table';
 import type { EpiRecord } from '../types';
@@ -46,6 +47,7 @@ export function HdcRecordsView({ age, fiscalYear, quarter, data, isLoading, erro
     { header: 'ชื่อ-สกุล', accessorFn: record => `${record.name} ${record.lname}` },
     { header: 'วันเกิด', accessorKey: 'birth', cell: ({ row }) => <div>{formatDateStr(row.original.birth)}<div className="text-xs text-zinc-500">(อายุ {formatAgeStr(row.original.birth)})</div></div> },
     { header: 'ผลจาก HDC', accessorFn: record => hdcValue(record.result), cell: info => <span className="whitespace-pre-wrap">{info.getValue<string>()}</span> },
+    { header: 'ข้อสังเกตข้อมูลวันที่', id: 'dateWarnings', cell: ({ row }) => <div className="text-sm whitespace-pre-wrap">{getRecordDateWarnings(row.original).join('\n') || '—'}</div> },
     { header: 'ประวัติวัคซีน', id: 'history', cell: ({ row }) => <Button variant="outline" size="sm" onClick={() => setSelectedPatient(row.original)}>ดูประวัติ</Button> },
   ], []);
 
@@ -70,13 +72,14 @@ export function HdcRecordsView({ age, fiscalYear, quarter, data, isLoading, erro
           <option value="">ผลจาก HDC ทั้งหมด</option>
           {results.map(value => <option key={value} value={value}>{value}</option>)}
         </select>
-        <Button variant="outline" onClick={() => exportToExcel(getHdcExportRows(filtered), filename, 'HDC')}>Excel พร้อมข้อมูลวัคซีน</Button>
+        <Button variant="outline" onClick={() => exportToExcel(getHdcExportRows(filtered).map((row, index) => ({ ...row, 'ข้อสังเกตข้อมูลวันที่': getRecordDateWarnings(filtered[index]).join('; ') })), filename, 'HDC')}>Excel พร้อมข้อมูลวัคซีน</Button>
         <Button variant="outline" onClick={() => exportToPdf(filtered.map(record => ({
           'สถานบริการ': `${record.hoscode} ${record.hosname}`,
           'CID': record.cid,
           'ชื่อ-สกุล': `${record.name} ${record.lname}`,
           'วันเกิด': formatDateStr(record.birth),
           'ผลจาก HDC': hdcValue(record.result),
+          'ข้อสังเกตข้อมูลวันที่': getRecordDateWarnings(record).join('; '),
         })), filename, `รายชื่อเด็กอายุครบ ${age} ปี — ข้อมูลจาก HDC`)}>PDF รายชื่อ</Button>
       </div>
       <p className="text-sm text-zinc-500">แสดง {filtered.length.toLocaleString()} จาก {cohort.length.toLocaleString()} คน</p>
