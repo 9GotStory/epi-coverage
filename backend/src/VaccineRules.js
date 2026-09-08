@@ -467,11 +467,14 @@ function seedVaccineRules(fiscalYear, adminEmail, force = false) {
     // ── 3yr — View 1 ──
     { age_group: '3yr', view_type: 1, vaccine_group: 'JE/LAJE', display_name: 'ขาด LAJE เข็ม 2 / JE เข็ม 3', hdc_code: 'J12/053', required_fields: ['j12_date'], branch_alt_fields: ['je3_date'], logic_type: 'BRANCH', is_required_for_v2: true },
 
-    // ── 3yr — View 2 ──
+    // ── 3yr — View 2: report template ข้อ 6 (Fully Immunized) ──
+    // ครบทั้ง 9 กลุ่ม: BCG1, HBV3, DTP4, Hib3, IPV2, OPV2, MMR2, Rota, LAJE2/JE3
+    // OPV ใช้ opv3_date + opv4_date (6 และ 18 เดือน); ไม่บังคับ opv1_date/opv2_date
+    // ใช้ result ของ HDC เป็นผลอ้างอิง; template ยังไม่ระบุเงื่อนไขวันที่ซ้ำ/ระยะห่าง
     { age_group: '3yr', view_type: 2, vaccine_group: 'BCG', display_name: 'BCG 1 เข็ม', hdc_code: '010', required_fields: ['bcg_date'], logic_type: 'ALL', is_required_for_v2: true },
     { age_group: '3yr', view_type: 2, vaccine_group: 'HBV', display_name: 'HBV เข็ม 1', hdc_code: '041', required_fields: ['hbv1_date'], logic_type: 'ALL', is_required_for_v2: true },
     { age_group: '3yr', view_type: 2, vaccine_group: 'HBV', display_name: 'HBV เข็ม 2', hdc_code: '042', required_fields: ['hbv2_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '3yr', view_type: 2, vaccine_group: 'HBV', display_name: 'HBV เข็ม 3 (6 ด.)', hdc_code: '043', required_fields: ['hbv4_date'], logic_type: 'ALL', is_required_for_v2: true },
+    { age_group: '3yr', view_type: 2, vaccine_group: 'HBV', display_name: 'HBV เข็ม 3 (6 ด.)', hdc_code: '043', required_fields: ['hbv4_date'], logic_type: 'ALL', is_required_for_v2: true, note: 'Template กำหนด HBV แรกเกิด + 2 เดือน + 6 เดือน; คง mapping hbv1_date, hbv2_date, hbv4_date ของระบบเดิมไว้ก่อน รอยืนยัน mapping เข็ม 6 เดือนจากรายงาน HDC' },
     { age_group: '3yr', view_type: 2, vaccine_group: 'DTP', display_name: 'DTP เข็ม 1', hdc_code: '031', required_fields: ['dtp1_date'], logic_type: 'ALL', is_required_for_v2: true },
     { age_group: '3yr', view_type: 2, vaccine_group: 'DTP', display_name: 'DTP เข็ม 2', hdc_code: '032', required_fields: ['dtp2_date'], logic_type: 'ALL', is_required_for_v2: true },
     { age_group: '3yr', view_type: 2, vaccine_group: 'DTP', display_name: 'DTP เข็ม 3', hdc_code: '033', required_fields: ['dtp3_date'], logic_type: 'ALL', is_required_for_v2: true },
@@ -479,17 +482,15 @@ function seedVaccineRules(fiscalYear, adminEmail, force = false) {
     { age_group: '3yr', view_type: 2, vaccine_group: 'Hib', display_name: 'Hib เข็ม 1', hdc_code: 'D21', required_fields: ['hib1_date'], logic_type: 'ALL', is_required_for_v2: true },
     { age_group: '3yr', view_type: 2, vaccine_group: 'Hib', display_name: 'Hib เข็ม 2', hdc_code: 'D22', required_fields: ['hib2_date'], logic_type: 'ALL', is_required_for_v2: true },
     { age_group: '3yr', view_type: 2, vaccine_group: 'Hib', display_name: 'Hib เข็ม 3', hdc_code: 'D23', required_fields: ['hib3_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '3yr', view_type: 2, vaccine_group: 'IPV', display_name: 'IPV เข็ม 1', hdc_code: 'I11', required_fields: ['ipv1_date'], branch_alt_fields: ['ipv2_date'], logic_type: 'BRANCH', is_required_for_v2: true },
-    { age_group: '3yr', view_type: 2, vaccine_group: 'IPV', display_name: 'IPV เข็ม 2', hdc_code: 'I12', required_fields: ['ipv2_date'], branch_alt_fields: ['opv4_date'], logic_type: 'BRANCH', is_required_for_v2: true },
+    { age_group: '3yr', view_type: 2, vaccine_group: 'IPV', display_name: 'IPV เข็ม 1', hdc_code: 'I11', required_fields: ['ipv1_date'], logic_type: 'ALL', is_required_for_v2: true, note: 'Report template ข้อ 6: IPV 2 ครั้ง ต้องมี IPV1 และ IPV2; ไม่ใช้ IPV2 แทน IPV1' },
+    { age_group: '3yr', view_type: 2, vaccine_group: 'IPV', display_name: 'IPV เข็ม 2', hdc_code: 'I12', required_fields: ['ipv2_date'], logic_type: 'ALL', is_required_for_v2: true, note: 'Report template ข้อ 6: IPV 2 ครั้ง ต้องมี IPV1 และ IPV2; ไม่ใช้ OPV4 แทน IPV2' },
 
-    { age_group: '3yr', view_type: 2, vaccine_group: 'OPV', display_name: 'OPV เข็ม 1', hdc_code: '081', required_fields: ['opv1_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '3yr', view_type: 2, vaccine_group: 'OPV', display_name: 'OPV เข็ม 2', hdc_code: '082', required_fields: ['opv2_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '3yr', view_type: 2, vaccine_group: 'OPV', display_name: 'OPV เข็ม 3 (083)', hdc_code: '083', required_fields: ['opv3_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '3yr', view_type: 2, vaccine_group: 'OPV', display_name: 'OPV เข็ม 4 (084)', hdc_code: '084', required_fields: ['opv4_date'], logic_type: 'ALL', is_required_for_v2: true },
+    { age_group: '3yr', view_type: 2, vaccine_group: 'OPV', display_name: 'OPV 6 เดือน (083)', hdc_code: '083', required_fields: ['opv3_date'], logic_type: 'ALL', is_required_for_v2: true, note: 'Report template ข้อ 6: OPV 2 ครั้ง ใช้ opv3_date และ opv4_date ตามกำหนดการ 6 และ 18 เดือน; ไม่บังคับ OPV1–2 ในมุมมองที่ 2 อายุ 3 ปี' },
+    { age_group: '3yr', view_type: 2, vaccine_group: 'OPV', display_name: 'OPV 18 เดือน (084)', hdc_code: '084', required_fields: ['opv4_date'], logic_type: 'ALL', is_required_for_v2: true, note: 'Report template ข้อ 6: OPV 2 ครั้ง ใช้ opv3_date และ opv4_date ตามกำหนดการ 6 และ 18 เดือน; ไม่บังคับ OPV1–2 ในมุมมองที่ 2 อายุ 3 ปี' },
     { age_group: '3yr', view_type: 2, vaccine_group: 'MMR', display_name: 'MMR เข็ม 1', hdc_code: '061', required_fields: ['mmr1_date'], logic_type: 'ALL', is_required_for_v2: true },
     { age_group: '3yr', view_type: 2, vaccine_group: 'MMR', display_name: 'MMR เข็ม 2', hdc_code: '073', required_fields: ['mmr2_date'], logic_type: 'ALL', is_required_for_v2: true },
     { age_group: '3yr', view_type: 2, vaccine_group: 'Rota', display_name: 'Rota เข็ม 1', hdc_code: 'R11/R21', required_fields: ['rv21_date'], branch_alt_fields: ['rv31_date'], logic_type: 'BRANCH', is_required_for_v2: true },
-    { age_group: '3yr', view_type: 2, vaccine_group: 'Rota', display_name: 'Rota เข็มสุดท้าย (ครบ)', hdc_code: '', required_fields: ['rv21_date', 'rv22_date'], branch_alt_fields: ['rv31_date', 'rv32_date', 'rv33_date'], logic_type: 'BRANCH', is_required_for_v2: true },
+    { age_group: '3yr', view_type: 2, vaccine_group: 'Rota', display_name: 'Rota เข็มสุดท้าย (ครบ)', hdc_code: '', required_fields: ['rv21_date', 'rv22_date'], branch_alt_fields: ['rv31_date', 'rv32_date', 'rv33_date'], logic_type: 'BRANCH', is_required_for_v2: true, note: 'ครบชุด 2 เข็ม หรือครบชุด 3 เข็ม; template ที่ได้รับยังไม่แจกแจงวันที่ซ้ำ ระยะห่าง หรือสูตรผสม จึงไม่เพิ่มเงื่อนไขเหล่านี้ใน seed' },
     { age_group: '3yr', view_type: 2, vaccine_group: 'JE/LAJE', display_name: 'LAJE เข็ม 1 หรือ JE เข็ม 1', hdc_code: 'J11/051', required_fields: ['j11_date'], branch_alt_fields: ['je1_date'], logic_type: 'BRANCH', is_required_for_v2: true },
     { age_group: '3yr', view_type: 2, vaccine_group: 'JE/LAJE', display_name: 'LAJE เข็ม 2 หรือ JE เข็ม 2-3 (ครบ)', hdc_code: 'J12/052-053', required_fields: ['j11_date', 'j12_date'], branch_alt_fields: ['je1_date', 'je2_date', 'je3_date'], logic_type: 'BRANCH', is_required_for_v2: true },
 
@@ -543,7 +544,7 @@ function seedVaccineRules(fiscalYear, adminEmail, force = false) {
         case 'is_required_for_v2': return r.is_required_for_v2 !== false;
         case 'is_active': return true;
         case 'target_age_months': return targetAge !== null ? targetAge : '';
-        case 'note': return '';
+        case 'note': return r.note || '';
         case 'updated_at': return now;
         case 'updated_by': return adminEmail || 'system';
         default: return '';

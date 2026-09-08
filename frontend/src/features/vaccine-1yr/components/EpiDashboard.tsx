@@ -1,17 +1,15 @@
 
 import { useState, useEffect } from 'react';
 import { SubNav } from '../../../widgets/layout/SubNav';
-import { View1Individual } from './View1Individual';
-import { View2FullyImmunized } from './View2FullyImmunized';
 import { OpenDataDashboard } from '../../opendata/components/OpenDataDashboard';
 import { useEpiData } from '../../../shared/hooks/useEpiData';
 import { useAvailableYears } from '../../../shared/hooks/useAvailableYears';
-import { useVaccineRules } from '../../../shared/hooks/useVaccineRules';
+import { HdcRecordsView } from '../../../shared/components/HdcRecordsView';
 import { getCurrentFiscalYear } from '../../../shared/utils/dateUtils';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../../shared/components/ui/select';
 
 export function EpiDashboard() {
-  const [activeTab, setActiveTab] = useState<'view1' | 'view2' | 'view3'>('view1');
+  const [activeTab, setActiveTab] = useState<'view1' | 'view3'>('view1');
   
   // Global Filters for Cohort
   const currentYear = getCurrentFiscalYear();
@@ -20,8 +18,6 @@ export function EpiDashboard() {
 
   const { data, isLoading, error, asOfDate } = useEpiData('Epi_1_Year', fiscalYear);
   const { years: availableFiscalYears } = useAvailableYears();
-  const { rules } = useVaccineRules(fiscalYear, '1yr');
-  const v1RulesCount = rules.filter(r => r.view_type === 1 && r.is_active).length;
 
   // Remove old availableFiscalYears logic
 
@@ -39,7 +35,7 @@ export function EpiDashboard() {
         
         <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
           {/* Apple-style Segmented Control */}
-          <div className="bg-[#e3e3e8] p-1 rounded-xl inline-flex relative">
+          <div className="bg-[#e3e3e8] p-1 rounded-xl inline-flex flex-wrap relative">
             <button
               onClick={() => setActiveTab('view1')}
               className={`relative z-10 px-6 py-2 text-[14px] font-medium tracking-[-0.224px] rounded-lg transition-all duration-300 ${
@@ -48,17 +44,7 @@ export function EpiDashboard() {
                   : 'text-[#7a7a7a] hover:text-[#1d1d1f]'
               }`}
             >
-              มุมมองที่ 1: ความครอบคลุมรายชนิด ({v1RulesCount} รายการ)
-            </button>
-            <button
-              onClick={() => setActiveTab('view2')}
-              className={`relative z-10 px-6 py-2 text-[14px] font-medium tracking-[-0.224px] rounded-lg transition-all duration-300 ${
-                activeTab === 'view2'
-                  ? 'text-[#1d1d1f] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.1)]'
-                  : 'text-[#7a7a7a] hover:text-[#1d1d1f]'
-              }`}
-            >
-              มุมมองที่ 2: Fully Immunized (1 ปี)
+              รายชื่อและประวัติจาก HDC
             </button>
             <button
               onClick={() => setActiveTab('view3')}
@@ -68,7 +54,7 @@ export function EpiDashboard() {
                   : 'text-[#7a7a7a] hover:text-[#1d1d1f]'
               }`}
             >
-              มุมมองที่ 3: ภาพรวม (OpenData)
+              ภาพรวม (OpenData)
             </button>
           </div>
           
@@ -114,9 +100,8 @@ export function EpiDashboard() {
         </div>
 
         {/* Content Area */}
-        <div className="bg-white rounded-[24px] p-8 border border-[#e0e0e0] min-h-[600px]">
-          {activeTab === 'view1' && <View1Individual fiscalYear={fiscalYear} quarter={quarter} data={data} isLoading={isLoading} error={error} asOfDate={asOfDate} />}
-          {activeTab === 'view2' && <View2FullyImmunized fiscalYear={fiscalYear} quarter={quarter} data={data} isLoading={isLoading} error={error} asOfDate={asOfDate} />}
+        <div className="bg-white rounded-[24px] p-4 sm:p-8 border border-[#e0e0e0] min-h-[600px]">
+          {activeTab === 'view1' && <HdcRecordsView key={`${fiscalYear}-${quarter}`} age={1} fiscalYear={fiscalYear} quarter={quarter} data={data} isLoading={isLoading} error={error} asOfDate={asOfDate} />}
           {activeTab === 'view3' && <OpenDataDashboard />}
         </div>
 
