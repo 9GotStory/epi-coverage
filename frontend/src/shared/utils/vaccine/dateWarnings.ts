@@ -1,8 +1,10 @@
 import type { EpiRecord } from '../../types';
+import type { VaccineDateChecks, VaccineDatePair } from '../../types/vaccineDateChecks';
+import type { VaccineRule } from './ruleEngine';
 import { vaccineFieldLabel } from './hdcData';
 
-// Data-quality checks only. These warnings never replace the imported HDC result.
-function dateKey(value: unknown): string | null {
+export function dateKey(value: unknown): string | null {
+  if (value instanceof Date && Number.isNaN(value.getTime())) return '';
   const text = value instanceof Date ? value.toISOString() : String(value ?? '').trim();
   if (!text || text === '-' || text === '—') return null;
   const day = text.split('T')[0];
@@ -11,28 +13,50 @@ function dateKey(value: unknown): string | null {
   return Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== day ? '' : day;
 }
 
-export function getRecordDateWarnings(record: EpiRecord): string[] {
-  const warnings: string[] = [];
-  const birth = dateKey(record.birth);
-  const dates = Object.entries(record).filter(([field]) => field.endsWith('_date'))
-    .map(([field, value]) => ({ field, day: dateKey(value) }));
-  for (const { field, day } of dates) {
-    if (day === '') warnings.push(`${vaccineFieldLabel(field)}: รูปแบบวันที่ไม่ถูกต้อง`);
-    else if (day && birth && day < birth) warnings.push(`${vaccineFieldLabel(field)}: วันที่ฉีดก่อนวันเกิด`);
-  }
-  // Compare doses within the same series only; Rota 2/3-dose and LAJE/JE stay separate.
-  const seriesDose = (field: string) => field.match(/^(hbv|dtp|hib|ipv|opv|mmr|pcv|je|j1|rv2|rv3)(\d+)_date$/);
-  for (let i = 0; i < dates.length; i++) {
-    const a = dates[i];
-    const left = seriesDose(a.field);
-    if (!left || !a.day) continue;
-    for (const b of dates.slice(i + 1)) {
-      const right = seriesDose(b.field);
-      if (!right || !b.day || left[1] !== right[1]) continue;
-      const [earlier, later] = Number(left[2]) < Number(right[2]) ? [a, b] : [b, a];
-      if (earlier.day === later.day) warnings.push(`${vaccineFieldLabel(earlier.field)} / ${vaccineFieldLabel(later.field)}: วันที่ซ้ำซ้อนกับเข็มอื่น`);
-      else if (earlier.day! > later.day!) warnings.push(`${vaccineFieldLabel(later.field)}: วันที่ฉีดก่อน ${vaccineFieldLabel(earlier.field)}`);
+// Compatibility defaults for unsaved legacy rules. Once saved, the explicit pairs are authoritative.
+export function getRuleDateChecks(rule: VaccineRule, allRules: VaccineRule[]): VaccineDateChecks {
+  if (rule.date_checks) return rule.date_checks;
+  const own = new Set([...(rule.required_fields || []), ...(rule.branch_alt_fields || [])]);
+  const fields = [...new Set(allRules.filter(r => r.is_active).flatMap(r => [...r.required_fields, ...(r.branch_alt_fields || [])]))];
+  const pairs: VaccineDatePair[] = [];
+  for (const field of fields) {
+    const a = field.match(/^(hbv|dtp|hib|ipv|opv|mmr|pcv|je|j1|rv2|rv3)(\d+)_date$/);
+    if (!a) continue;
+    for (const other_field of fields) {
+      const b = other_field.match(/^(hbv|dtp|hib|ipv|opv|mmr|pcv|je|j1|rv2|rv3)(\d+)_date$/);
+      if (b && a[1] === b[1] && Number(a[2]) < Number(b[2]) && (own.has(field) || own.has(other_field))) pairs.push({ field, other_field });
     }
   }
-  return warnings;
+  return { before_birth: true, allow_on_birth: rule.target_age_months === 0, same_day_pairs: pairs, ordered_pairs: pairs };
+}
+
+export function getRuleDateWarnings(record: EpiRecord, rule: VaccineRule, allRules: VaccineRule[]): string[] {
+  if (!rule.is_active) return [];
+  const config = getRuleDateChecks(rule, allRules);
+  const warnings: string[] = [];
+  const birth = dateKey(record.birth);
+  const fields = [...new Set([...rule.required_fields, ...(rule.branch_alt_fields || [])])];
+  for (const field of fields) {
+    const day = dateKey(record[field as keyof EpiRecord]);
+    if (day === '') warnings.push(`${vaccineFieldLabel(field)}: รูปแบบวันที่ไม่ถูกต้อง`);
+    else if (day && birth) {
+      if (config.before_birth && day < birth) warnings.push(`${vaccineFieldLabel(field)}: วันที่ฉีดก่อนวันเกิด`);
+      if (!config.allow_on_birth && day === birth) warnings.push(`${vaccineFieldLabel(field)}: วันที่ฉีดตรงวันเกิดตามเกณฑ์ที่ไม่อนุญาต`);
+    }
+  }
+  for (const { field, other_field } of config.same_day_pairs) {
+    const a = dateKey(record[field as keyof EpiRecord]);
+    const b = dateKey(record[other_field as keyof EpiRecord]);
+    if (a && b && a === b) warnings.push(`${vaccineFieldLabel(field)} / ${vaccineFieldLabel(other_field)}: วันที่ซ้ำซ้อนกับเข็มอื่น`);
+  }
+  for (const { field, other_field } of config.ordered_pairs) {
+    const a = dateKey(record[field as keyof EpiRecord]);
+    const b = dateKey(record[other_field as keyof EpiRecord]);
+    if (a && b && a > b) warnings.push(`${vaccineFieldLabel(other_field)}: วันที่ฉีดก่อน ${vaccineFieldLabel(field)}`);
+  }
+  return [...new Set(warnings)];
+}
+
+export function getRecordDateWarnings(record: EpiRecord, rules: VaccineRule[]): string[] {
+  return [...new Set(rules.flatMap(rule => getRuleDateWarnings(record, rule, rules)))];
 }

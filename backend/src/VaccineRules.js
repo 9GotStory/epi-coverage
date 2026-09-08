@@ -8,6 +8,34 @@
 
 const VACCINE_RULES_SHEET = 'vaccine_rules';
 
+// Validate relationships before any sheet mutation.
+function validateDateChecks_(checks, rule, knownFields) {
+  if (checks === undefined) return;
+  if (!checks || typeof checks !== 'object' || Array.isArray(checks) ||
+      typeof checks.before_birth !== 'boolean' || typeof checks.allow_on_birth !== 'boolean') throw new Error('Invalid date_checks settings');
+  const own = [...(rule.required_fields || []), ...(rule.branch_alt_fields || [])];
+  for (const key of ['same_day_pairs', 'ordered_pairs']) {
+    if (!Array.isArray(checks[key]) || checks[key].length > 500) throw new Error('Invalid date pair list');
+    const seen = new Set();
+    for (const pair of checks[key]) {
+      if (!pair || typeof pair.field !== 'string' || typeof pair.other_field !== 'string' ||
+          pair.field === pair.other_field || !knownFields.has(pair.field) || !knownFields.has(pair.other_field) ||
+          (!own.includes(pair.field) && !own.includes(pair.other_field))) throw new Error('Invalid vaccine date pair');
+      const id = key === 'same_day_pairs' ? [pair.field, pair.other_field].sort().join('|') : pair.field + '|' + pair.other_field;
+      if (seen.has(id)) throw new Error('Duplicate vaccine date pair');
+      seen.add(id);
+    }
+  }
+}
+function ensureDateChecksColumn_(sheet) {
+  const headers = sheet.getDataRange().getValues()[0];
+  if (!headers.includes('date_checks')) sheet.getRange(1, headers.length + 1, 1, 1).setValues([['date_checks']]);
+}
+function parseDateChecks_(value) {
+  if (value === '' || value === undefined || value === null) return undefined;
+  return typeof value === 'string' ? JSON.parse(value) : value;
+}
+
 /**
  * ──────────────────────────────────────────────────────────
  * TARGET_AGE_MONTHS_BY_FIELD — แหล่งเดียว (Single Source of Truth)
@@ -111,6 +139,7 @@ function getVaccineRules(fiscalYear, ageGroup) {
         ...r,
         fiscal_year: Number(r.fiscal_year),
         view_type: Number(r.view_type),
+        date_checks: parseDateChecks_(r.date_checks),
         required_fields: requiredFields,
         branch_alt_fields: branchAltFields,
         is_active: true,
@@ -137,6 +166,17 @@ function saveVaccineRule(rule, adminEmail) {
   const ss = getSpreadsheet();
   const sheet = ss.getSheetByName(VACCINE_RULES_SHEET);
   if (!sheet) return { success: false, error: 'vaccine_rules sheet not found. Run setup first.' };
+
+  try {
+    const incoming = [rule];
+    const known = new Set(Object.keys(TARGET_AGE_MONTHS_BY_FIELD));
+    const peers = getVaccineRules(rule.fiscal_year, rule.age_group);
+    [...incoming, ...peers].forEach(r => [...(r.required_fields || []), ...(r.branch_alt_fields || [])].forEach(f => {
+      if (typeof f === 'string' && /^[a-z][a-z0-9_]*_date$/.test(f)) known.add(f);
+    }));
+    incoming.forEach(r => validateDateChecks_(r.date_checks, r, known));
+  } catch (error) { return { success: false, error: error.message }; }
+  ensureDateChecksColumn_(sheet);
 
   const data = sheet.getDataRange().getValues();
   const headers = data[0];
@@ -179,6 +219,7 @@ function saveVaccineRule(rule, adminEmail) {
       case 'is_required_for_v2': return rule.is_required_for_v2 !== false;
       case 'is_active': return rule.is_active !== false;
       case 'target_age_months': return rule.target_age_months !== undefined ? rule.target_age_months : '';
+      case 'date_checks': return rule.date_checks === undefined ? (existingRowIndex > 0 ? data[existingRowIndex - 1][headers.indexOf('date_checks')] || '' : '') : JSON.stringify(rule.date_checks);
       case 'note': return rule.note || '';
       case 'updated_at': return now;
       case 'updated_by': return adminEmail || '';
@@ -212,6 +253,17 @@ function batchSaveRules(fiscalYear, ageGroup, rules, adminEmail) {
   const sheet = ss.getSheetByName(VACCINE_RULES_SHEET);
   if (!sheet) return { success: false, error: 'vaccine_rules sheet not found.' };
 
+  try {
+    const incoming = rules;
+    const known = new Set(Object.keys(TARGET_AGE_MONTHS_BY_FIELD));
+    const peers = getVaccineRules(incoming[0]?.fiscal_year || fiscalYear, incoming[0]?.age_group || ageGroup);
+    [...incoming, ...peers].forEach(r => [...(r.required_fields || []), ...(r.branch_alt_fields || [])].forEach(f => {
+      if (typeof f === 'string' && /^[a-z][a-z0-9_]*_date$/.test(f)) known.add(f);
+    }));
+    incoming.forEach(r => validateDateChecks_(r.date_checks, r, known));
+  } catch (error) { return { success: false, error: error.message }; }
+  ensureDateChecksColumn_(sheet);
+
   const data = sheet.getDataRange().getValues();
   const headers = data[0];
 
@@ -244,7 +296,8 @@ function batchSaveRules(fiscalYear, ageGroup, rules, adminEmail) {
         case 'is_required_for_v2': return rule.is_required_for_v2 !== false;
         case 'is_active': return rule.is_active !== false;
         case 'target_age_months': return rule.target_age_months !== undefined ? rule.target_age_months : '';
-        case 'note': return rule.note || '';
+        case 'date_checks': return rule.date_checks === undefined ? (data.slice(1).find(row => row[headers.indexOf('rule_id')] === rule.rule_id)?.[headers.indexOf('date_checks')] || '') : JSON.stringify(rule.date_checks);
+      case 'note': return rule.note || '';
         case 'updated_at': return now;
         case 'updated_by': return adminEmail || '';
         default: return '';

@@ -86,13 +86,13 @@ describe('ruleEngine', () => {
       // DTP1 ไม่ใช่วัคซีนแรกเกิด ถ้าลงเป็นวันเกิด = ผิด
       const rec: EpiRecord = { ...mockRecord, birth: '2024-10-08', dtp1_date: '2024-10-08' };
       const errors = getDataErrors(rec, birthDoseRules);
-      expect(errors).toContain('DTP1 (031)');
+      expect(errors).toContain('DTP1 (031) (DTP เข็ม 1: วันที่ฉีดตรงวันเกิดตามเกณฑ์ที่ไม่อนุญาต)');
     });
 
     it('flags any vaccine when the date is before the birth date', () => {
       const rec: EpiRecord = { ...mockRecord, birth: '2024-10-08', bcg_date: '2024-10-07' };
       const errors = getDataErrors(rec, birthDoseRules);
-      expect(errors).toContain('BCG (010)');
+      expect(errors).toContain('BCG (010) (BCG: วันที่ฉีดก่อนวันเกิด)');
     });
 
     it('flags a birth-date dose when the rule does NOT config target_age_months=0 (config คือความจริงเดียว)', () => {
@@ -102,7 +102,7 @@ describe('ruleEngine', () => {
       ];
       const rec: EpiRecord = { ...mockRecord, birth: '2024-10-08', bcg_date: '2024-10-08' };
       const errors = getDataErrors(rec, noConfigRules);
-      expect(errors).toContain('BCG (010)');
+      expect(errors).toContain('BCG (010) (BCG: วันที่ฉีดตรงวันเกิดตามเกณฑ์ที่ไม่อนุญาต)');
     });
   });
 
@@ -166,7 +166,7 @@ describe('ruleEngine', () => {
       const result = evaluateDynamicV1(rec, rules);
       expect(result.results['DTP1']).toBe(false);
       expect(result.missingVaccines).not.toContain('DTP1');
-      expect(getDataErrors(rec, rules)).toContain('DTP1');
+      expect(getDataErrors(rec, rules)).toContain('DTP1 (DTP เข็ม 1: วันที่ฉีดตรงวันเกิดตามเกณฑ์ที่ไม่อนุญาต)');
     });
 
     it('classifies a not-yet-due child as PENDING and reports pendingRuleNames', () => {
@@ -200,5 +200,21 @@ describe('ruleEngine', () => {
       expect(result.status).toBe('FAIL');
       expect(result.missingVaccines).toContain('ไม่ผ่านเกณฑ์ HDC (ตรวจสอบรายละเอียดในระบบ)');
     });
+  });
+});
+
+describe('date configuration drives evaluation', () => {
+  const rule: VaccineRule = { rule_id: 'hbv', fiscal_year: 2569, age_group: '1yr', view_type: 1, vaccine_group: 'HBV', display_name: 'HBV', hdc_code: '', required_fields: ['hbv1_date'], logic_type: 'ALL', is_active: true, is_required_for_v2: true, date_checks: { before_birth: false, allow_on_birth: true, same_day_pairs: [], ordered_pairs: [] } };
+  it('respects disabled birth checks and explicit cross-vaccine pairs', () => {
+    const record = { birth: '2024-01-01', hbv1_date: '2023-12-31', dtp1_date: '2023-12-31' } as EpiRecord;
+    expect(evaluateDynamicV1(record, [rule]).results.HBV).toBe(true);
+    const configured = { ...rule, date_checks: { ...rule.date_checks!, same_day_pairs: [{ field: 'hbv1_date', other_field: 'dtp1_date' }] } };
+    expect(evaluateDynamicV1(record, [configured]).results.HBV).toBe(false);
+    expect(evaluateDynamicV2({ ...record, result: 'ผ่าน' }, [{ ...configured, view_type: 2 }]).status).toBe('PASS');
+  });
+  it('does not compare Rota alternatives as if they were separate doses', () => {
+    const rota = { ...rule, vaccine_group: 'Rota', display_name: 'Rota เข็ม 1', required_fields: ['rv21_date'], branch_alt_fields: ['rv31_date'], logic_type: 'BRANCH' as const, date_checks: undefined };
+    const record = { birth: '2024-01-01', rv21_date: '2024-03-01', rv31_date: '2024-03-01' } as EpiRecord;
+    expect(evaluateDynamicV1(record, [rota]).results['Rota เข็ม 1']).toBe(true);
   });
 });

@@ -1,3 +1,5 @@
+import { getRuleDateChecks } from '../../../shared/utils/vaccine/dateWarnings';
+import { vaccineFieldLabel } from '../../../shared/utils/vaccine/hdcData';
 import { useEffect } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -35,6 +37,12 @@ import { Switch } from "../../../shared/components/ui/switch";
 import type { VaccineRule } from "../../../shared/utils/vaccine/ruleEngine";
 
 const ruleSchema = z.object({
+  date_checks: z.object({
+    before_birth: z.boolean(),
+    allow_on_birth: z.boolean(),
+    same_day_pairs: z.array(z.object({ field: z.string().min(1), other_field: z.string().min(1) })),
+    ordered_pairs: z.array(z.object({ field: z.string().min(1), other_field: z.string().min(1) })),
+  }),
   display_name: z.string().min(1, "กรุณาระบุชื่อแสดงผล"),
   vaccine_group: z.string().min(1, "กรุณาระบุกลุ่มวัคซีน (เช่น BCG, HBV)"),
   hdc_code: z.string().optional(),
@@ -64,6 +72,7 @@ const ruleSchema = z.object({
 type RuleFormValues = z.infer<typeof ruleSchema>;
 
 interface RuleEditModalProps {
+  allRules: VaccineRule[];
   rule: VaccineRule | null;
   isOpen: boolean;
   onClose: () => void;
@@ -73,10 +82,11 @@ interface RuleEditModalProps {
   ageGroup: string;
 }
 
-export function RuleEditModal({ rule, isOpen, onClose, onSave, fiscalYear, ageGroup }: RuleEditModalProps) {
+export function RuleEditModal({ rule, allRules, isOpen, onClose, onSave, fiscalYear, ageGroup }: RuleEditModalProps) {
   const form = useForm<RuleFormValues>({
     resolver: zodResolver(ruleSchema),
     defaultValues: {
+      date_checks: { before_birth: true, allow_on_birth: false, same_day_pairs: [], ordered_pairs: [] },
       display_name: "",
       vaccine_group: "",
       hdc_code: "",
@@ -109,12 +119,18 @@ export function RuleEditModal({ rule, isOpen, onClose, onSave, fiscalYear, ageGr
     control: form.control,
   });
 
+  const sameDay = useFieldArray({ control: form.control, name: 'date_checks.same_day_pairs' });
+  const ordered = useFieldArray({ control: form.control, name: 'date_checks.ordered_pairs' });
+  const currentFields = [...form.watch('required_fields'), ...(form.watch('branch_alt_fields') || [])].map(f => f.value);
+  const dateOptions = [...new Set([...allRules.flatMap(r => [...r.required_fields, ...(r.branch_alt_fields || [])]), ...currentFields])].filter(Boolean).sort();
+
   const logicType = form.watch("logic_type");
 
   useEffect(() => {
     if (isOpen) {
       if (rule) {
         form.reset({
+          date_checks: getRuleDateChecks(rule, allRules),
           display_name: rule.display_name || "",
           vaccine_group: rule.vaccine_group || "",
           hdc_code: rule.hdc_code != null ? String(rule.hdc_code) : "",
@@ -129,7 +145,8 @@ export function RuleEditModal({ rule, isOpen, onClose, onSave, fiscalYear, ageGr
         });
       } else {
         form.reset({
-          display_name: "",
+          date_checks: { before_birth: true, allow_on_birth: false, same_day_pairs: [], ordered_pairs: [] },
+      display_name: "",
           vaccine_group: "",
           hdc_code: "",
           view_type: 1,
@@ -142,7 +159,7 @@ export function RuleEditModal({ rule, isOpen, onClose, onSave, fiscalYear, ageGr
         });
       }
     }
-  }, [rule, isOpen, form]);
+  }, [rule, isOpen, form, allRules]);
 
   const isDirty = form.formState.isDirty;
 
@@ -174,6 +191,18 @@ export function RuleEditModal({ rule, isOpen, onClose, onSave, fiscalYear, ageGr
   }, [isOpen, isDirty]);
 
   const onSubmit = (data: RuleFormValues) => {
+    const own = [...data.required_fields, ...(data.branch_alt_fields || [])].map(f => f.value.trim());
+    for (const key of ['same_day_pairs', 'ordered_pairs'] as const) {
+      const seen = new Set<string>();
+      for (const pair of data.date_checks[key]) {
+        const id = key === 'same_day_pairs' ? [pair.field, pair.other_field].sort().join('|') : `${pair.field}|${pair.other_field}`;
+        if (pair.field === pair.other_field || (!own.includes(pair.field) && !own.includes(pair.other_field)) || seen.has(id)) {
+          form.setError('date_checks', { message: 'กรุณาเลือกคู่เข็มต่างกัน ไม่ซ้ำ และมีอย่างน้อยหนึ่งเข็มอยู่ในเกณฑ์นี้' });
+          return;
+        }
+        seen.add(id);
+      }
+    }
     const isNew = !rule;
     
     const updatedRule: VaccineRule = {
@@ -182,6 +211,7 @@ export function RuleEditModal({ rule, isOpen, onClose, onSave, fiscalYear, ageGr
       fiscal_year: rule?.fiscal_year || fiscalYear,
       age_group: rule?.age_group || ageGroup,
       
+      date_checks: data.date_checks,
       display_name: data.display_name,
       vaccine_group: data.vaccine_group,
       hdc_code: data.hdc_code || "",
@@ -479,6 +509,33 @@ export function RuleEditModal({ rule, isOpen, onClose, onSave, fiscalYear, ageGr
                 )}
               </div>
             )}
+
+            <section className="border rounded-lg p-4 space-y-4">
+              <h3 className="font-semibold">ตรวจสอบข้อมูลวันที่</h3>
+              {!rule?.date_checks && <p className="text-sm text-zinc-500">เกณฑ์เดิมยังไม่มีการตั้งค่ารายคู่ ระบบแสดงค่าเริ่มต้นให้ตรวจทาน กดบันทึกฉบับร่างและยืนยันบันทึกเพื่อใช้ค่าที่เลือก</p>}
+              <p className="text-sm text-zinc-500">ใช้กับเข็มในเกณฑ์นี้ แสดงรายละเอียดในประวัติการรับวัคซีน กฎวันซ้ำเป็นการตรวจข้อมูลตามที่ผู้ดูแลกำหนด ไม่ใช่ข้อห้ามฉีดวัคซีนร่วมกันทางการแพทย์</p>
+              {(['before_birth', 'allow_on_birth'] as const).map(key => <FormField key={key} control={form.control} name={`date_checks.${key}`} render={({ field }) => <FormItem className="flex items-center justify-between gap-3">
+                <FormLabel>{key === 'before_birth' ? 'เตือนเมื่อฉีดก่อนวันเกิด' : 'อนุญาตวันที่ฉีดตรงวันเกิด'}</FormLabel>
+                <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
+              </FormItem>} />)}
+              {([{ key: 'same_day_pairs', array: sameDay, title: 'ห้ามบันทึกวันเดียวกัน', relation: 'กับ' }, { key: 'ordered_pairs', array: ordered, title: 'ลำดับวันที่ฉีด', relation: 'ต้องไม่หลัง' }] as const).map(({ key, array, title, relation }) => <div key={key} className="space-y-2">
+                <div className="flex items-center justify-between"><h4 className="text-sm font-semibold">{title}</h4><Button type="button" variant="outline" size="sm" onClick={() => array.append({ field: '', other_field: '' })}>เพิ่มคู่เข็ม</Button></div>
+                {array.fields.length === 0 && <p className="text-sm text-zinc-500">ไม่ได้กำหนดคู่เข็ม</p>}
+                {array.fields.map((pair, index) => <div key={pair.id} className="flex flex-wrap items-center gap-2">
+                  {(['field', 'other_field'] as const).map((side, position) => <div key={side} className="flex items-center gap-2 flex-1 min-w-48">
+                    {position === 1 && <span className="text-sm">{relation}</span>}
+                    <FormField control={form.control} name={`date_checks.${key}.${index}.${side}`} render={({ field }) => <FormItem className="flex-1"><FormControl>
+                      <select {...field} aria-label={`${title} ${index + 1} ${position === 0 ? 'เข็มแรก' : 'เข็มที่เปรียบเทียบ'}`} className="border rounded-lg px-3 py-2 text-sm w-full bg-white">
+                        <option value="">เลือกเข็มวัคซีน</option>
+                        {dateOptions.map(value => <option key={value} value={value}>{vaccineFieldLabel(value)} ({value})</option>)}
+                      </select>
+                    </FormControl><FormMessage /></FormItem>} />
+                  </div>)}
+                  <Button type="button" variant="outline" size="sm" onClick={() => array.remove(index)}>ลบคู่เข็ม</Button>
+                </div>)}
+              </div>)}
+              {form.formState.errors.date_checks?.message && <p className="text-sm text-destructive">{form.formState.errors.date_checks.message}</p>}
+            </section>
 
             <div className="flex justify-end gap-3 pt-6 border-t border-slate-100">
               <Button type="button" variant="outline" onClick={handleClose} className="bg-white">

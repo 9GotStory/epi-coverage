@@ -1,4 +1,3 @@
-import { getRecordDateWarnings } from '../utils/vaccine/dateWarnings';
 import type { EpiRecord } from '../types';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from './ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
@@ -7,15 +6,16 @@ import { formatDateStr } from '../utils/dateUtils';
 
 interface VaccineHistoryModalProps {
   warnings?: string[];
+  warningsStatus?: string;
   isOpen: boolean;
   onClose: () => void;
   record: EpiRecord | null;
 }
 
-export function VaccineHistoryModal({ isOpen, onClose, record, warnings }: VaccineHistoryModalProps) {
+export function VaccineHistoryModal({ isOpen, onClose, record, warnings, warningsStatus }: VaccineHistoryModalProps) {
   if (!record) return null;
   const rows = getHdcVaccineRows(record);
-  const dateWarnings = warnings ?? getRecordDateWarnings(record);
+  const dateWarnings = warnings ?? [];
 
   return (
     <Dialog open={isOpen} onOpenChange={open => { if (!open) onClose(); }}>
@@ -31,11 +31,13 @@ export function VaccineHistoryModal({ isOpen, onClose, record, warnings }: Vacci
           <div><dt className="text-zinc-500">ผลจาก HDC</dt><dd className="whitespace-pre-wrap">{hdcValue(record.result)}</dd></div>
         </dl>
         <p className="text-sm text-zinc-500">{rows.length} รายการ · — หมายถึงไม่มีค่าในข้อมูลที่โหลดมา</p>
+        {warningsStatus && <p role="status" className="text-sm text-zinc-500">{warningsStatus}</p>}
         {dateWarnings.length > 0 && <div className="border rounded-lg p-3 text-sm space-y-2">
           <p className="font-semibold">ข้อสังเกตข้อมูลวันที่ — โปรดตรวจสอบต้นทาง</p>
           <p className="text-zinc-500">ข้อสังเกตนี้ไม่เปลี่ยนผลจาก HDC และยังไม่ยืนยันว่าเป็นการบันทึกผิด</p>
           <ul className="list-disc pl-5">{dateWarnings.map(warning => <li key={warning}>{warning}</li>)}</ul>
         </div>}
+        {rows.some(row => /^rv[23]/.test(row.field)) && <p className="text-sm text-zinc-500">ข้อมูล Rota แยกเป็นชุด 2 เข็ม (rv21, rv22) และชุด 3 เข็ม (rv31, rv32, rv33) ส่วน “Rota เข็ม 1” และ “Rota (ครบถ้วน)” เป็นชื่อเกณฑ์ตรวจเข็มแรกและตรวจครบชุด</p>}
         <Table>
           <TableHeader>
             <TableRow>

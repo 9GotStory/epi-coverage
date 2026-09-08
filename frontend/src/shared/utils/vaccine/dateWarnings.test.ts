@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { EpiRecord } from '../../types';
-import { getRecordDateWarnings } from './dateWarnings';
+import { getRecordDateWarnings as checkWarnings } from './dateWarnings';
+import type { VaccineRule } from './ruleEngine';
+const fields = ['bcg_date', 'dtp1_date', 'dtp2_date', 'hib1_date', 'rv21_date', 'rv31_date', 'j11_date', 'j12_date', 'je1_date'];
+const rules: VaccineRule[] = fields.map(field => ({ rule_id: field, fiscal_year: 2569, age_group: '1yr', view_type: 1, vaccine_group: field, display_name: field, hdc_code: '', required_fields: [field], logic_type: 'ALL', is_active: true, is_required_for_v2: true, target_age_months: field === 'bcg_date' ? 0 : 2 }));
+const getRecordDateWarnings = (input: EpiRecord) => checkWarnings(input, rules);
 const record = (values: Partial<EpiRecord>) => ({ birth: '2024-01-01', ...values }) as EpiRecord;
 describe('record date warnings', () => {
   it('warns for duplicate doses and reversed order', () => {
@@ -28,5 +32,23 @@ describe('record date warnings', () => {
   });
   it('ignores empty dates and permits birth doses', () => {
     expect(getRecordDateWarnings(record({ bcg_date: '2024-01-01', dtp1_date: '', dtp2_date: '-' }))).toEqual([]);
+  });
+});
+
+describe('configured relationships', () => {
+  const config = { before_birth: false, allow_on_birth: true, same_day_pairs: [], ordered_pairs: [] };
+  it('explicit empty lists disable inferred duplicate and sequence checks', () => {
+    const configured = rules.map(rule => ({ ...rule, date_checks: config }));
+    expect(checkWarnings(record({ dtp1_date: '2023-12-31', dtp2_date: '2023-12-31' }), configured)).toEqual([]);
+  });
+  it('checks an explicit pair across different vaccine groups', () => {
+    const configured = [{ ...rules[1], date_checks: { ...config, same_day_pairs: [{ field: 'dtp1_date', other_field: 'hib1_date' }] } }];
+    expect(checkWarnings(record({ dtp1_date: '2024-03-01', hib1_date: '2024-03-01' }), configured)).toHaveLength(1);
+    expect(checkWarnings(record({ dtp1_date: '2024-03-01', hib1_date: '2024-04-01' }), configured)).toEqual([]);
+  });
+  it('does not run inactive rules or rules from an empty response', () => {
+    const input = record({ dtp1_date: '2023-12-31' });
+    expect(checkWarnings(input, [])).toEqual([]);
+    expect(checkWarnings(input, rules.map(rule => ({ ...rule, is_active: false })))).toEqual([]);
   });
 });

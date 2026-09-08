@@ -124,6 +124,7 @@ Thumbs.db
 !frontend/vite.config.js
 !backend/src/**/*.js
 !backend/src/*.js
+!backend/tests/*.test.cjs
 
 # Data files / PDFs (Exclude PII data)
 *.xlsx

@@ -1,3 +1,5 @@
+import type { VaccineDateChecks } from '../../types/vaccineDateChecks';
+import { dateKey, getRuleDateWarnings } from './dateWarnings';
 import { differenceInMonths, isValid } from 'date-fns';
 import type { EpiRecord, VaccineStatus } from '../../types';
 export interface View1Evaluation {
@@ -20,6 +22,7 @@ export const getAgeInMonths = (birthDateStr: string | Date | undefined, evaluati
 };
 
 export interface VaccineRule {
+  date_checks?: VaccineDateChecks;
   rule_id: string;
   fiscal_year: number;
   age_group: string;
@@ -82,51 +85,15 @@ export const hasDose = (record: EpiRecord, field: keyof EpiRecord, allowOnBirth:
 };
 
 /** rule นี้อนุญาตให้ฉีดตรงวันเกิดได้ไหม — อ่านตรงจาก config ไม่มีการเดา */
-const ruleAllowsOnBirth = (rule: VaccineRule): boolean => rule.target_age_months === 0;
+
 
 export const ruleHasDataError = (record: EpiRecord, rule: VaccineRule, allRules?: VaccineRule[]): string | null => {
-  const checkField = (f: string) => hasFieldDataError(record, f as keyof EpiRecord, ruleAllowsOnBirth(rule));
-  
-  const invalidField = [...(rule.required_fields || []), ...(rule.branch_alt_fields || [])].find(checkField);
-  if (invalidField) {
-    return 'ข้อมูลวันที่ก่อนวันเกิด';
-  }
-
-  // Check duplicate dates within the same vaccine group
-  if (allRules && rule.vaccine_group) {
-    const groupFields = new Set<string>();
-    for (const r of allRules) {
-      if (r.vaccine_group === rule.vaccine_group) {
-        (r.required_fields || []).forEach(f => groupFields.add(f));
-        (r.branch_alt_fields || []).forEach(f => groupFields.add(f));
-      }
-    }
-    
-    const ruleFields = [...(rule.required_fields || []), ...(rule.branch_alt_fields || [])];
-    for (const f of ruleFields) {
-      const val = record[f as keyof EpiRecord];
-      if (!val || typeof val !== 'string') continue;
-      const cleanVal = val.split('T')[0].trim();
-      if (cleanVal === '' || cleanVal === '-') continue;
-
-      for (const otherF of groupFields) {
-        if (f !== otherF) {
-          const otherVal = record[otherF as keyof EpiRecord];
-          if (otherVal && typeof otherVal === 'string') {
-            const cleanOtherVal = otherVal.split('T')[0].trim();
-            if (cleanVal === cleanOtherVal) return 'วันที่ซ้ำซ้อนกับเข็มอื่น';
-          }
-        }
-      }
-    }
-  }
-
-  return null;
+  return getRuleDateWarnings(record, rule, allRules || [rule])[0] || null;
 };
 
 export const getDataErrors = (record: EpiRecord, rules: VaccineRule[]): string[] => {
   const errors: string[] = [];
-  if (!record.birth || !rules) return errors;
+  if (!rules) return errors;
 
   for (const rule of rules) {
     const err = ruleHasDataError(record, rule, rules);
@@ -162,9 +129,8 @@ const resolveSmartVaccineNames = (record: EpiRecord, rule: VaccineRule, currentA
       (targetAge !== undefined && targetAge !== null && targetAge >= 6);
 
     if (isCompleteSeries) {
-      const allowOnBirth = ruleAllowsOnBirth(rule);
-      const hasRv21 = hasDose(record, 'rv21_date', allowOnBirth);
-      const hasRv31 = hasDose(record, 'rv31_date', allowOnBirth);
+      const hasRv21 = Boolean(dateKey(record['rv21_date']));
+      const hasRv31 = Boolean(dateKey(record['rv31_date']));
 
       if (!hasRv21 && !hasRv31) {
         let pending = false;
@@ -174,8 +140,8 @@ const resolveSmartVaccineNames = (record: EpiRecord, rule: VaccineRule, currentA
         return { names: ['Rota เข็ม 1'], isPending: pending };
       }
 
-      const hasRv22 = hasDose(record, 'rv22_date', allowOnBirth);
-      const hasRv32 = hasDose(record, 'rv32_date', allowOnBirth);
+      const hasRv22 = Boolean(dateKey(record['rv22_date']));
+      const hasRv32 = Boolean(dateKey(record['rv32_date']));
 
       if (!hasRv22 && !hasRv32) {
         let pending = false;
@@ -223,21 +189,20 @@ export const evaluateDynamicV1 = (record: EpiRecord, rules: VaccineRule[], evalu
       continue;
     }
 
-    const allowOnBirth = ruleAllowsOnBirth(rule);
     let passed = false;
 
     if (rule.logic_type === 'ALL') {
       // ต้องมีทุกเข็ม
-      passed = rule.required_fields && rule.required_fields.length > 0 && rule.required_fields.every(field => hasDose(record, field as keyof EpiRecord, allowOnBirth));
+      passed = rule.required_fields && rule.required_fields.length > 0 && rule.required_fields.every(field => Boolean(dateKey(record[field as keyof EpiRecord])));
     } else if (rule.logic_type === 'ANY') {
       // มีเข็มใดเข็มหนึ่งก็ผ่าน
-      passed = rule.required_fields && rule.required_fields.length > 0 && rule.required_fields.some(field => hasDose(record, field as keyof EpiRecord, allowOnBirth));
+      passed = rule.required_fields && rule.required_fields.length > 0 && rule.required_fields.some(field => Boolean(dateKey(record[field as keyof EpiRecord])));
     } else if (rule.logic_type === 'BRANCH') {
       // เส้นทางที่ 1 (เช่น Rota 2 เข็ม)
-      const path1Passed = rule.required_fields && rule.required_fields.length > 0 && rule.required_fields.every(field => hasDose(record, field as keyof EpiRecord, allowOnBirth));
+      const path1Passed = rule.required_fields && rule.required_fields.length > 0 && rule.required_fields.every(field => Boolean(dateKey(record[field as keyof EpiRecord])));
       // เส้นทางที่ 2 (เช่น Rota 3 เข็ม)
       const path2Passed = rule.branch_alt_fields && rule.branch_alt_fields.length > 0
-        ? rule.branch_alt_fields.every(field => hasDose(record, field as keyof EpiRecord, allowOnBirth))
+        ? rule.branch_alt_fields.every(field => Boolean(dateKey(record[field as keyof EpiRecord])))
         : false;
 
       passed = path1Passed || path2Passed;
@@ -280,16 +245,15 @@ export const evaluateDynamicV2 = (record: EpiRecord, rules: VaccineRule[], evalu
       continue;
     }
 
-    const allowOnBirth = ruleAllowsOnBirth(rule);
     let passed = false;
     if (rule.logic_type === 'ALL') {
-      passed = rule.required_fields && rule.required_fields.length > 0 && rule.required_fields.every(field => hasDose(record, field as keyof EpiRecord, allowOnBirth));
+      passed = rule.required_fields && rule.required_fields.length > 0 && rule.required_fields.every(field => Boolean(dateKey(record[field as keyof EpiRecord])));
     } else if (rule.logic_type === 'ANY') {
-      passed = rule.required_fields && rule.required_fields.length > 0 && rule.required_fields.some(field => hasDose(record, field as keyof EpiRecord, allowOnBirth));
+      passed = rule.required_fields && rule.required_fields.length > 0 && rule.required_fields.some(field => Boolean(dateKey(record[field as keyof EpiRecord])));
     } else if (rule.logic_type === 'BRANCH') {
-      const path1Passed = rule.required_fields && rule.required_fields.length > 0 && rule.required_fields.every(field => hasDose(record, field as keyof EpiRecord, allowOnBirth));
+      const path1Passed = rule.required_fields && rule.required_fields.length > 0 && rule.required_fields.every(field => Boolean(dateKey(record[field as keyof EpiRecord])));
       const path2Passed = rule.branch_alt_fields && rule.branch_alt_fields.length > 0
-        ? rule.branch_alt_fields.every(field => hasDose(record, field as keyof EpiRecord, allowOnBirth))
+        ? rule.branch_alt_fields.every(field => Boolean(dateKey(record[field as keyof EpiRecord])))
         : false;
       passed = path1Passed || path2Passed;
     }

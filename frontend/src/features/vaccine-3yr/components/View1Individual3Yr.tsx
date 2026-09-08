@@ -49,7 +49,7 @@ export function View1Individual3Yr({ fiscalYear, quarter, data, isLoading, error
   // Modal state
   const [selectedPatient, setSelectedPatient] = useState<EpiRecord | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const { rules } = useVaccineRules(fiscalYear, '3yr');
+  const { rules, isLoading: rulesLoading, error: rulesError } = useVaccineRules(fiscalYear, '3yr');
   const v1RulesCount = rules.filter(r => r.view_type === 1 && r.is_active).length;
 
   const processedData = useMemo(() => {
@@ -71,12 +71,11 @@ export function View1Individual3Yr({ fiscalYear, quarter, data, isLoading, error
       if (missing.length > 0) status = 'FAIL';
       else if (pending.length > 0) status = 'PENDING';
 
-      const v1Rules = rules.filter(r => r.view_type === 1 && r.is_active);
-      const dataErrors = [...new Set([...getDataErrors(record, v1Rules), ...getRecordDateWarnings(record)])];
+      const dataErrors = [...new Set([...getDataErrors(record, rules), ...getRecordDateWarnings(record, rules)])];
 
       return {
         ...record,
-        missingVaccines: missing,
+        missingVaccines: missing.filter(value => !dataErrors.includes(value)),
         pendingVaccines: pending,
         dataErrors,
         status: status
@@ -112,12 +111,11 @@ export function View1Individual3Yr({ fiscalYear, quarter, data, isLoading, error
       const { status, missingVaccines, pendingVaccines, dataErrors = [] } = row.original;
       const missing = missingVaccines.filter(value => !dataErrors.includes(value));
       return <div className="space-y-1 text-sm">
-        <p>{status === 'PASS' ? `ได้รับวัคซีนครบถ้วน (${v1RulesCount} รายการ)` : status === 'PENDING' ? 'ยังไม่ถึงเกณฑ์' : 'ไม่ผ่านเกณฑ์รายชนิด'}</p>
+        <p>{status === 'PASS' ? `ได้รับวัคซีนครบถ้วน (${v1RulesCount} รายการ)` : status === 'PENDING' ? 'ยังไม่ถึงเกณฑ์' : missing.length === 0 ? 'ตรวจสอบประวัติวัคซีน' : 'ไม่ผ่านเกณฑ์รายชนิด'}</p>
         {missing.length > 0 && <p>ขาด: {missing.join(', ')}</p>}
         {pendingVaccines.length > 0 && <p className="text-zinc-500">ยังไม่ถึงเกณฑ์: {pendingVaccines.join(', ')}</p>}
       </div>;
     } },
-    { header: 'ข้อสังเกตข้อมูลวันที่', id: 'dateWarnings', cell: ({ row }) => <div className="text-sm whitespace-pre-wrap">{row.original.dataErrors?.join('\n') || '—'}</div> },
     { header: 'ประวัติวัคซีน', id: 'history', cell: ({ row }) => <Button variant="outline" size="sm" onClick={() => { setSelectedPatient(row.original); setIsModalOpen(true); }}>ดูประวัติ</Button> },
   ], [v1RulesCount]);
 
@@ -151,14 +149,12 @@ export function View1Individual3Yr({ fiscalYear, quarter, data, isLoading, error
         'นามสกุล': row.lname,
         'วันเกิด': birthStr ? `${birthStr}\n(อายุ ${ageStr})` : '',
         'ผลการประเมิน (LAJE2 / JE3)': (() => {
-          let text = row.status === 'PASS'
+          const text = row.status === 'PASS'
             ? 'ได้รับวัคซีนครบถ้วน'
             : (row.status === 'FAIL'
-              ? `ตกหล่น: ${row.missingVaccines.join(', ')}`
+              ? (row.missingVaccines.length ? `ตกหล่น: ${row.missingVaccines.join(', ')}` : 'ตรวจสอบประวัติวัคซีน')
               : `ยังไม่ถึงเกณฑ์: ${row.pendingVaccines.join(', ')}`);
-          if (row.dataErrors && row.dataErrors.length > 0) {
-            text += `\n[ข้อมูลวันที่ผิดปกติ: ${row.dataErrors.join(', ')}]`;
-          }
+
           return text;
         })()
       };
@@ -177,14 +173,12 @@ export function View1Individual3Yr({ fiscalYear, quarter, data, isLoading, error
         'ชื่อ-สกุล': `${row.name} ${row.lname}`,
         'วันเกิด': birthStr ? `${birthStr}\n(อายุ ${ageStr})` : '',
         'ผลการประเมิน': (() => {
-          let text = row.status === 'PASS'
+          const text = row.status === 'PASS'
             ? 'ครบถ้วน'
             : (row.status === 'FAIL'
-              ? `ตกหล่น: ${row.missingVaccines.join(', ')}`
+              ? (row.missingVaccines.length ? `ตกหล่น: ${row.missingVaccines.join(', ')}` : 'ตรวจสอบประวัติวัคซีน')
               : `ยังไม่ถึงเกณฑ์: ${row.pendingVaccines.join(', ')}`);
-          if (row.dataErrors && row.dataErrors.length > 0) {
-            text += `\n[ข้อมูลวันที่ผิดปกติ: ${row.dataErrors.join(', ')}]`;
-          }
+
           return text;
         })()
       };
@@ -203,7 +197,8 @@ export function View1Individual3Yr({ fiscalYear, quarter, data, isLoading, error
           isOpen={isModalOpen}
           onClose={() => setIsModalOpen(false)}
           record={selectedPatient}
-          warnings={selectedPatient ? [...new Set([...getDataErrors(selectedPatient, rules.filter(r => r.view_type === 1 && r.is_active)), ...getRecordDateWarnings(selectedPatient)])] : []}
+          warningsStatus={rulesLoading ? 'กำลังโหลดเกณฑ์ตรวจวันที่...' : rulesError ? 'โหลดเกณฑ์ตรวจวันที่ไม่สำเร็จ' : rules.length === 0 ? 'ยังไม่มีเกณฑ์ตรวจวันที่สำหรับปีและกลุ่มอายุนี้' : undefined}
+          warnings={selectedPatient ? getRecordDateWarnings(selectedPatient, rules) : []}
         />
 
         {/* Header section */}

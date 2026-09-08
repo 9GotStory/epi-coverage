@@ -1,3 +1,5 @@
+import { getRuleDateChecks } from '../../../shared/utils/vaccine/dateWarnings';
+import { vaccineFieldLabel } from '../../../shared/utils/vaccine/hdcData';
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../../shared/components/ui/card';
 import { Button } from '../../../shared/components/ui/button';
@@ -20,6 +22,16 @@ import { AlertCircle, CheckCircle2, RotateCw, RotateCcw } from 'lucide-react';
 
 interface VaccineRuleManagerProps {
   onDirtyChange?: (isDirty: boolean) => void;
+}
+
+function describeDateChecks(rule: VaccineRule, rules: VaccineRule[]) {
+  const checks = getRuleDateChecks(rule, rules);
+  return [
+    `ตรวจฉีดก่อนวันเกิด: ${checks.before_birth ? 'เปิด' : 'ปิด'}`,
+    `ฉีดตรงวันเกิด: ${checks.allow_on_birth ? 'อนุญาต' : 'ไม่อนุญาต'}`,
+    `ห้ามวันซ้ำ: ${checks.same_day_pairs.map(p => `${vaccineFieldLabel(p.field)} กับ ${vaccineFieldLabel(p.other_field)}`).join(', ') || 'ไม่มี'}`,
+    `ลำดับวันที่: ${checks.ordered_pairs.map(p => `${vaccineFieldLabel(p.field)} ต้องไม่หลัง ${vaccineFieldLabel(p.other_field)}`).join(', ') || 'ไม่มี'}`,
+  ].join('; ');
 }
 
 export const VaccineRuleManager = ({ onDirtyChange }: VaccineRuleManagerProps) => {
@@ -408,6 +420,7 @@ export const VaccineRuleManager = ({ onDirtyChange }: VaccineRuleManagerProps) =
 
       {editingRule && (
         <RuleEditModal
+          allRules={displayRules}
           rule={editingRule}
           isOpen={!!editingRule}
           onClose={() => setEditingRule(null)}
@@ -531,6 +544,7 @@ export const VaccineRuleManager = ({ onDirtyChange }: VaccineRuleManagerProps) =
                           {original.is_required_for_v2 !== draft.is_required_for_v2 && renderStringDiff("บังคับใช้ View 2", original.is_required_for_v2 ? 'ใช่' : 'ไม่ใช่', draft.is_required_for_v2 ? 'ใช่' : 'ไม่ใช่')}
                           {JSON.stringify(original.required_fields) !== JSON.stringify(draft.required_fields) && renderArrayDiff("ฟิลด์ที่ต้องการ", original.required_fields, draft.required_fields)}
                           {JSON.stringify(original.branch_alt_fields || []) !== JSON.stringify(draft.branch_alt_fields || []) && renderArrayDiff("ฟิลด์ทางเลือก", original.branch_alt_fields || [], draft.branch_alt_fields || [])}
+                          {JSON.stringify(original.date_checks) !== JSON.stringify(draft.date_checks) && renderStringDiff("ตรวจสอบข้อมูลวันที่", describeDateChecks(original, rules), describeDateChecks(draft, displayRules))}
                           {original.note !== draft.note && renderStringDiff("หมายเหตุ", original.note || '-', draft.note || '-')}
                         </div>
                       </div>
