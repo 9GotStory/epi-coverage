@@ -1,7 +1,13 @@
-/** HDC imports: PID within facility/year (CID fallback only when unmasked); missing fields preserve existing values. */
-function epiImportKey(record, fiscalYear) {
-  const identity = record.pid ? ['pid', String(record.pid)] : ['cid', String(record.cid || '')];
-  return JSON.stringify([String(fiscalYear || ''), String(record.hoscode || ''), ...identity]);
+/** Match the full identity; a CID must never bypass PID/sex/birth/village differences. */
+function epiImportKey(record, fiscalYear, timeZone = 'UTC') {
+  const text = value => String(value == null ? '' : value).trim();
+  const identity = text(record.pid) ? ['pid', text(record.pid)] : ['cid', text(record.cid)];
+  // Sheet Date cells represent a calendar date in the spreadsheet's timezone.
+  const birth = Object.prototype.toString.call(record.birth) === '[object Date]'
+    ? Utilities.formatDate(record.birth, timeZone, 'yyyy-MM-dd')
+    : text(record.birth).slice(0, 10);
+  return JSON.stringify([text(fiscalYear), text(record.hoscode), ...identity,
+    text(record.sex), birth, text(record.check_vhid)]);
 }
 
 function epiSourceColumns(value) {
@@ -64,6 +70,7 @@ function upsertEpiData(chunk, batchId, adminEmail, fiscalYear, targetTable = 'Ep
   }
   return withEpiImportLock(() => {
     const ss = getSpreadsheet();
+    const timeZone = ss.getSpreadsheetTimeZone();
     const batches = epiBatchSheet(ss);
     const receipts = batches.getDataRange().getValues();
     let receiptIndex = receipts.findIndex((row, i) => i > 0 && row[0] === batchId);
@@ -95,24 +102,15 @@ function upsertEpiData(chunk, batchId, adminEmail, fiscalYear, targetTable = 'Ep
     const headers = rows[0];
     const objects = rows.slice(1).map(row => arrayToObj(headers, row));
     const lookup = new Map();
-    const cidLookup = new Map();
-    const duplicateCids = new Set();
     objects.forEach((record, i) => {
-      const key = epiImportKey(record, record.fiscal_year);
+      const key = epiImportKey(record, record.fiscal_year, timeZone);
       if (lookup.has(key)) throw new Error('Duplicate identity in existing sheet. Review duplicates before importing.');
       lookup.set(key, i + 1);
-      if (/^\d{13}$/.test(String(record.cid))) {
-        const cidKey = JSON.stringify([String(record.fiscal_year), String(record.hoscode), String(record.cid)]);
-        if (cidLookup.has(cidKey)) duplicateCids.add(cidKey);
-        cidLookup.set(cidKey, i + 1);
-      }
     });
     let inserted = 0, updated = 0;
     chunk.forEach(record => {
-      const key = epiImportKey(record, fiscalYear);
-      let rowIndex = lookup.get(key);
-      const cidKey = JSON.stringify([String(fiscalYear), record.hoscode, record.cid]);
-      if (rowIndex === undefined && /^\d{13}$/.test(record.cid) && !duplicateCids.has(cidKey)) rowIndex = cidLookup.get(cidKey);
+      const key = epiImportKey(record, fiscalYear, timeZone);
+      const rowIndex = lookup.get(key);
       const previous = rowIndex === undefined ? {} : arrayToObj(headers, rows[rowIndex]);
       if (/^\d{13}$/.test(String(previous.cid)) && /^\d{13}$/.test(record.cid) && String(previous.cid) !== record.cid) {
         throw new Error('PID matches a different unmasked CID. Review identity before importing.');
@@ -126,7 +124,6 @@ function upsertEpiData(chunk, batchId, adminEmail, fiscalYear, targetTable = 'Ep
       const values = headers.map(field => merged[field] == null ? '' : merged[field]);
       if (rowIndex === undefined) { lookup.set(key, rows.length); rows.push(values); inserted++; }
       else { rows[rowIndex] = values; lookup.set(key, rowIndex); updated++; }
-      if (/^\d{13}$/.test(record.cid)) cidLookup.set(cidKey, lookup.get(key));
     });
     writeEpiRows(sheet, headers, rows);
     completed.push({ index, fingerprint });

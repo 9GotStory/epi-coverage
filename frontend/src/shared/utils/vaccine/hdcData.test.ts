@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { EpiRecord } from '../../types';
-import { getHdcExportRows, getHdcVaccineRows, hdcValue } from './hdcData';
+import { getHdcExportRows, getHdcVaccineRows, hdcValue, formatHdcDate } from './hdcData';
 
 const record: EpiRecord = {
   hoscode: '00001', hosname: 'สถานบริการทดสอบ', pid: '0001',
@@ -49,5 +49,31 @@ describe('HDC source data', () => {
     const rows = getHdcVaccineRows({ ...record, j11_date: undefined, j12_date: '', je3_date: null });
     expect(rows.find(row => row.field === 'j11_date')?.date).toContain('ไม่มีคอลัมน์');
     expect(rows.filter(row => row.field !== 'j11_date').every(row => row.date === '—')).toBe(true);
+  });
+});
+
+
+describe('HDC history date formatting', () => {
+  it('displays the literal source day as DD-MM-YYYY without a timezone shift', () => {
+    expect(formatHdcDate('2023-10-03T17:00:00.000Z')).toBe('03-10-2023');
+    expect(formatHdcDate('2023-10-03')).toBe('03-10-2023');
+    expect(formatHdcDate('2023-10-03T23:30:00-07:00')).toBe('03-10-2023');
+    expect(formatHdcDate(new Date('2023-10-03T17:00:00.000Z'))).toBe('03-10-2023');
+    expect(formatHdcDate('2024-02-29')).toBe('29-02-2024');
+  });
+  it('retains empty, unknown and invalid source values rather than inventing dates', () => {
+    expect(formatHdcDate(null)).toBe('—');
+    expect(formatHdcDate('')).toBe('—');
+    expect(formatHdcDate('2023-02-29')).toBe('2023-02-29');
+    expect(formatHdcDate('2023-10-03Tinvalid')).toBe('2023-10-03Tinvalid');
+    expect(formatHdcDate('ไฟล์ไม่มีคอลัมน์')).toBe('ไฟล์ไม่มีคอลัมน์');
+    expect(formatHdcDate('ตรวจสอบต้นทาง')).toBe('ตรวจสอบต้นทาง');
+  });
+  it('does not change the stored or exported source timestamp', () => {
+    const source = { ...record, j12_date: '2023-10-03T17:00:00.000Z' };
+    const row = getHdcVaccineRows(source).find(row => row.field === 'j12_date')!;
+    expect(formatHdcDate(row.date)).toBe('03-10-2023');
+    expect(source.j12_date).toBe('2023-10-03T17:00:00.000Z');
+    expect(getHdcExportRows([source])[0]).toHaveProperty('j12_date', source.j12_date);
   });
 });

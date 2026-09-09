@@ -50,3 +50,11 @@ it('supports masked CIDs with unique PIDs and refuses masked records without PID
   expect((await parseHdcFile(json(rows), 1)).rows).toHaveLength(2);
   await expect(parseHdcFile(json([{ ...base, cid: '123456*******' }]), 1)).rejects.toThrow('PID');
 });
+
+
+it('allows same PID and CID with different sex, birth or village; rejects the full duplicate key', async () => {
+  const row = { ...base, pid: '001', sex: '1', check_vhid: '00123' };
+  const variants = [row, { ...row, sex: '2' }, { ...row, birth: '2025-01-02' }, { ...row, check_vhid: '00124' }];
+  expect((await parseHdcFile(json(variants), 1)).rows).toHaveLength(4);
+  await expect(parseHdcFile(json([row, { ...row, sex: 1 }]), 1)).rejects.toThrow('ซ้ำ');
+});

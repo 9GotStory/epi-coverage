@@ -40,13 +40,13 @@ function setup() {
     sheets.set(name, sheet);
     return sheet;
   }
-  const ss = { getSheetByName: name => sheets.get(name), getSheets: () => [...sheets.values()], insertSheet: name => createSheet(name) };
+  const ss = { getSpreadsheetTimeZone: () => 'Asia/Bangkok', getSheetByName: name => sheets.get(name), getSheets: () => [...sheets.values()], insertSheet: name => createSheet(name) };
   const context = vm.createContext({
     getSpreadsheet: () => ss, console, logAction() {},
     arrayToObj: (headers, row) => Object.fromEntries(headers.map((field, index) => [field, row[index]])),
     LockService: { getScriptLock: () => ({ waitLock() { assert.equal(locked, false); locked = true; }, releaseLock() { locked = false; } }) },
     SpreadsheetApp: { flush() {} },
-    Utilities: { DigestAlgorithm: { SHA_256: 'sha256' }, computeDigest: (_, data) => crypto.createHash('sha256').update(data).digest(), base64Encode: data => Buffer.from(data).toString('base64') },
+    Utilities: { formatDate: (value, timeZone) => new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(value), DigestAlgorithm: { SHA_256: 'sha256' }, computeDigest: (_, data) => crypto.createHash('sha256').update(data).digest(), base64Encode: data => Buffer.from(data).toString('base64') },
   });
   for (const file of ['Setup.js', 'Upload.js', 'Data.js']) vm.runInContext(fs.readFileSync(path.join(__dirname, '../src', file), 'utf8'), context);
   context.logAction = () => {};
@@ -76,7 +76,7 @@ test('every dose has both facility columns and all ages preserve HDC fields', ()
 
 test('legacy migration is append-only, repeatable and expands columns', () => {
   const { context: c, createSheet, sheets, read } = setup();
-  createSheet('Epi_1_Year', [['hoscode', 'cid', 'fiscal_year', 'addr'], ['00588', '0000000000001', '2569', 'old']]);
+  createSheet('Epi_1_Year', [['hoscode', 'cid', 'fiscal_year', 'addr', 'pid', 'birth'], ['00588', '0000000000001', '2569', 'old', '0001', '2025-01-01']]);
   assert.equal(upload(c, [person()], 'migrate').success, true);
   assert.deepEqual(sheets.get('Epi_1_Year').cells[0].slice(0, 4), ['hoscode', 'cid', 'fiscal_year', 'addr']);
   assert.equal(read()[0].addr, 'old');
@@ -88,7 +88,7 @@ test('legacy migration is append-only, repeatable and expands columns', () => {
 test('missing columns preserve data, explicit blanks clear it and provenance survives legacy uploads', () => {
   const { context: c, read } = setup();
   upload(c, [person({ bcg_input_hosp: '00002', addr: '001', check_typearea: '3' })], 'full');
-  upload(c, [person({ pid: 'changed', birth: '2025-01-02' })], 'legacy');
+  assert.equal(upload(c, [person({ name: 'ชื่อแก้ไข' })], 'legacy').updated, 1);
   assert.equal(read().length, 1); assert.equal(read()[0].bcg_input_hosp, '00002');
   assert.ok(JSON.parse(read()[0].source_columns).includes('bcg_input_hosp'));
   upload(c, [person({ bcg_input_hosp: null })], 'clear');
@@ -210,4 +210,30 @@ test('session validation provides stored facility and rejects expired or unappro
   assert.equal(c.validateTokenAndGetRole('session').valid, false);
   session.cells[1][5] = '2000-01-01';
   assert.equal(c.validateTokenAndGetRole('session').valid, false);
+});
+
+
+test('all ages keep identical PID/CID records separate when sex, birth or village differs', () => {
+  for (const age of [1, 2, 3, 5]) {
+    for (const cid of ['0000000000001', '123456*******']) {
+      const { context: c, read } = setup();
+      const table = `Epi_${age}_Year`;
+      const base = person({ pid: '001', cid, sex: '1', check_vhid: '00123456' });
+      const variants = [base, { ...base, sex: '2' }, { ...base, birth: '2025-01-02' }, { ...base, check_vhid: '00123457' }];
+      assert.equal(upload(c, variants, 'variants', 2569, table).inserted, 4);
+      assert.equal(upload(c, variants.map((row, i) => ({ ...row, addr: `address-${i}` })), 'updates', 2569, table).updated, 4);
+      assert.equal(read(table).length, 4);
+      assert.deepEqual(read(table).map(row => row.addr), ['address-0', 'address-1', 'address-2', 'address-3']);
+      assert.equal(upload(c, [{ ...base, pid: '002' }], 'new-pid', 2569, table).inserted, 1);
+    }
+  }
+});
+
+test('calendar birth dates from native Sheets Date cells match normalized imports', () => {
+  const { context: c, createSheet, read } = setup();
+  createSheet('Epi_1_Year', [['hoscode', 'pid', 'cid', 'sex', 'birth', 'check_vhid', 'fiscal_year'],
+    ['00588', '0001', '0000000000001', 1, new Date('2024-12-31T17:00:00.000Z'), '', 2569]]);
+  assert.equal(upload(c, [person({ sex: '1', check_vhid: null })], 'date-normalized').updated, 1);
+  assert.equal(read().length, 1);
+  assert.equal(read()[0].birth, '2025-01-01');
 });

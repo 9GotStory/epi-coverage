@@ -2,7 +2,7 @@ import type { EpiAge } from '../types/hdc';
 import type { EpiRecord } from '../types';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from './ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
-import { getHdcVaccineRows, hdcValue } from '../utils/vaccine/hdcData';
+import { getHdcVaccineRows, hdcValue, formatHdcDate } from '../utils/vaccine/hdcData';
 import { formatDateStr } from '../utils/dateUtils';
 
 interface VaccineHistoryModalProps {
@@ -56,7 +56,7 @@ export function VaccineHistoryModal({ isOpen, onClose, record, warnings, warning
             {rows.map(row => (
               <TableRow key={row.id}>
                 <TableCell><div>{row.name}</div><div className="text-xs text-zinc-500">{row.field}</div>{row.mappingNote && <div className="text-sm text-muted-foreground">ข้อมูลไม่พอประเมิน: {row.mappingNote}</div>}</TableCell>
-                <TableCell className="whitespace-pre-wrap">{row.date}</TableCell>
+                <TableCell className="whitespace-pre-wrap">{formatHdcDate(row.date)}</TableCell>
                 <TableCell>{row.facility}</TableCell>
                 <TableCell>{row.inputFacility}</TableCell>
               </TableRow>

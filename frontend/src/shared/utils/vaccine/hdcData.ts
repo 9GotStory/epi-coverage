@@ -20,6 +20,18 @@ export function hdcValue(value: unknown): string {
   return value instanceof Date ? value.toISOString() : String(value);
 }
 
+/** Display the source calendar day, without shifting it to the browser timezone. */
+export function formatHdcDate(value: unknown): string {
+  const text = hdcValue(value).trim();
+  const match = /^(\d{4})-(\d{2})-(\d{2})(?:T.*)?$/.exec(text);
+  if (!match || (text.includes('T') && Number.isNaN(Date.parse(text)))) return text;
+  const [, year, month, day] = match;
+  const datePart = `${year}-${month}-${day}`;
+  const parsed = new Date(`${datePart}T00:00:00Z`);
+  if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== datePart) return text;
+  return `${day}-${month}-${year}`;
+}
+
 export function getHdcVaccineRows(record: EpiRecord, age?: EpiAge) {
   const values = Object.fromEntries(Object.entries(record));
   const rows = age ? AGE_VACCINES[age].flatMap(item => {

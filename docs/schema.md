@@ -24,11 +24,11 @@
 | `hoscode` | String | รหัส รพ.สต. ที่ดูแล (Text) |
 | `hosname` | String | ชื่อ รพ.สต. |
 | `pid` | String | รหัสบุคคล (PID) จากฐานข้อมูล HDC/JHCIS |
-| `cid` | String | CID ต้นทาง อาจมี * ปิดบังและซ้ำกัน จับคู่หลักด้วย PID ในหน่วยบริการและปี |
+| `cid` | String | CID ต้นทาง อาจมี * ปิดบังและซ้ำกัน จับคู่ด้วย PID + hoscode + fiscal_year + sex + birth + check_vhid |
 | `name` | String | ชื่อผู้ป่วย (Masked) |
 | `lname` | String | นามสกุล (Masked) |
 | `sex` | String | เพศ |
-| `birth` | Date | วันเกิด (YYYY-MM-DD) สำหรับคำนวณอายุ ไม่ใช้เป็นคีย์อัปเดต |
+| `birth` | Date | วันเกิด (YYYY-MM-DD) สำหรับคำนวณอายุและเป็นส่วนหนึ่งของคีย์อัปเดต |
 | `check_vhid` | String | รหัสบ้าน (ถ้ามี) |
 | `bcg_date`, `bcg_hospcode` | Date, String | วันที่ฉีด BCG และรหัสสถานพยาบาลที่ฉีด |
 | `hbv1_date` ... `hbv4_date` | Date | วันที่ฉีด HBV 1-4 |

@@ -33,7 +33,10 @@ export async function parseHdcFile(file: File, age?: EpiAge) {
     if (!validated.success) throw new Error(`แถว ${index + 2}: ${validated.error.issues[0].message}`);
     if (String(row.cid).includes('*') && !row.pid) throw new Error(`แถว ${index + 2}: CID ถูกปิดบัง ต้องมี PID เพื่อแยกบุคคล`);
     if (row.pid != null && row.pid !== '' && !/^\d+$/.test(String(row.pid))) throw new Error(`แถว ${index + 2}: PID ไม่ถูกต้อง`);
-    const key = `${row.hoscode}:${row.pid ? 'pid:' + row.pid : 'cid:' + row.cid}`;
+    // fiscal_year and target table are fixed for this file; match the backend's full identity.
+    const text = (value: unknown) => String(value ?? '').trim();
+    const identity = row.pid ? ['pid', text(row.pid)] : ['cid', text(row.cid)];
+    const key = JSON.stringify([text(row.hoscode), ...identity, text(row.sex), text(row.birth).slice(0, 10), text(row.check_vhid)]);
     if (seen.has(key)) throw new Error(`แถว ${index + 2}: รหัสบุคคลซ้ำในหน่วยบริการเดียวกัน`);
     seen.add(key);
     for (const [field, value] of Object.entries(row)) {
