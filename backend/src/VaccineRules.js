@@ -442,141 +442,243 @@ function seedVaccineRules(fiscalYear, adminEmail, force = false) {
   // Default Rules — แปลงมาจาก vaccine-*.ts Hardcoded Logic
   // ──────────────────────────────────────────────────────────
   const rules = [
-    // ── 1yr — View 1 (รายเข็ม) ──
-    { age_group: '1yr', view_type: 1, vaccine_group: 'BCG', display_name: 'ขาด BCG (010)', hdc_code: '010', required_fields: ['bcg_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '1yr', view_type: 1, vaccine_group: 'HBV', display_name: 'ขาด HBV เข็ม 1 (041)', hdc_code: '041', required_fields: ['hbv1_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '1yr', view_type: 1, vaccine_group: 'HBV', display_name: 'ขาด HBV เข็ม 2 (042)', hdc_code: '042', required_fields: ['hbv2_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '1yr', view_type: 1, vaccine_group: 'HBV', display_name: 'ขาด HBV เข็ม 3 (043)', hdc_code: '043', required_fields: ['hbv3_date'], logic_type: 'ALL', is_required_for_v2: false },
-    { age_group: '1yr', view_type: 1, vaccine_group: 'HBV', display_name: 'ขาด HBV เข็ม 4 (043)', hdc_code: '043', required_fields: ['hbv4_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '1yr', view_type: 1, vaccine_group: 'DTP', display_name: 'ขาด DTP เข็ม 1 (031)', hdc_code: '031', required_fields: ['dtp1_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '1yr', view_type: 1, vaccine_group: 'DTP', display_name: 'ขาด DTP เข็ม 2 (032)', hdc_code: '032', required_fields: ['dtp2_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '1yr', view_type: 1, vaccine_group: 'DTP', display_name: 'ขาด DTP เข็ม 3 (033)', hdc_code: '033', required_fields: ['dtp3_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '1yr', view_type: 1, vaccine_group: 'Hib', display_name: 'ขาด Hib เข็ม 1 (D21)', hdc_code: 'D21', required_fields: ['hib1_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '1yr', view_type: 1, vaccine_group: 'Hib', display_name: 'ขาด Hib เข็ม 2 (D22)', hdc_code: 'D22', required_fields: ['hib2_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '1yr', view_type: 1, vaccine_group: 'Hib', display_name: 'ขาด Hib เข็ม 3 (D23)', hdc_code: 'D23', required_fields: ['hib3_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '1yr', view_type: 1, vaccine_group: 'IPV', display_name: 'IPV เข็ม 1 (I11)', hdc_code: 'I11', required_fields: ['ipv1_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '1yr', view_type: 1, vaccine_group: 'IPV', display_name: 'IPV เข็ม 2 (I12)', hdc_code: 'I12', required_fields: ['ipv2_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '1yr', view_type: 1, vaccine_group: 'OPV', display_name: 'ขาด OPV เข็ม 1 (081)', hdc_code: '081', required_fields: ['opv1_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '1yr', view_type: 1, vaccine_group: 'OPV', display_name: 'ขาด OPV เข็ม 2 (082)', hdc_code: '082', required_fields: ['opv2_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '1yr', view_type: 1, vaccine_group: 'OPV', display_name: 'ขาด OPV เข็ม 3 (083)', hdc_code: '083', required_fields: ['opv3_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '1yr', view_type: 1, vaccine_group: 'MMR', display_name: 'ขาด MMR เข็ม 1 (061)', hdc_code: '061', required_fields: ['mmr1_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '1yr', view_type: 1, vaccine_group: 'Rota', display_name: 'ขาด Rota เข็ม 1', hdc_code: 'R11/R21', required_fields: ['rv21_date'], branch_alt_fields: ['rv31_date'], logic_type: 'BRANCH', is_required_for_v2: true },
-    { age_group: '1yr', view_type: 1, vaccine_group: 'Rota', display_name: 'ขาด Rota (ครบถ้วน)', hdc_code: '', required_fields: ['rv21_date', 'rv22_date'], branch_alt_fields: ['rv31_date', 'rv32_date', 'rv33_date'], logic_type: 'BRANCH', is_required_for_v2: true },
+    // ── 1yr — View 1 (วัคซีนรายชนิด/รายเข็ม) ──
+    { age_group: '1yr', view_type: 1, vaccine_group: 'BCG', display_name: 'BCG', hdc_code: '010', required_fields: ['bcg_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 0 },
+    
+    // ── HBV (เรียงตามอายุ แต่สลับฟิลด์ตามโครงสร้าง HOSxP) ──
+    { age_group: '1yr', view_type: 1, vaccine_group: 'HBV', display_name: 'HBV เข็ม 1 (0 เดือน)', hdc_code: '041', required_fields: ['hbv1_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 0 },
+    { age_group: '1yr', view_type: 1, vaccine_group: 'HBV', display_name: 'HBV เข็ม 2 (2 เดือน)', hdc_code: '042', required_fields: ['hbv2_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 2 },
+    { age_group: '1yr', view_type: 1, vaccine_group: 'HBV', display_name: 'HBV เข็ม 3 (4 เดือน)', hdc_code: '043', required_fields: ['hbv4_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 4 },
+    { age_group: '1yr', view_type: 1, vaccine_group: 'HBV', display_name: 'HBV เข็ม 4 (6 เดือน)', hdc_code: '044', required_fields: ['hbv3_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 6 },
+    
+    // ── DTP ──
+    { age_group: '1yr', view_type: 1, vaccine_group: 'DTP', display_name: 'DTP เข็ม 1', hdc_code: '031', required_fields: ['dtp1_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 2 },
+    { age_group: '1yr', view_type: 1, vaccine_group: 'DTP', display_name: 'DTP เข็ม 2', hdc_code: '032', required_fields: ['dtp2_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 4 },
+    { age_group: '1yr', view_type: 1, vaccine_group: 'DTP', display_name: 'DTP เข็ม 3', hdc_code: '033', required_fields: ['dtp3_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 6 },
+    
+    // ── Hib ──
+    { age_group: '1yr', view_type: 1, vaccine_group: 'Hib', display_name: 'Hib เข็ม 1', hdc_code: 'D21', required_fields: ['hib1_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 2 },
+    { age_group: '1yr', view_type: 1, vaccine_group: 'Hib', display_name: 'Hib เข็ม 2', hdc_code: 'D22', required_fields: ['hib2_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 4 },
+    { age_group: '1yr', view_type: 1, vaccine_group: 'Hib', display_name: 'Hib เข็ม 3', hdc_code: 'D23', required_fields: ['hib3_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 6 },
+    
+    // ── IPV ──
+    { age_group: '1yr', view_type: 1, vaccine_group: 'IPV', display_name: 'IPV เข็ม 1', hdc_code: 'I11', required_fields: ['ipv1_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 2 },
+    { age_group: '1yr', view_type: 1, vaccine_group: 'IPV', display_name: 'IPV เข็ม 2', hdc_code: 'I12', required_fields: ['ipv2_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 4 },
+    
+    // ── OPV ──
+    { age_group: '1yr', view_type: 1, vaccine_group: 'OPV', display_name: 'OPV เข็ม 1', hdc_code: '081', required_fields: ['opv1_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 2 },
+    { age_group: '1yr', view_type: 1, vaccine_group: 'OPV', display_name: 'OPV เข็ม 2', hdc_code: '082', required_fields: ['opv2_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 4 },
+    { age_group: '1yr', view_type: 1, vaccine_group: 'OPV', display_name: 'OPV เข็ม 3', hdc_code: '083', required_fields: ['opv3_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 6 },
+    
+    // ── MMR ──
+    { age_group: '1yr', view_type: 1, vaccine_group: 'MMR', display_name: 'MMR เข็ม 1', hdc_code: '061', required_fields: ['mmr1_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 9 },
+    
+    // ── PCV (นอกแผน) ──
+    { age_group: '1yr', view_type: 1, vaccine_group: 'PCV', display_name: 'PCV เข็ม 1', hdc_code: 'P11', required_fields: ['pcv1_date'], logic_type: 'ALL', is_required_for_v2: false, target_age_months: 2 },
+    { age_group: '1yr', view_type: 1, vaccine_group: 'PCV', display_name: 'PCV เข็ม 2', hdc_code: 'P12', required_fields: ['pcv2_date'], logic_type: 'ALL', is_required_for_v2: false, target_age_months: 4 },
+    { age_group: '1yr', view_type: 1, vaccine_group: 'PCV', display_name: 'PCV เข็ม 3', hdc_code: 'P13', required_fields: ['pcv3_date'], logic_type: 'ALL', is_required_for_v2: false, target_age_months: 6 },
+
+    // ── Rota (รายเข็ม Single Responsibility) ──
+    { age_group: '1yr', view_type: 1, vaccine_group: 'Rota', display_name: 'Rota เข็ม 1 (ชนิด 2 เข็ม)', hdc_code: 'R11', required_fields: ['rv21_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 2 },
+    { age_group: '1yr', view_type: 1, vaccine_group: 'Rota', display_name: 'Rota เข็ม 2 (ชนิด 2 เข็ม)', hdc_code: 'R12', required_fields: ['rv22_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 4 },
+    { age_group: '1yr', view_type: 1, vaccine_group: 'Rota', display_name: 'Rota เข็ม 1 (ชนิด 3 เข็ม)', hdc_code: 'R21', required_fields: ['rv31_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 2 },
+    { age_group: '1yr', view_type: 1, vaccine_group: 'Rota', display_name: 'Rota เข็ม 2 (ชนิด 3 เข็ม)', hdc_code: 'R22', required_fields: ['rv32_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 4 },
+    { age_group: '1yr', view_type: 1, vaccine_group: 'Rota', display_name: 'Rota เข็ม 3 (ชนิด 3 เข็ม)', hdc_code: 'R23', required_fields: ['rv33_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 6 },
 
     // ── 1yr — View 2 (Fully Immunized) ──
-    { age_group: '1yr', view_type: 2, vaccine_group: 'BCG', display_name: 'BCG 1 เข็ม (010)', hdc_code: '010', required_fields: ['bcg_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '1yr', view_type: 2, vaccine_group: 'HBV', display_name: 'HBV เข็ม 1 (041)', hdc_code: '041', required_fields: ['hbv1_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '1yr', view_type: 2, vaccine_group: 'HBV', display_name: 'HBV เข็ม 2 (042)', hdc_code: '042', required_fields: ['hbv2_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '1yr', view_type: 2, vaccine_group: 'HBV', display_name: 'HBV เข็ม 3 (6 ด.) (043)', hdc_code: '043', required_fields: ['hbv4_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '1yr', view_type: 2, vaccine_group: 'DTP', display_name: 'DTP เข็ม 1 (031)', hdc_code: '031', required_fields: ['dtp1_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '1yr', view_type: 2, vaccine_group: 'DTP', display_name: 'DTP เข็ม 2 (032)', hdc_code: '032', required_fields: ['dtp2_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '1yr', view_type: 2, vaccine_group: 'DTP', display_name: 'DTP เข็ม 3 (033)', hdc_code: '033', required_fields: ['dtp3_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '1yr', view_type: 2, vaccine_group: 'Hib', display_name: 'Hib เข็ม 1 (D21)', hdc_code: 'D21', required_fields: ['hib1_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '1yr', view_type: 2, vaccine_group: 'Hib', display_name: 'Hib เข็ม 2 (D22)', hdc_code: 'D22', required_fields: ['hib2_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '1yr', view_type: 2, vaccine_group: 'Hib', display_name: 'Hib เข็ม 3 (D23)', hdc_code: 'D23', required_fields: ['hib3_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '1yr', view_type: 2, vaccine_group: 'IPV', display_name: 'IPV เข็ม 1 (I11)', hdc_code: 'I11', required_fields: ['ipv1_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '1yr', view_type: 2, vaccine_group: 'IPV', display_name: 'IPV เข็ม 2 (I12)', hdc_code: 'I12', required_fields: ['ipv2_date'], logic_type: 'ALL', is_required_for_v2: true },
-
-    { age_group: '1yr', view_type: 2, vaccine_group: 'OPV', display_name: 'OPV เข็ม 1 (081)', hdc_code: '081', required_fields: ['opv1_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '1yr', view_type: 2, vaccine_group: 'OPV', display_name: 'OPV เข็ม 2 (082)', hdc_code: '082', required_fields: ['opv2_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '1yr', view_type: 2, vaccine_group: 'OPV', display_name: 'OPV เข็ม 3 (083)', hdc_code: '083', required_fields: ['opv3_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '1yr', view_type: 2, vaccine_group: 'MMR', display_name: 'MMR เข็ม 1 (061)', hdc_code: '061', required_fields: ['mmr1_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '1yr', view_type: 2, vaccine_group: 'Rota', display_name: 'Rota เข็ม 1', hdc_code: 'R11/R21', required_fields: ['rv21_date'], branch_alt_fields: ['rv31_date'], logic_type: 'BRANCH', is_required_for_v2: true },
-    { age_group: '1yr', view_type: 2, vaccine_group: 'Rota', display_name: 'Rota เข็มสุดท้าย (ครบ)', hdc_code: '', required_fields: ['rv21_date', 'rv22_date'], branch_alt_fields: ['rv31_date', 'rv32_date', 'rv33_date'], logic_type: 'BRANCH', is_required_for_v2: true },
+    { age_group: '1yr', view_type: 2, vaccine_group: 'BCG', display_name: 'BCG 1 เข็ม', hdc_code: '010', required_fields: ['bcg_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 0 },
+    // ── HBV (เรียงตามอายุ แต่สลับฟิลด์ตามโครงสร้าง HOSxP) ──
+    { age_group: '1yr', view_type: 1, vaccine_group: 'HBV', display_name: 'HBV เข็ม 1 (0 เดือน)', hdc_code: '041', required_fields: ['hbv1_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 0 },
+    { age_group: '1yr', view_type: 1, vaccine_group: 'HBV', display_name: 'HBV เข็ม 2 (2 เดือน)', hdc_code: '042', required_fields: ['hbv2_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 2 },
+    { age_group: '1yr', view_type: 1, vaccine_group: 'HBV', display_name: 'HBV เข็ม 3 (4 เดือน)', hdc_code: '043', required_fields: ['hbv4_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 4 },
+    { age_group: '1yr', view_type: 1, vaccine_group: 'HBV', display_name: 'HBV เข็ม 4 (6 เดือน)', hdc_code: '044', required_fields: ['hbv3_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 6 },
+    { age_group: '1yr', view_type: 2, vaccine_group: 'DTP', display_name: 'DTP เข็ม 1', hdc_code: '031', required_fields: ['dtp1_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 2 },
+    { age_group: '1yr', view_type: 2, vaccine_group: 'DTP', display_name: 'DTP เข็ม 2', hdc_code: '032', required_fields: ['dtp2_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 4 },
+    { age_group: '1yr', view_type: 2, vaccine_group: 'DTP', display_name: 'DTP เข็ม 3', hdc_code: '033', required_fields: ['dtp3_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 6 },
+    { age_group: '1yr', view_type: 2, vaccine_group: 'Hib', display_name: 'Hib เข็ม 1', hdc_code: 'D21', required_fields: ['hib1_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 2 },
+    { age_group: '1yr', view_type: 2, vaccine_group: 'Hib', display_name: 'Hib เข็ม 2', hdc_code: 'D22', required_fields: ['hib2_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 4 },
+    { age_group: '1yr', view_type: 2, vaccine_group: 'Hib', display_name: 'Hib เข็ม 3', hdc_code: 'D23', required_fields: ['hib3_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 6 },
+    { age_group: '1yr', view_type: 2, vaccine_group: 'IPV', display_name: 'IPV เข็ม 1', hdc_code: 'I11', required_fields: ['ipv1_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 2 },
+    { age_group: '1yr', view_type: 2, vaccine_group: 'IPV', display_name: 'IPV เข็ม 2', hdc_code: 'I12', required_fields: ['ipv2_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 4 },
+    { age_group: '1yr', view_type: 2, vaccine_group: 'OPV', display_name: 'OPV เข็ม 1', hdc_code: '081', required_fields: ['opv1_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 2 },
+    { age_group: '1yr', view_type: 2, vaccine_group: 'OPV', display_name: 'OPV เข็ม 2', hdc_code: '082', required_fields: ['opv2_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 4 },
+    { age_group: '1yr', view_type: 2, vaccine_group: 'OPV', display_name: 'OPV เข็ม 3', hdc_code: '083', required_fields: ['opv3_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 6 },
+    { age_group: '1yr', view_type: 2, vaccine_group: 'MMR', display_name: 'MMR เข็ม 1', hdc_code: '061', required_fields: ['mmr1_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 9 },
+    
+    // ── Rota Items (แยกรายเข็มเพื่อเช็คความครบถ้วนทีละรายการ) ──
+    { age_group: '1yr', view_type: 2, vaccine_group: 'Rota', display_name: 'Rota เข็ม 1 (ชนิด 2 เข็ม)', hdc_code: 'R11', required_fields: ['rv21_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 2 },
+    { age_group: '1yr', view_type: 2, vaccine_group: 'Rota', display_name: 'Rota เข็ม 2 (ชนิด 2 เข็ม)', hdc_code: 'R12', required_fields: ['rv22_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 4 },
+    { age_group: '1yr', view_type: 2, vaccine_group: 'Rota', display_name: 'Rota เข็ม 1 (ชนิด 3 เข็ม)', hdc_code: 'R21', required_fields: ['rv31_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 2 },
+    { age_group: '1yr', view_type: 2, vaccine_group: 'Rota', display_name: 'Rota เข็ม 2 (ชนิด 3 เข็ม)', hdc_code: 'R22', required_fields: ['rv32_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 4 },
+    { age_group: '1yr', view_type: 2, vaccine_group: 'Rota', display_name: 'Rota เข็ม 3 (ชนิด 3 เข็ม)', hdc_code: 'R23', required_fields: ['rv33_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 6 },
 
     // ── 2yr — View 1 ──
-    { age_group: '2yr', view_type: 1, vaccine_group: 'JE/LAJE', display_name: 'ขาด LAJE เข็ม 1 (J11) / JE เข็ม 2 (052)', hdc_code: 'J11/052', required_fields: ['j11_date'], branch_alt_fields: ['je1_date', 'je2_date'], logic_type: 'BRANCH', is_required_for_v2: true },
-    { age_group: '2yr', view_type: 1, vaccine_group: 'DTP', display_name: 'ขาด DTP เข็ม 4 (034)', hdc_code: '034', required_fields: ['dtp4_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '2yr', view_type: 1, vaccine_group: 'OPV', display_name: 'ขาด OPV เข็ม 4 (084)', hdc_code: '084', required_fields: ['opv4_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '2yr', view_type: 1, vaccine_group: 'MMR', display_name: 'ขาด MMR เข็ม 1 (061)', hdc_code: '061', required_fields: ['mmr1_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '2yr', view_type: 1, vaccine_group: 'MMR', display_name: 'ขาด MMR เข็ม 2 (073)', hdc_code: '073', required_fields: ['mmr2_date'], logic_type: 'ALL', is_required_for_v2: true },
+    { age_group: '2yr', view_type: 1, vaccine_group: 'MMR', display_name: 'MMR เข็ม 1', hdc_code: '061', required_fields: ['mmr1_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 9 },
+    { age_group: '2yr', view_type: 1, vaccine_group: 'MMR', display_name: 'MMR เข็ม 2', hdc_code: '073', required_fields: ['mmr2_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 18 },
 
+    // ── DTP & OPV (1 ปี 6 เดือน) ──
+    { age_group: '2yr', view_type: 1, vaccine_group: 'DTP', display_name: 'DTP เข็ม 4', hdc_code: '034', required_fields: ['dtp4_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 18 },
+    { age_group: '2yr', view_type: 1, vaccine_group: 'OPV', display_name: 'OPV เข็ม 4', hdc_code: '084', required_fields: ['opv4_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 18 },
+
+    // ── JE / LAJE (แยกรายเข็ม Single Responsibility) ──
+    { age_group: '2yr', view_type: 1, vaccine_group: 'JE', display_name: 'LAJE เข็ม 1', hdc_code: 'J11', required_fields: ['j11_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 12 },
+    { age_group: '2yr', view_type: 1, vaccine_group: 'JE', display_name: 'JE เข็ม 1', hdc_code: '051', required_fields: ['je1_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 12 },
+    { age_group: '2yr', view_type: 1, vaccine_group: 'JE', display_name: 'JE เข็ม 2', hdc_code: '052', required_fields: ['je2_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 13 }, // ฉีดห่างจากเข็มแรก 1-4 สัปดาห์
+    
     // ── 2yr — View 2 ──
-    { age_group: '2yr', view_type: 2, vaccine_group: 'BCG', display_name: 'BCG 1 เข็ม', hdc_code: '010', required_fields: ['bcg_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '2yr', view_type: 2, vaccine_group: 'HBV', display_name: 'HBV เข็ม 1', hdc_code: '041', required_fields: ['hbv1_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '2yr', view_type: 2, vaccine_group: 'HBV', display_name: 'HBV เข็ม 2', hdc_code: '042', required_fields: ['hbv2_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '2yr', view_type: 2, vaccine_group: 'HBV', display_name: 'HBV เข็ม 3 (6 ด.)', hdc_code: '043', required_fields: ['hbv4_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '2yr', view_type: 2, vaccine_group: 'DTP', display_name: 'DTP เข็ม 1', hdc_code: '031', required_fields: ['dtp1_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '2yr', view_type: 2, vaccine_group: 'DTP', display_name: 'DTP เข็ม 2', hdc_code: '032', required_fields: ['dtp2_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '2yr', view_type: 2, vaccine_group: 'DTP', display_name: 'DTP เข็ม 3', hdc_code: '033', required_fields: ['dtp3_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '2yr', view_type: 2, vaccine_group: 'DTP', display_name: 'DTP เข็ม 4', hdc_code: '034', required_fields: ['dtp4_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '2yr', view_type: 2, vaccine_group: 'Hib', display_name: 'Hib เข็ม 1', hdc_code: 'D21', required_fields: ['hib1_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '2yr', view_type: 2, vaccine_group: 'Hib', display_name: 'Hib เข็ม 2', hdc_code: 'D22', required_fields: ['hib2_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '2yr', view_type: 2, vaccine_group: 'Hib', display_name: 'Hib เข็ม 3', hdc_code: 'D23', required_fields: ['hib3_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '2yr', view_type: 2, vaccine_group: 'IPV', display_name: 'IPV เข็ม 1', hdc_code: 'I11', required_fields: ['ipv1_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '2yr', view_type: 2, vaccine_group: 'IPV', display_name: 'IPV เข็ม 2', hdc_code: 'I12', required_fields: ['ipv2_date'], logic_type: 'ALL', is_required_for_v2: true },
+    // ── BCG ──
+    { age_group: '2yr', view_type: 2, vaccine_group: 'BCG', display_name: 'BCG 1 เข็ม', hdc_code: '010', required_fields: ['bcg_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 0 },
+    
+    // ── HBV (เรียงตามอายุ แต่สลับฟิลด์ตามโครงสร้าง HOSxP) ──
+    { age_group: '1yr', view_type: 1, vaccine_group: 'HBV', display_name: 'HBV เข็ม 1 (0 เดือน)', hdc_code: '041', required_fields: ['hbv1_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 0 },
+    { age_group: '1yr', view_type: 1, vaccine_group: 'HBV', display_name: 'HBV เข็ม 2 (2 เดือน)', hdc_code: '042', required_fields: ['hbv2_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 2 },
+    { age_group: '1yr', view_type: 1, vaccine_group: 'HBV', display_name: 'HBV เข็ม 3 (4 เดือน)', hdc_code: '043', required_fields: ['hbv4_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 4 },
+    { age_group: '1yr', view_type: 1, vaccine_group: 'HBV', display_name: 'HBV เข็ม 4 (6 เดือน)', hdc_code: '044', required_fields: ['hbv3_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 6 },
+    
+    // ── DTP (เช็ค 4 เข็ม: 2, 4, 6, 18 เดือน) ──
+    { age_group: '2yr', view_type: 2, vaccine_group: 'DTP', display_name: 'DTP เข็ม 1', hdc_code: '031', required_fields: ['dtp1_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 2 },
+    { age_group: '2yr', view_type: 2, vaccine_group: 'DTP', display_name: 'DTP เข็ม 2', hdc_code: '032', required_fields: ['dtp2_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 4 },
+    { age_group: '2yr', view_type: 2, vaccine_group: 'DTP', display_name: 'DTP เข็ม 3', hdc_code: '033', required_fields: ['dtp3_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 6 },
+    { age_group: '2yr', view_type: 2, vaccine_group: 'DTP', display_name: 'DTP เข็ม 4', hdc_code: '034', required_fields: ['dtp4_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 18 },
+    
+    // ── Hib (เช็ค 3 เข็ม) ──
+    { age_group: '2yr', view_type: 2, vaccine_group: 'Hib', display_name: 'Hib เข็ม 1', hdc_code: 'D21', required_fields: ['hib1_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 2 },
+    { age_group: '2yr', view_type: 2, vaccine_group: 'Hib', display_name: 'Hib เข็ม 2', hdc_code: 'D22', required_fields: ['hib2_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 4 },
+    { age_group: '2yr', view_type: 2, vaccine_group: 'Hib', display_name: 'Hib เข็ม 3', hdc_code: 'D23', required_fields: ['hib3_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 6 },
+    
+    // ── IPV (เช็ค 2 เข็ม) ──
+    { age_group: '2yr', view_type: 2, vaccine_group: 'IPV', display_name: 'IPV เข็ม 1', hdc_code: 'I11', required_fields: ['ipv1_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 2 },
+    { age_group: '2yr', view_type: 2, vaccine_group: 'IPV', display_name: 'IPV เข็ม 2', hdc_code: 'I12', required_fields: ['ipv2_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 4 },
+    
+    // ── OPV (เช็ค 4 เข็ม) ──
+    { age_group: '2yr', view_type: 2, vaccine_group: 'OPV', display_name: 'OPV เข็ม 1', hdc_code: '081', required_fields: ['opv1_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 2 },
+    { age_group: '2yr', view_type: 2, vaccine_group: 'OPV', display_name: 'OPV เข็ม 2', hdc_code: '082', required_fields: ['opv2_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 4 },
+    { age_group: '2yr', view_type: 2, vaccine_group: 'OPV', display_name: 'OPV เข็ม 3', hdc_code: '083', required_fields: ['opv3_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 6 },
+    { age_group: '2yr', view_type: 2, vaccine_group: 'OPV', display_name: 'OPV เข็ม 4', hdc_code: '084', required_fields: ['opv4_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 18 },
+    
+    // ── MMR (เช็ค 2 เข็ม: 9 เดือน, 18 เดือน) ──
+    { age_group: '2yr', view_type: 2, vaccine_group: 'MMR', display_name: 'MMR เข็ม 1', hdc_code: '061', required_fields: ['mmr1_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 9 },
+    { age_group: '2yr', view_type: 2, vaccine_group: 'MMR', display_name: 'MMR เข็ม 2', hdc_code: '073', required_fields: ['mmr2_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 18 },
+    
+    // ── Rota (แยกรายเข็ม Single Responsibility) ──
+    { age_group: '2yr', view_type: 2, vaccine_group: 'Rota', display_name: 'Rota เข็ม 1 (ชนิด 2 เข็ม)', hdc_code: 'R11', required_fields: ['rv21_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 2 },
+    { age_group: '2yr', view_type: 2, vaccine_group: 'Rota', display_name: 'Rota เข็ม 2 (ชนิด 2 เข็ม)', hdc_code: 'R12', required_fields: ['rv22_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 4 },
+    { age_group: '2yr', view_type: 2, vaccine_group: 'Rota', display_name: 'Rota เข็ม 1 (ชนิด 3 เข็ม)', hdc_code: 'R21', required_fields: ['rv31_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 2 },
+    { age_group: '2yr', view_type: 2, vaccine_group: 'Rota', display_name: 'Rota เข็ม 2 (ชนิด 3 เข็ม)', hdc_code: 'R22', required_fields: ['rv32_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 4 },
+    { age_group: '2yr', view_type: 2, vaccine_group: 'Rota', display_name: 'Rota เข็ม 3 (ชนิด 3 เข็ม)', hdc_code: 'R23', required_fields: ['rv33_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 6 },
 
-    { age_group: '2yr', view_type: 2, vaccine_group: 'OPV', display_name: 'OPV เข็ม 1', hdc_code: '081', required_fields: ['opv1_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '2yr', view_type: 2, vaccine_group: 'OPV', display_name: 'OPV เข็ม 2', hdc_code: '082', required_fields: ['opv2_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '2yr', view_type: 2, vaccine_group: 'OPV', display_name: 'OPV เข็ม 3 (083)', hdc_code: '083', required_fields: ['opv3_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '2yr', view_type: 2, vaccine_group: 'OPV', display_name: 'OPV เข็ม 4 (084)', hdc_code: '084', required_fields: ['opv4_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '2yr', view_type: 2, vaccine_group: 'MMR', display_name: 'MMR เข็ม 1', hdc_code: '061', required_fields: ['mmr1_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '2yr', view_type: 2, vaccine_group: 'MMR', display_name: 'MMR เข็ม 2', hdc_code: '073', required_fields: ['mmr2_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '2yr', view_type: 2, vaccine_group: 'Rota', display_name: 'Rota เข็ม 1', hdc_code: 'R11/R21', required_fields: ['rv21_date'], branch_alt_fields: ['rv31_date'], logic_type: 'BRANCH', is_required_for_v2: true },
-    { age_group: '2yr', view_type: 2, vaccine_group: 'Rota', display_name: 'Rota เข็มสุดท้าย (ครบ)', hdc_code: '', required_fields: ['rv21_date', 'rv22_date'], branch_alt_fields: ['rv31_date', 'rv32_date', 'rv33_date'], logic_type: 'BRANCH', is_required_for_v2: true },
-    { age_group: '2yr', view_type: 2, vaccine_group: 'JE/LAJE', display_name: 'LAJE เข็ม 1 หรือ JE เข็ม 1', hdc_code: 'J11/051', required_fields: ['j11_date'], branch_alt_fields: ['je1_date'], logic_type: 'BRANCH', is_required_for_v2: true },
-    { age_group: '2yr', view_type: 2, vaccine_group: 'JE/LAJE', display_name: 'JE เข็ม 2 (เฉพาะกรณีรับ JE)', hdc_code: '052', required_fields: ['j11_date'], branch_alt_fields: ['je2_date'], logic_type: 'BRANCH', is_required_for_v2: true },
+    // ── JE / LAJE (แยกรายเข็ม Single Responsibility) ──
+    { age_group: '2yr', view_type: 2, vaccine_group: 'JE', display_name: 'LAJE เข็ม 1', hdc_code: 'J11', required_fields: ['j11_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 12 },
+    { age_group: '2yr', view_type: 2, vaccine_group: 'JE', display_name: 'JE เข็ม 1', hdc_code: '051', required_fields: ['je1_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 12 },
+    { age_group: '2yr', view_type: 2, vaccine_group: 'JE', display_name: 'JE เข็ม 2', hdc_code: '052', required_fields: ['je2_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 13 },
 
     // ── 3yr — View 1 ──
-    { age_group: '3yr', view_type: 1, vaccine_group: 'JE/LAJE', display_name: 'ขาด LAJE เข็ม 2 / JE เข็ม 3', hdc_code: 'J12/053', required_fields: ['j12_date'], branch_alt_fields: ['je3_date'], logic_type: 'BRANCH', is_required_for_v2: true },
+    { age_group: '3yr', view_type: 1, vaccine_group: 'JE', display_name: 'ขาด LAJE เข็ม 2', hdc_code: 'J12', required_fields: ['j12_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 30 },
+    { age_group: '3yr', view_type: 1, vaccine_group: 'JE', display_name: 'ขาด JE เข็ม 3', hdc_code: '053', required_fields: ['je3_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 30 },
 
     // ── 3yr — View 2: report template ข้อ 6 (Fully Immunized) ──
-    // ครบทั้ง 9 กลุ่ม: BCG1, HBV3, DTP4, Hib3, IPV2, OPV2, MMR2, Rota, LAJE2/JE3
-    // OPV ใช้ opv3_date + opv4_date (6 และ 18 เดือน); ไม่บังคับ opv1_date/opv2_date
-    // ใช้ result ของ HDC เป็นผลอ้างอิง; template ยังไม่ระบุเงื่อนไขวันที่ซ้ำ/ระยะห่าง
-    { age_group: '3yr', view_type: 2, vaccine_group: 'BCG', display_name: 'BCG 1 เข็ม', hdc_code: '010', required_fields: ['bcg_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '3yr', view_type: 2, vaccine_group: 'HBV', display_name: 'HBV เข็ม 1', hdc_code: '041', required_fields: ['hbv1_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '3yr', view_type: 2, vaccine_group: 'HBV', display_name: 'HBV เข็ม 2', hdc_code: '042', required_fields: ['hbv2_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '3yr', view_type: 2, vaccine_group: 'HBV', display_name: 'HBV เข็ม 3 (6 ด.)', hdc_code: '043', required_fields: ['hbv4_date'], logic_type: 'ALL', is_required_for_v2: true, note: 'Template กำหนด HBV แรกเกิด + 2 เดือน + 6 เดือน; คง mapping hbv1_date, hbv2_date, hbv4_date ของระบบเดิมไว้ก่อน รอยืนยัน mapping เข็ม 6 เดือนจากรายงาน HDC' },
-    { age_group: '3yr', view_type: 2, vaccine_group: 'DTP', display_name: 'DTP เข็ม 1', hdc_code: '031', required_fields: ['dtp1_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '3yr', view_type: 2, vaccine_group: 'DTP', display_name: 'DTP เข็ม 2', hdc_code: '032', required_fields: ['dtp2_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '3yr', view_type: 2, vaccine_group: 'DTP', display_name: 'DTP เข็ม 3', hdc_code: '033', required_fields: ['dtp3_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '3yr', view_type: 2, vaccine_group: 'DTP', display_name: 'DTP เข็ม 4', hdc_code: '034', required_fields: ['dtp4_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '3yr', view_type: 2, vaccine_group: 'Hib', display_name: 'Hib เข็ม 1', hdc_code: 'D21', required_fields: ['hib1_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '3yr', view_type: 2, vaccine_group: 'Hib', display_name: 'Hib เข็ม 2', hdc_code: 'D22', required_fields: ['hib2_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '3yr', view_type: 2, vaccine_group: 'Hib', display_name: 'Hib เข็ม 3', hdc_code: 'D23', required_fields: ['hib3_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '3yr', view_type: 2, vaccine_group: 'IPV', display_name: 'IPV เข็ม 1', hdc_code: 'I11', required_fields: ['ipv1_date'], logic_type: 'ALL', is_required_for_v2: true, note: 'Report template ข้อ 6: IPV 2 ครั้ง ต้องมี IPV1 และ IPV2; ไม่ใช้ IPV2 แทน IPV1' },
-    { age_group: '3yr', view_type: 2, vaccine_group: 'IPV', display_name: 'IPV เข็ม 2', hdc_code: 'I12', required_fields: ['ipv2_date'], logic_type: 'ALL', is_required_for_v2: true, note: 'Report template ข้อ 6: IPV 2 ครั้ง ต้องมี IPV1 และ IPV2; ไม่ใช้ OPV4 แทน IPV2' },
+    // ── BCG ──
+    { age_group: '3yr', view_type: 2, vaccine_group: 'BCG', display_name: 'BCG 1 เข็ม', hdc_code: '010', required_fields: ['bcg_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 0 },
+    
+    // ── HBV (เรียงตามอายุ แต่สลับฟิลด์ตามโครงสร้าง HOSxP) ──
+    { age_group: '1yr', view_type: 1, vaccine_group: 'HBV', display_name: 'HBV เข็ม 1 (0 เดือน)', hdc_code: '041', required_fields: ['hbv1_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 0 },
+    { age_group: '1yr', view_type: 1, vaccine_group: 'HBV', display_name: 'HBV เข็ม 2 (2 เดือน)', hdc_code: '042', required_fields: ['hbv2_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 2 },
+    { age_group: '1yr', view_type: 1, vaccine_group: 'HBV', display_name: 'HBV เข็ม 3 (4 เดือน)', hdc_code: '043', required_fields: ['hbv4_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 4 },
+    { age_group: '1yr', view_type: 1, vaccine_group: 'HBV', display_name: 'HBV เข็ม 4 (6 เดือน)', hdc_code: '044', required_fields: ['hbv3_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 6 },
+    
+    // ── DTP (เช็ค 4 เข็ม) ──
+    { age_group: '3yr', view_type: 2, vaccine_group: 'DTP', display_name: 'DTP เข็ม 1', hdc_code: '031', required_fields: ['dtp1_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 2 },
+    { age_group: '3yr', view_type: 2, vaccine_group: 'DTP', display_name: 'DTP เข็ม 2', hdc_code: '032', required_fields: ['dtp2_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 4 },
+    { age_group: '3yr', view_type: 2, vaccine_group: 'DTP', display_name: 'DTP เข็ม 3', hdc_code: '033', required_fields: ['dtp3_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 6 },
+    { age_group: '3yr', view_type: 2, vaccine_group: 'DTP', display_name: 'DTP เข็ม 4', hdc_code: '034', required_fields: ['dtp4_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 18 },
+    
+    // ── Hib (เช็ค 3 เข็ม) ──
+    { age_group: '3yr', view_type: 2, vaccine_group: 'Hib', display_name: 'Hib เข็ม 1', hdc_code: 'D21', required_fields: ['hib1_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 2 },
+    { age_group: '3yr', view_type: 2, vaccine_group: 'Hib', display_name: 'Hib เข็ม 2', hdc_code: 'D22', required_fields: ['hib2_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 4 },
+    { age_group: '3yr', view_type: 2, vaccine_group: 'Hib', display_name: 'Hib เข็ม 3', hdc_code: 'D23', required_fields: ['hib3_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 6 },
+    
+    // ── IPV (เช็ค 2 เข็ม) ──
+    { age_group: '3yr', view_type: 2, vaccine_group: 'IPV', display_name: 'IPV เข็ม 1', hdc_code: 'I11', required_fields: ['ipv1_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 2 },
+    { age_group: '3yr', view_type: 2, vaccine_group: 'IPV', display_name: 'IPV เข็ม 2', hdc_code: 'I12', required_fields: ['ipv2_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 4 },
+    
+    // ── OPV (เช็ค 4 เข็ม) ──
+    { age_group: '3yr', view_type: 2, vaccine_group: 'OPV', display_name: 'OPV เข็ม 1', hdc_code: '081', required_fields: ['opv1_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 2 },
+    { age_group: '3yr', view_type: 2, vaccine_group: 'OPV', display_name: 'OPV เข็ม 2', hdc_code: '082', required_fields: ['opv2_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 4 },
+    { age_group: '3yr', view_type: 2, vaccine_group: 'OPV', display_name: 'OPV เข็ม 3', hdc_code: '083', required_fields: ['opv3_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 6 },
+    { age_group: '3yr', view_type: 2, vaccine_group: 'OPV', display_name: 'OPV เข็ม 4', hdc_code: '084', required_fields: ['opv4_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 18 },
+    
+    // ── MMR (เช็ค 2 เข็ม) ──
+    { age_group: '3yr', view_type: 2, vaccine_group: 'MMR', display_name: 'MMR เข็ม 1', hdc_code: '061', required_fields: ['mmr1_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 9 },
+    { age_group: '3yr', view_type: 2, vaccine_group: 'MMR', display_name: 'MMR เข็ม 2', hdc_code: '073', required_fields: ['mmr2_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 18 },
+    
+    // ── Rota (แยกรายเข็ม Single Responsibility) ──
+    { age_group: '3yr', view_type: 2, vaccine_group: 'Rota', display_name: 'Rota เข็ม 1 (ชนิด 2 เข็ม)', hdc_code: 'R11', required_fields: ['rv21_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 2 },
+    { age_group: '3yr', view_type: 2, vaccine_group: 'Rota', display_name: 'Rota เข็ม 2 (ชนิด 2 เข็ม)', hdc_code: 'R12', required_fields: ['rv22_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 4 },
+    { age_group: '3yr', view_type: 2, vaccine_group: 'Rota', display_name: 'Rota เข็ม 1 (ชนิด 3 เข็ม)', hdc_code: 'R21', required_fields: ['rv31_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 2 },
+    { age_group: '3yr', view_type: 2, vaccine_group: 'Rota', display_name: 'Rota เข็ม 2 (ชนิด 3 เข็ม)', hdc_code: 'R22', required_fields: ['rv32_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 4 },
+    { age_group: '3yr', view_type: 2, vaccine_group: 'Rota', display_name: 'Rota เข็ม 3 (ชนิด 3 เข็ม)', hdc_code: 'R23', required_fields: ['rv33_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 6 },
 
-    { age_group: '3yr', view_type: 2, vaccine_group: 'OPV', display_name: 'OPV 6 เดือน (083)', hdc_code: '083', required_fields: ['opv3_date'], logic_type: 'ALL', is_required_for_v2: true, note: 'Report template ข้อ 6: OPV 2 ครั้ง ใช้ opv3_date และ opv4_date ตามกำหนดการ 6 และ 18 เดือน; ไม่บังคับ OPV1–2 ในมุมมองที่ 2 อายุ 3 ปี' },
-    { age_group: '3yr', view_type: 2, vaccine_group: 'OPV', display_name: 'OPV 18 เดือน (084)', hdc_code: '084', required_fields: ['opv4_date'], logic_type: 'ALL', is_required_for_v2: true, note: 'Report template ข้อ 6: OPV 2 ครั้ง ใช้ opv3_date และ opv4_date ตามกำหนดการ 6 และ 18 เดือน; ไม่บังคับ OPV1–2 ในมุมมองที่ 2 อายุ 3 ปี' },
-    { age_group: '3yr', view_type: 2, vaccine_group: 'MMR', display_name: 'MMR เข็ม 1', hdc_code: '061', required_fields: ['mmr1_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '3yr', view_type: 2, vaccine_group: 'MMR', display_name: 'MMR เข็ม 2', hdc_code: '073', required_fields: ['mmr2_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '3yr', view_type: 2, vaccine_group: 'Rota', display_name: 'Rota เข็ม 1', hdc_code: 'R11/R21', required_fields: ['rv21_date'], branch_alt_fields: ['rv31_date'], logic_type: 'BRANCH', is_required_for_v2: true },
-    { age_group: '3yr', view_type: 2, vaccine_group: 'Rota', display_name: 'Rota เข็มสุดท้าย (ครบ)', hdc_code: '', required_fields: ['rv21_date', 'rv22_date'], branch_alt_fields: ['rv31_date', 'rv32_date', 'rv33_date'], logic_type: 'BRANCH', is_required_for_v2: true, note: 'ครบชุด 2 เข็ม หรือครบชุด 3 เข็ม; template ที่ได้รับยังไม่แจกแจงวันที่ซ้ำ ระยะห่าง หรือสูตรผสม จึงไม่เพิ่มเงื่อนไขเหล่านี้ใน seed' },
-    { age_group: '3yr', view_type: 2, vaccine_group: 'JE/LAJE', display_name: 'LAJE เข็ม 1 หรือ JE เข็ม 1', hdc_code: 'J11/051', required_fields: ['j11_date'], branch_alt_fields: ['je1_date'], logic_type: 'BRANCH', is_required_for_v2: true },
-    { age_group: '3yr', view_type: 2, vaccine_group: 'JE/LAJE', display_name: 'LAJE เข็ม 2 หรือ JE เข็ม 2-3 (ครบ)', hdc_code: 'J12/052-053', required_fields: ['j11_date', 'j12_date'], branch_alt_fields: ['je1_date', 'je2_date', 'je3_date'], logic_type: 'BRANCH', is_required_for_v2: true },
+    // ── JE / LAJE (แยกรายเข็ม Single Responsibility สำหรับเด็ก 3 ปี) ──
+    { age_group: '3yr', view_type: 2, vaccine_group: 'JE', display_name: 'LAJE เข็ม 1', hdc_code: 'J11', required_fields: ['j11_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 12 },
+    { age_group: '3yr', view_type: 2, vaccine_group: 'JE', display_name: 'LAJE เข็ม 2', hdc_code: 'J12', required_fields: ['j12_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 30 }, // 2 ปีครึ่ง
+    { age_group: '3yr', view_type: 2, vaccine_group: 'JE', display_name: 'JE เข็ม 1', hdc_code: '051', required_fields: ['je1_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 12 },
+    { age_group: '3yr', view_type: 2, vaccine_group: 'JE', display_name: 'JE เข็ม 2', hdc_code: '052', required_fields: ['je2_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 13 },
+    { age_group: '3yr', view_type: 2, vaccine_group: 'JE', display_name: 'JE เข็ม 3', hdc_code: '053', required_fields: ['je3_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 30 }, // 2 ปีครึ่ง
 
     // ── 5yr — View 1 ──
-    { age_group: '5yr', view_type: 1, vaccine_group: 'DTP', display_name: 'ขาด DTP เข็ม 5 (035)', hdc_code: '035', required_fields: ['dtp5_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '5yr', view_type: 1, vaccine_group: 'OPV', display_name: 'ขาด OPV เข็ม 5 (085)', hdc_code: '085', required_fields: ['opv5_date'], logic_type: 'ALL', is_required_for_v2: true },
+    { age_group: '5yr', view_type: 1, vaccine_group: 'DTP', display_name: 'DTP เข็ม 5', hdc_code: '035', required_fields: ['dtp5_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 48},
+    { age_group: '5yr', view_type: 1, vaccine_group: 'OPV', display_name: 'OPV เข็ม 5', hdc_code: '085', required_fields: ['opv5_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 48 },
 
     // ── 5yr — View 2 ──
-    { age_group: '5yr', view_type: 2, vaccine_group: 'BCG', display_name: 'BCG 1 เข็ม', hdc_code: '010', required_fields: ['bcg_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '5yr', view_type: 2, vaccine_group: 'HBV', display_name: 'HBV เข็ม 1', hdc_code: '041', required_fields: ['hbv1_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '5yr', view_type: 2, vaccine_group: 'HBV', display_name: 'HBV เข็ม 2', hdc_code: '042', required_fields: ['hbv2_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '5yr', view_type: 2, vaccine_group: 'HBV', display_name: 'HBV เข็ม 3 (6 ด.)', hdc_code: '043', required_fields: ['hbv4_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '5yr', view_type: 2, vaccine_group: 'DTP', display_name: 'DTP เข็ม 1', hdc_code: '031', required_fields: ['dtp1_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '5yr', view_type: 2, vaccine_group: 'DTP', display_name: 'DTP เข็ม 2', hdc_code: '032', required_fields: ['dtp2_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '5yr', view_type: 2, vaccine_group: 'DTP', display_name: 'DTP เข็ม 3', hdc_code: '033', required_fields: ['dtp3_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '5yr', view_type: 2, vaccine_group: 'DTP', display_name: 'DTP เข็ม 4', hdc_code: '034', required_fields: ['dtp4_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '5yr', view_type: 2, vaccine_group: 'DTP', display_name: 'DTP เข็ม 5 (4 ปี)', hdc_code: '035', required_fields: ['dtp5_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '5yr', view_type: 2, vaccine_group: 'Hib', display_name: 'Hib เข็ม 1', hdc_code: 'D21', required_fields: ['hib1_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '5yr', view_type: 2, vaccine_group: 'Hib', display_name: 'Hib เข็ม 2', hdc_code: 'D22', required_fields: ['hib2_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '5yr', view_type: 2, vaccine_group: 'Hib', display_name: 'Hib เข็ม 3', hdc_code: 'D23', required_fields: ['hib3_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '5yr', view_type: 2, vaccine_group: 'IPV', display_name: 'IPV (4 เดือน)', hdc_code: 'I11', required_fields: ['ipv2_date'], logic_type: 'ALL', is_required_for_v2: true },
+    // ── BCG ──
+    { age_group: '5yr', view_type: 2, vaccine_group: 'BCG', display_name: 'BCG 1 เข็ม', hdc_code: '010', required_fields: ['bcg_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 0 },
+    
+    // ── HBV (เรียงตามอายุ แต่สลับฟิลด์ตามโครงสร้าง HOSxP) ──
+    { age_group: '1yr', view_type: 1, vaccine_group: 'HBV', display_name: 'HBV เข็ม 1 (0 เดือน)', hdc_code: '041', required_fields: ['hbv1_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 0 },
+    { age_group: '1yr', view_type: 1, vaccine_group: 'HBV', display_name: 'HBV เข็ม 2 (2 เดือน)', hdc_code: '042', required_fields: ['hbv2_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 2 },
+    { age_group: '1yr', view_type: 1, vaccine_group: 'HBV', display_name: 'HBV เข็ม 3 (4 เดือน)', hdc_code: '043', required_fields: ['hbv4_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 4 },
+    { age_group: '1yr', view_type: 1, vaccine_group: 'HBV', display_name: 'HBV เข็ม 4 (6 เดือน)', hdc_code: '044', required_fields: ['hbv3_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 6 },
+    
+    // ── DTP (เช็ค 5 เข็ม: 2, 4, 6, 18 เดือน, 4 ปี) ──
+    { age_group: '5yr', view_type: 2, vaccine_group: 'DTP', display_name: 'DTP เข็ม 1', hdc_code: '031', required_fields: ['dtp1_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 2 },
+    { age_group: '5yr', view_type: 2, vaccine_group: 'DTP', display_name: 'DTP เข็ม 2', hdc_code: '032', required_fields: ['dtp2_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 4 },
+    { age_group: '5yr', view_type: 2, vaccine_group: 'DTP', display_name: 'DTP เข็ม 3', hdc_code: '033', required_fields: ['dtp3_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 6 },
+    { age_group: '5yr', view_type: 2, vaccine_group: 'DTP', display_name: 'DTP เข็ม 4', hdc_code: '034', required_fields: ['dtp4_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 18 },
+    { age_group: '5yr', view_type: 2, vaccine_group: 'DTP', display_name: 'DTP เข็ม 5', hdc_code: '035', required_fields: ['dtp5_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 48 },
+    
+    // ── Hib (เช็ค 3 เข็ม) ──
+    { age_group: '5yr', view_type: 2, vaccine_group: 'Hib', display_name: 'Hib เข็ม 1', hdc_code: 'D21', required_fields: ['hib1_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 2 },
+    { age_group: '5yr', view_type: 2, vaccine_group: 'Hib', display_name: 'Hib เข็ม 2', hdc_code: 'D22', required_fields: ['hib2_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 4 },
+    { age_group: '5yr', view_type: 2, vaccine_group: 'Hib', display_name: 'Hib เข็ม 3', hdc_code: 'D23', required_fields: ['hib3_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 6 },
+    
+    // ── IPV (เช็ค 2 เข็ม) ──
+    { age_group: '5yr', view_type: 2, vaccine_group: 'IPV', display_name: 'IPV เข็ม 1', hdc_code: 'I11', required_fields: ['ipv1_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 2 },
+    { age_group: '5yr', view_type: 2, vaccine_group: 'IPV', display_name: 'IPV เข็ม 2', hdc_code: 'I12', required_fields: ['ipv2_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 4 },
+    
+    // ── OPV (เช็ค 5 เข็ม: 2, 4, 6, 18 เดือน, 4 ปี) ──
+    { age_group: '5yr', view_type: 2, vaccine_group: 'OPV', display_name: 'OPV เข็ม 1', hdc_code: '081', required_fields: ['opv1_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 2 },
+    { age_group: '5yr', view_type: 2, vaccine_group: 'OPV', display_name: 'OPV เข็ม 2', hdc_code: '082', required_fields: ['opv2_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 4 },
+    { age_group: '5yr', view_type: 2, vaccine_group: 'OPV', display_name: 'OPV เข็ม 3', hdc_code: '083', required_fields: ['opv3_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 6 },
+    { age_group: '5yr', view_type: 2, vaccine_group: 'OPV', display_name: 'OPV เข็ม 4', hdc_code: '084', required_fields: ['opv4_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 18 },
+    { age_group: '5yr', view_type: 2, vaccine_group: 'OPV', display_name: 'OPV เข็ม 5', hdc_code: '085', required_fields: ['opv5_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 48 },
+    
+    // ── MMR (เช็ค 2 เข็ม) ──
+    { age_group: '5yr', view_type: 2, vaccine_group: 'MMR', display_name: 'MMR เข็ม 1', hdc_code: '061', required_fields: ['mmr1_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 9 },
+    { age_group: '5yr', view_type: 2, vaccine_group: 'MMR', display_name: 'MMR เข็ม 2', hdc_code: '073', required_fields: ['mmr2_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 18 },
+    
+    // ── Rota (แยกรายเข็ม Single Responsibility) ──
+    { age_group: '5yr', view_type: 2, vaccine_group: 'Rota', display_name: 'Rota เข็ม 1 (ชนิด 2 เข็ม)', hdc_code: 'R11', required_fields: ['rv21_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 2 },
+    { age_group: '5yr', view_type: 2, vaccine_group: 'Rota', display_name: 'Rota เข็ม 2 (ชนิด 2 เข็ม)', hdc_code: 'R12', required_fields: ['rv22_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 4 },
+    { age_group: '5yr', view_type: 2, vaccine_group: 'Rota', display_name: 'Rota เข็ม 1 (ชนิด 3 เข็ม)', hdc_code: 'R21', required_fields: ['rv31_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 2 },
+    { age_group: '5yr', view_type: 2, vaccine_group: 'Rota', display_name: 'Rota เข็ม 2 (ชนิด 3 เข็ม)', hdc_code: 'R22', required_fields: ['rv32_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 4 },
+    { age_group: '5yr', view_type: 2, vaccine_group: 'Rota', display_name: 'Rota เข็ม 3 (ชนิด 3 เข็ม)', hdc_code: 'R23', required_fields: ['rv33_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 6 },
 
-    { age_group: '5yr', view_type: 2, vaccine_group: 'OPV', display_name: 'OPV เข็ม 1', hdc_code: '081', required_fields: ['opv1_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '5yr', view_type: 2, vaccine_group: 'OPV', display_name: 'OPV เข็ม 2', hdc_code: '082', required_fields: ['opv2_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '5yr', view_type: 2, vaccine_group: 'OPV', display_name: 'OPV เข็ม 3 (083)', hdc_code: '083', required_fields: ['opv3_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '5yr', view_type: 2, vaccine_group: 'OPV', display_name: 'OPV เข็ม 4 (084)', hdc_code: '084', required_fields: ['opv4_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '5yr', view_type: 2, vaccine_group: 'OPV', display_name: 'OPV เข็ม 5 (085)', hdc_code: '085', required_fields: ['opv5_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '5yr', view_type: 2, vaccine_group: 'MMR', display_name: 'MMR เข็ม 1', hdc_code: '061', required_fields: ['mmr1_date'], logic_type: 'ALL', is_required_for_v2: true },
-    { age_group: '5yr', view_type: 2, vaccine_group: 'MMR', display_name: 'MMR เข็ม 2', hdc_code: '073', required_fields: ['mmr2_date'], logic_type: 'ALL', is_required_for_v2: true },
-    // Rota สำหรับเด็ก 5 ปี: HDC บังคับเป็นผ่านเกณฑ์
-    { age_group: '5yr', view_type: 2, vaccine_group: 'Rota', display_name: 'Rota (ครบถ้วน)', hdc_code: '', required_fields: ['rv21_date', 'rv22_date'], branch_alt_fields: ['rv31_date', 'rv32_date', 'rv33_date'], logic_type: 'BRANCH', is_required_for_v2: true },
-    { age_group: '5yr', view_type: 2, vaccine_group: 'JE/LAJE', display_name: 'LAJE เข็ม 1 หรือ JE เข็ม 1', hdc_code: 'J11/051', required_fields: ['j11_date'], branch_alt_fields: ['je1_date'], logic_type: 'BRANCH', is_required_for_v2: true },
-    { age_group: '5yr', view_type: 2, vaccine_group: 'JE/LAJE', display_name: 'LAJE เข็ม 2 หรือ JE เข็ม 2-3 (ครบ)', hdc_code: 'J12/052-053', required_fields: ['j11_date', 'j12_date'], branch_alt_fields: ['je1_date', 'je2_date', 'je3_date'], logic_type: 'BRANCH', is_required_for_v2: true }
+    // ── JE / LAJE (แยกรายเข็ม Single Responsibility สำหรับเด็ก 5 ปี) ──
+    { age_group: '5yr', view_type: 2, vaccine_group: 'JE', display_name: 'LAJE เข็ม 1', hdc_code: 'J11', required_fields: ['j11_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 12 },
+    { age_group: '5yr', view_type: 2, vaccine_group: 'JE', display_name: 'LAJE เข็ม 2', hdc_code: 'J12', required_fields: ['j12_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 30 },
+    { age_group: '5yr', view_type: 2, vaccine_group: 'JE', display_name: 'JE เข็ม 1', hdc_code: '051', required_fields: ['je1_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 12 },
+    { age_group: '5yr', view_type: 2, vaccine_group: 'JE', display_name: 'JE เข็ม 2', hdc_code: '052', required_fields: ['je2_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 13 },
+    { age_group: '5yr', view_type: 2, vaccine_group: 'JE', display_name: 'JE เข็ม 3', hdc_code: '053', required_fields: ['je3_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 30 },
   ];
 
   const now = new Date();
