@@ -1,7 +1,6 @@
-import type { EpiAge } from '../../types/hdc';
-import { AGE_VACCINES } from './ageVaccines';
 import { hasSourceColumn } from './sourceColumns';
 import type { EpiRecord } from '../../types';
+import type { VaccineRule } from './ruleEngine';
 
 // Column labels only: no dose requirements or clinical evaluation.
 export function vaccineFieldLabel(field: string): string {
@@ -32,12 +31,12 @@ export function formatHdcDate(value: unknown): string {
   return `${day}-${month}-${year}`;
 }
 
-export function getHdcVaccineRows(record: EpiRecord, age?: EpiAge) {
+export function getHdcVaccineRows(record: EpiRecord, rules?: VaccineRule[]) {
   const values = Object.fromEntries(Object.entries(record));
-  const rows = age ? AGE_VACCINES[age].flatMap(item => {
-    const fields = [...new Set([...item.fields, ...(item.alternatives || [])])];
-    return (fields.length ? fields : ['']).map(field => ({ field, name: item.label, mappingNote: item.mappingNote, id: `${item.id}-${field}` }));
-  }) : Object.keys(record).filter(field => field.endsWith('_date')).map(field => ({ field, name: vaccineFieldLabel(field), mappingNote: undefined, id: field }));
+  const rows = rules ? rules.flatMap(rule => {
+    const fields = [...new Set([...(rule.required_fields || []), ...(rule.branch_alt_fields || [])])];
+    return fields.map(field => ({ field, name: rule.display_name || field, note: rule.note, id: `${rule.rule_id}-${field}` }));
+  }) : Object.keys(record).filter(field => field.endsWith('_date')).map(field => ({ field, name: vaccineFieldLabel(field), note: undefined, id: field }));
   return rows.map(row => ({
     ...row,
     date: row.field && hasSourceColumn(record, row.field) ? hdcValue(values[row.field]) : 'ไฟล์ไม่มีคอลัมน์ / ยังไม่มีข้อมูลต้นทาง',
@@ -46,11 +45,11 @@ export function getHdcVaccineRows(record: EpiRecord, age?: EpiAge) {
   }));
 }
 
-export function getHdcExportRows(records: EpiRecord[], age?: EpiAge) {
-  const allowedDates = age ? new Set(AGE_VACCINES[age].flatMap(item => [...item.fields, ...(item.alternatives || [])])) : null;
+export function getHdcExportRows(records: EpiRecord[], rules?: VaccineRule[]) {
+  const allowedDates = rules ? new Set(rules.flatMap(rule => [...(rule.required_fields || []), ...(rule.branch_alt_fields || [])])) : null;
   const fields = [...new Set(records.flatMap(record =>
     Object.keys(record).filter(field => {
-      if (field.startsWith('g_')) return !age;
+      if (field.startsWith('g_')) return !rules;
       if (!/_date$|_hospcode$|_input_hosp$/.test(field)) return false;
       return !allowedDates || allowedDates.has(field.replace(/_hospcode$|_input_hosp$/, '_date'));
     }),

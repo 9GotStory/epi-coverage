@@ -5,6 +5,7 @@ import type { ColumnDef } from '@tanstack/react-table';
 import type { EpiRecord } from '../types';
 import { EpiDataTable } from './EpiDataTable';
 import { VaccineHistoryModal } from './VaccineHistoryModal';
+import { VaccineRulesGuide } from './VaccineRulesGuide';
 import { Button } from './ui/button';
 import { formatAgeStr, formatDateStr, formatDateTimeStr, getBirthDateRangeForQuarter } from '../utils/dateUtils';
 import { getHdcExportRows, hdcValue } from '../utils/vaccine/hdcData';
@@ -65,6 +66,7 @@ export function HdcRecordsView({ age, fiscalYear, quarter, data, isLoading, erro
         <p className="text-sm text-zinc-500">แสดงผลจาก HDC ที่นำเข้า เปิดประวัติเพื่อดูวันที่วัคซีนแต่ละเข็ม</p>
         {asOfDate && <p className="text-xs text-zinc-500 mt-1">ข้อมูล ณ วันที่ {formatDateTimeStr(asOfDate)}</p>}
       </div>
+      <VaccineRulesGuide rules={rules} viewType={2} isLoading={rulesLoading} error={rulesError} />
       <div className="flex flex-wrap gap-3">
         <input aria-label="ค้นหาชื่อหรือ CID" placeholder="ค้นหาชื่อหรือ CID" value={search} onChange={event => setSearch(event.target.value)} className="border rounded-lg px-3 py-2 text-sm w-full sm:w-56" />
         <select aria-label="สถานบริการ" value={facility} onChange={event => setFacility(event.target.value)} className="border rounded-lg px-3 py-2 text-sm max-w-full">

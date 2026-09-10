@@ -1,72 +1,56 @@
-import type { ReactNode } from 'react';
+import { sortRulesForDisplay, isOutPlanRule } from '../utils/vaccine/rulePresentation';
 import type { VaccineRule } from '../utils/vaccine/ruleEngine';
 
-interface DynamicVaccineGuideProps {
+interface VaccineRulesGuideProps {
   rules: VaccineRule[];
-  viewType: number;
-  title: string;
-  fallbackContent: ReactNode;
-  theme?: 'blue' | 'indigo';
+  viewType: 1 | 2;
+  isLoading?: boolean;
+  error?: string | null;
 }
 
-export function DynamicVaccineGuide({ rules, viewType, title, fallbackContent, theme = 'blue' }: DynamicVaccineGuideProps) {
-  // Filter rules that match the view type and are active
-  const activeRules = rules.filter(r => r.view_type === viewType && r.is_active);
+function describeLogic(rule: VaccineRule): string {
+  const fields = rule.required_fields.join(', ');
+  const alt = (rule.branch_alt_fields || []).join(', ');
+  if (rule.logic_type === 'ANY') return `ANY: มีเข็มใดเข็มหนึ่ง [${fields}]`;
+  if (rule.logic_type === 'BRANCH') return `BRANCH: ครบ [${fields}] หรือครบ [${alt}]`;
+  return `ALL: ต้องครบทุกเข็ม [${fields}]`;
+}
 
-  // If no rules are found from the backend (or all deleted), use the hardcoded fallback
-  if (rules.length === 0) {
-    return <>{fallbackContent}</>;
-  }
+/**
+ * หัวข้อ "รายการและขอบเขตการประเมิน" — แสดงจาก vaccine_rules ทั้งหมด
+ * (กรองด้วย view_type + is_active) ไม่มีรายการ hardcode
+ */
+export function VaccineRulesGuide({ rules, viewType, isLoading, error }: VaccineRulesGuideProps) {
+  const activeRules = sortRulesForDisplay(rules.filter(rule => rule.view_type === viewType && rule.is_active));
 
-  // Style mappings based on theme
-  const styles = {
-    blue: {
-      container: "bg-white/70 p-4 rounded-lg border border-blue-100/50 mt-3 text-xs shadow-sm",
-      title: "font-semibold mb-3 text-blue-900 border-b border-blue-100 pb-2",
-      grid: "grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-3 text-blue-800",
-      ruleName: "font-medium text-blue-900",
-      ruleDesc: "text-[11px] text-blue-700",
-      code: "bg-blue-100 px-1 py-0.5 rounded font-mono text-[10px]"
-    },
-    indigo: {
-      container: "bg-white/60 p-4 rounded-lg border border-indigo-100/50 mt-3 text-xs",
-      title: "font-semibold mb-3 text-indigo-900 border-b border-indigo-100 pb-2",
-      grid: "grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-3 text-indigo-800",
-      ruleName: "font-medium text-indigo-900",
-      ruleDesc: "text-[11px] text-indigo-700",
-      code: "bg-indigo-100 px-1 py-0.5 rounded font-mono text-[10px]"
-    }
-  };
-
-  const currentStyle = styles[theme];
-
-  // Otherwise, render dynamically based on the active rules
   return (
-    <div className={currentStyle.container}>
-      <p className={currentStyle.title}>
-        {title}
-      </p>
-      <div className={currentStyle.grid}>
-        {activeRules.length === 0 ? (
-          <div className="text-zinc-500 italic col-span-2">ไม่มีเกณฑ์วัคซีนที่เปิดใช้งานอยู่</div>
-        ) : (
-          activeRules.map((rule) => (
-            <div key={rule.rule_id} className="flex flex-col gap-0.5">
-              <span className={currentStyle.ruleName}>
-                {rule.display_name} {rule.vaccine_group && `(${rule.vaccine_group})`}
+    <details className="border rounded-lg p-3">
+      <summary className="cursor-pointer font-semibold">รายการและขอบเขตการประเมิน</summary>
+      {isLoading ? (
+        <p className="text-sm text-muted-foreground mt-3">กำลังโหลดเกณฑ์...</p>
+      ) : error ? (
+        <p role="alert" className="text-sm text-destructive mt-3">โหลดเกณฑ์ไม่สำเร็จ: {error}</p>
+      ) : activeRules.length === 0 ? (
+        <p className="text-sm text-muted-foreground mt-3">ไม่มีเกณฑ์วัคซีนที่เปิดใช้งานสำหรับปีและกลุ่มอายุนี้</p>
+      ) : (
+        <ul className="mt-3 space-y-1.5">
+          {activeRules.map(rule => (
+            <li key={rule.rule_id} className="text-sm">
+              <span className="font-medium">{rule.display_name}</span>
+              {isOutPlanRule(rule) && <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-800">นอกแผน — ไม่นับในความครบถ้วน</span>}
+              <span className="text-muted-foreground">
+                {' '}{rule.vaccine_group && `· กลุ่ม ${rule.vaccine_group} `}· HDC: {rule.hdc_code || '-'}
+                {rule.target_age_months !== undefined && rule.target_age_months !== null && ` · อายุเป้าหมาย ${rule.target_age_months} เดือน`}
+                {' '}{describeLogic(rule)}
+                {rule.note && ` · ${rule.note}`}
               </span>
-              <span className={currentStyle.ruleDesc}>
-                รหัส 43 แฟ้ม (HDC): <code className={currentStyle.code}>{rule.hdc_code || '-'}</code>
-                {rule.required_fields && rule.required_fields.length > 0 && (
-                  <span className="ml-1 text-zinc-500">
-                    [คอลัมน์ Excel: {rule.required_fields.join(', ')}]
-                  </span>
-                )}
-              </span>
-            </div>
-          ))
-        )}
-      </div>
-    </div>
+            </li>
+          ))}
+        </ul>
+      )}
+      {viewType === 1 && (
+        <p className="text-sm text-muted-foreground mt-3">ไม่มีคอลัมน์ต้นทางจะแสดง "ข้อมูลไม่พอประเมิน" และไม่นับเป็นขาดวัคซีน ส่วนเซลล์ว่างแสดงว่าไม่มีวันที่ในข้อมูลที่นำเข้า</p>
+      )}
+    </details>
   );
 }

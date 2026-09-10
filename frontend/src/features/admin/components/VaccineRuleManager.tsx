@@ -1,4 +1,5 @@
 import { getRuleDateChecks } from '../../../shared/utils/vaccine/dateWarnings';
+import { buildFieldLabelMap } from '../../../shared/utils/vaccine/rulePresentation';
 import { vaccineFieldLabel } from '../../../shared/utils/vaccine/hdcData';
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../../shared/components/ui/card';
@@ -26,11 +27,14 @@ interface VaccineRuleManagerProps {
 
 function describeDateChecks(rule: VaccineRule, rules: VaccineRule[]) {
   const checks = getRuleDateChecks(rule, rules);
+  // ป้ายชื่อเข็มมาจาก vaccine_rules (display_name) โดย fallback ที่ vaccineFieldLabel
+  const labels = buildFieldLabelMap(rules);
+  const name = (field: string) => labels.get(field) ?? vaccineFieldLabel(field);
   return [
     `ตรวจฉีดก่อนวันเกิด: ${checks.before_birth ? 'เปิด' : 'ปิด'}`,
     `ฉีดตรงวันเกิด: ${checks.allow_on_birth ? 'อนุญาต' : 'ไม่อนุญาต'}`,
-    `ห้ามวันซ้ำ: ${checks.same_day_pairs.map(p => `${vaccineFieldLabel(p.field)} กับ ${vaccineFieldLabel(p.other_field)}`).join(', ') || 'ไม่มี'}`,
-    `ลำดับวันที่: ${checks.ordered_pairs.map(p => `${vaccineFieldLabel(p.field)} ต้องไม่หลัง ${vaccineFieldLabel(p.other_field)}`).join(', ') || 'ไม่มี'}`,
+    `ห้ามวันซ้ำ: ${checks.same_day_pairs.map(p => `${name(p.field)} กับ ${name(p.other_field)}`).join(', ') || 'ไม่มี'}`,
+    `ลำดับวันที่: ${checks.ordered_pairs.map(p => `${name(p.field)} ต้องไม่หลัง ${name(p.other_field)}`).join(', ') || 'ไม่มี'}`,
   ].join('; ');
 }
 

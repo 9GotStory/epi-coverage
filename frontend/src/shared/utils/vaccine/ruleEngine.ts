@@ -1,6 +1,5 @@
-import { getAgeView1Rules } from './ageVaccines';
 import { hasSourceColumn } from './sourceColumns';
-import type { EpiAge } from '../../types/hdc';
+import { isOutPlanRule } from './rulePresentation';
 import type { VaccineDateChecks } from '../../types/vaccineDateChecks';
 import { dateKey, getRuleDateWarnings } from './dateWarnings';
 import { differenceInMonths, isValid } from 'date-fns';
@@ -175,6 +174,15 @@ const resolveSmartVaccineNames = (record: EpiRecord, rule: VaccineRule, currentA
 };
 
 /**
+ * ติดป้าย source_aware ให้ทุก rule (ค่าเริ่มต้น true) เพื่อเปิดการตรวจ
+ * "ไฟล์ไม่มีคอลัมน์ที่จำเป็น → ข้อมูลไม่พอประเมิน" ใน evaluateDynamicV1
+ * สำหรับ rules ที่ดึงจากฐานข้อมูล (แหล่งเดียวคือ vaccine_rules)
+ */
+export function markSourceAware(rules: VaccineRule[]): VaccineRule[] {
+  return rules.map(rule => ({ ...rule, source_aware: rule.source_aware ?? true }));
+}
+
+/**
  * Evaluate Dynamic View 1 (รายเข็ม)
  * Return structure ให้เข้ากันกับ View1Evaluation
  */
@@ -186,7 +194,7 @@ export const evaluateDynamicV1 = (record: EpiRecord, rules: VaccineRule[], evalu
 
   const currentAgeMonths = getAgeInMonths(record.birth, evaluationDate);
 
-  const v1Rules = rules.filter(rule => rule.view_type === 1 && rule.is_active && !rule.display_only);
+  const v1Rules = rules.filter(rule => rule.view_type === 1 && rule.is_active && !(rule.display_only || isOutPlanRule(rule)));
   const unknownVaccines: string[] = [];
   const unknownRuleNames: string[] = [];
   let passedCount = 0;
@@ -332,8 +340,3 @@ export const evaluateDynamicV2 = (record: EpiRecord, rules: VaccineRule[], evalu
 
   return { isFullyImmunized, status, missingVaccines, pendingVaccines, passedVaccines };
 };
-
-/** Explicit age projection is used by both View 1 and dashboard summary generation. */
-export function evaluateAgeView1(record: EpiRecord, rules: VaccineRule[], age: EpiAge, evaluationDate: Date = new Date()): View1Evaluation {
-  return evaluateDynamicV1(record, getAgeView1Rules(rules, age), evaluationDate);
-}

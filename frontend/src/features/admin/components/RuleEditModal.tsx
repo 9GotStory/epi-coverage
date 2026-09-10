@@ -1,4 +1,5 @@
 import { getRuleDateChecks } from '../../../shared/utils/vaccine/dateWarnings';
+import { buildFieldLabelMap } from '../../../shared/utils/vaccine/rulePresentation';
 import { vaccineFieldLabel } from '../../../shared/utils/vaccine/hdcData';
 import { useEffect } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
@@ -123,6 +124,12 @@ export function RuleEditModal({ rule, allRules, isOpen, onClose, onSave, fiscalY
   const ordered = useFieldArray({ control: form.control, name: 'date_checks.ordered_pairs' });
   const currentFields = [...form.watch('required_fields'), ...(form.watch('branch_alt_fields') || [])].map(f => f.value);
   const dateOptions = [...new Set([...allRules.flatMap(r => [...r.required_fields, ...(r.branch_alt_fields || [])]), ...currentFields])].filter(Boolean).sort();
+  // ป้ายชื่อวัคซีนมาจาก vaccine_rules (display_name ของ rule ที่ใช้ field นั้น) ไม่ hardcode
+  const fieldLabelMap = buildFieldLabelMap(allRules);
+  const dateOptionLabel = (value: string) => {
+    const label = fieldLabelMap.get(value) ?? vaccineFieldLabel(value);
+    return label === value ? value : `${label} (${value})`;
+  };
 
   const logicType = form.watch("logic_type");
 
@@ -527,7 +534,7 @@ export function RuleEditModal({ rule, allRules, isOpen, onClose, onSave, fiscalY
                     <FormField control={form.control} name={`date_checks.${key}.${index}.${side}`} render={({ field }) => <FormItem className="flex-1"><FormControl>
                       <select {...field} aria-label={`${title} ${index + 1} ${position === 0 ? 'เข็มแรก' : 'เข็มที่เปรียบเทียบ'}`} className="border rounded-lg px-3 py-2 text-sm w-full bg-white">
                         <option value="">เลือกเข็มวัคซีน</option>
-                        {dateOptions.map(value => <option key={value} value={value}>{vaccineFieldLabel(value)} ({value})</option>)}
+                        {dateOptions.map(value => <option key={value} value={value}>{dateOptionLabel(value)}</option>)}
                       </select>
                     </FormControl><FormMessage /></FormItem>} />
                   </div>)}

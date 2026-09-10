@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { EpiRecord } from '../../types';
+import type { VaccineRule } from './ruleEngine';
 import { getHdcExportRows, getHdcVaccineRows, hdcValue, formatHdcDate } from './hdcData';
 
 const record: EpiRecord = {
@@ -8,6 +9,12 @@ const record: EpiRecord = {
   j11_date: '2024-01-23', j12_date: '2024-01-23', je3_date: null,
   result: 'ไม่ผ่าน', ai_analysis: 'ข้อความเก่า', ai_analyzed_at: '2025-01-01',
 };
+
+const rule = (ruleId: string, displayName: string, fields: string[], alternatives: string[] = []): VaccineRule => ({
+  rule_id: ruleId, fiscal_year: 2569, age_group: '5yr', view_type: 1, vaccine_group: '', display_name: displayName,
+  hdc_code: '', required_fields: fields, branch_alt_fields: alternatives, logic_type: alternatives.length ? 'BRANCH' : 'ALL',
+  is_required_for_v2: true, is_active: true,
+});
 
 describe('HDC source data', () => {
   it('keeps duplicate dates in separate doses and retains empty alternatives', () => {
@@ -49,6 +56,26 @@ describe('HDC source data', () => {
     const rows = getHdcVaccineRows({ ...record, j11_date: undefined, j12_date: '', je3_date: null });
     expect(rows.find(row => row.field === 'j11_date')?.date).toContain('ไม่มีคอลัมน์');
     expect(rows.filter(row => row.field !== 'j11_date').every(row => row.date === '—')).toBe(true);
+  });
+
+  it('scopes history rows to rule fields with rule display names and notes', () => {
+    const rules = [rule('r1', 'DTP เข็ม 5', ['dtp5_date']), rule('r2', 'JE ทางเลือก', ['je1_date'], ['je3_date'])];
+    const rec: EpiRecord = { ...record, dtp5_date: '2026-06-01', je1_date: '' } as EpiRecord;
+    const rows = getHdcVaccineRows(rec, rules);
+    expect(rows.map(row => row.field)).toEqual(['dtp5_date', 'je1_date', 'je3_date']);
+    expect(rows[0]).toMatchObject({ name: 'DTP เข็ม 5', date: '2026-06-01', id: 'r1-dtp5_date' });
+    expect(rows[1]).toMatchObject({ name: 'JE ทางเลือก', date: '—' });
+    const withNote = [rule('r1', 'DTP เข็ม 5', ['dtp5_date'], [])].map(r => ({ ...r, note: 'หมายเหตุกฎ' }));
+    expect(getHdcVaccineRows(rec, withNote)[0].note).toBe('หมายเหตุกฎ');
+  });
+
+  it('scopes export columns to rule fields and flags missing source columns', () => {
+    const rules = [rule('r1', 'DTP เข็ม 5', ['dtp5_date'])];
+    const rec: EpiRecord = { ...record, dtp5_date: '2026-06-01', dtp5_hospcode: '00002' } as EpiRecord;
+    const exported = getHdcExportRows([rec], rules)[0];
+    expect(exported).toMatchObject({ dtp5_date: '2026-06-01', dtp5_hospcode: '00002' });
+    expect(exported).not.toHaveProperty('j11_date');
+    expect(exported).not.toHaveProperty('bcg_date');
   });
 });
 

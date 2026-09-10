@@ -7,7 +7,7 @@ import { toast } from 'sonner';
 import { fetchApi } from '../../../shared/lib/api';
 import { calcGroupSummary } from '../../../shared/utils/dashboardLogic';
 
-import { evaluateAgeView1, evaluateDynamicV2 } from '../../../shared/utils/vaccine/ruleEngine';
+import { evaluateDynamicV1, evaluateDynamicV2, markSourceAware } from '../../../shared/utils/vaccine/ruleEngine';
 import type { VaccineRule } from '../../../shared/utils/vaccine/ruleEngine';
 import { getAgeGroupFromTable, getAgeFromTable } from '../utils/uploadHelpers';
 import { getBirthDateRangeForQuarter } from '../../../shared/utils/dateUtils';
@@ -117,8 +117,8 @@ export function useUploadManager() {
       const rules: VaccineRule[] = rulesRes.data;
       if (!Array.isArray(rules)) throw new Error('รูปแบบข้อมูล vaccine rules ไม่ถูกต้อง (ต้องเป็น array)');
       
-      // View 1 ใช้รายการตามอายุร่วมกับหน้ารายบุคคล; View 2 summary คงกฎภายใน
-      evalV1 = (r: EpiRecord) => evaluateAgeView1(r, rules, getAgeFromTable(targetTable) as EpiAge);
+      // View 1 ใช้ rules จากฐานข้อมูล (view_type=1) ร่วมกับหน้ารายบุคคล; View 2 ใช้ view_type=2
+      evalV1 = (r: EpiRecord) => evaluateDynamicV1(r, markSourceAware(rules));
       evalV2 = (r: EpiRecord) => evaluateDynamicV2(r, rules);
       
       const rangeAll = getBirthDateRangeForQuarter(Number(fiscalYear), 'all', getAgeFromTable(targetTable));
@@ -183,7 +183,7 @@ export function useUploadManager() {
         const rules: VaccineRule[] = rulesRes.data;
         if (!Array.isArray(rules)) throw new Error('รูปแบบข้อมูล vaccine rules ไม่ถูกต้อง (ต้องเป็น array)');
         
-        evalV1 = (r: EpiRecord) => evaluateAgeView1(r, rules, getAgeFromTable(t) as EpiAge);
+        evalV1 = (r: EpiRecord) => evaluateDynamicV1(r, markSourceAware(rules));
         evalV2 = (r: EpiRecord) => evaluateDynamicV2(r, rules);
         
         const rangeAll = getBirthDateRangeForQuarter(Number(fiscalYear), 'all', getAgeFromTable(t));

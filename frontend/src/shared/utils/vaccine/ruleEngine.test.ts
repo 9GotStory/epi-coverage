@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { hasDose, getDataErrors, evaluateDynamicV1, evaluateDynamicV2 } from './ruleEngine';
+import { hasDose, getDataErrors, evaluateDynamicV1, evaluateDynamicV2, markSourceAware } from './ruleEngine';
 import type { VaccineRule } from './ruleEngine';
 import type { EpiRecord } from '../../types';
 
@@ -200,6 +200,46 @@ describe('ruleEngine', () => {
       expect(result.status).toBe('FAIL');
       expect(result.missingVaccines).toContain('ไม่ผ่านเกณฑ์ HDC (ตรวจสอบรายละเอียดในระบบ)');
     });
+  });
+});
+
+describe('rules-driven View 1 evaluation (no hardcode)', () => {
+  const baseRecord: EpiRecord = {
+    hoscode: '00000', hosname: 'Mock', pid: '00000', cid: '1234567890123',
+    name: 'Test', lname: 'User', birth: '2022-01-01', bcg_date: '2022-01-01', dtp1_date: '2022-03-01',
+  };
+  const v1Rule = (overrides: Partial<VaccineRule>): VaccineRule => ({
+    rule_id: 'r', fiscal_year: 2569, age_group: '1yr', view_type: 1, vaccine_group: 'DTP',
+    display_name: 'DTP เข็ม 1', hdc_code: '031', required_fields: ['dtp1_date'], logic_type: 'ALL',
+    is_required_for_v2: true, is_active: true, target_age_months: 2, ...overrides,
+  });
+
+  it('excludes out-of-plan rules (view_type=1, is_required_for_v2=false) from counting', () => {
+    const rules = [v1Rule({}), v1Rule({ rule_id: 'pcv', display_name: 'PCV เข็ม 1', required_fields: ['pcv1_date'], is_required_for_v2: false })];
+    const result = evaluateDynamicV1({ ...baseRecord, pcv1_date: undefined } as unknown as EpiRecord, rules);
+    expect(Object.keys(result.results)).toEqual(['DTP เข็ม 1']);
+    expect(result.unknownVaccines).toEqual([]);
+    expect(result.missingVaccines).toEqual([]);
+    expect(result.passedCount).toBe(1);
+  });
+
+  it('treats a field absent from the source_columns manifest as unknown, not missing', () => {
+    const rules = markSourceAware([v1Rule({})]);
+    const missing = { ...baseRecord, dtp1_date: '', source_columns: '["bcg_date"]' } as EpiRecord;
+    const unknown = evaluateDynamicV1(missing, rules);
+    expect(unknown.unknownRuleNames).toEqual(['DTP เข็ม 1']);
+    expect(unknown.missingVaccines).toEqual([]);
+    // manifest ระบุคอลัมน์แล้ว แต่เซลล์ว่าง → missing จริง
+    const blank = evaluateDynamicV1({ ...missing, source_columns: '["bcg_date","dtp1_date"]' }, rules);
+    expect(blank.unknownRuleNames).toEqual([]);
+    expect(blank.missingVaccines).toEqual(['DTP เข็ม 1']);
+  });
+
+  it('reports nothing missing when there are no rules at all', () => {
+    const result = evaluateDynamicV1(baseRecord, []);
+    expect(result.missingVaccines).toEqual([]);
+    expect(result.pendingVaccines).toEqual([]);
+    expect(result.results).toEqual({});
   });
 });
 

@@ -1,12 +1,13 @@
-import type { EpiAge } from '../types/hdc';
 import type { EpiRecord } from '../types';
+import type { VaccineRule } from '../utils/vaccine/ruleEngine';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from './ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { getHdcVaccineRows, hdcValue, formatHdcDate } from '../utils/vaccine/hdcData';
 import { formatDateStr } from '../utils/dateUtils';
 
 interface VaccineHistoryModalProps {
-  age?: EpiAge;
+  rules?: VaccineRule[];
+  caption?: string;
   warnings?: string[];
   warningsStatus?: string;
   isOpen: boolean;
@@ -14,9 +15,9 @@ interface VaccineHistoryModalProps {
   record: EpiRecord | null;
 }
 
-export function VaccineHistoryModal({ isOpen, onClose, record, warnings, warningsStatus, age }: VaccineHistoryModalProps) {
+export function VaccineHistoryModal({ isOpen, onClose, record, warnings, warningsStatus, rules, caption }: VaccineHistoryModalProps) {
   if (!record) return null;
-  const rows = getHdcVaccineRows(record, age);
+  const rows = getHdcVaccineRows(record, rules);
   const dateWarnings = warnings ?? [];
 
   return (
@@ -24,7 +25,7 @@ export function VaccineHistoryModal({ isOpen, onClose, record, warnings, warning
       <DialogContent className="sm:max-w-3xl max-h-[90dvh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>ประวัติการรับวัคซีน</DialogTitle>
-          <DialogDescription>{age ? `รายการวัคซีนสำหรับกลุ่มอายุ ${age} ปี` : 'ข้อมูลจาก HDC ที่นำเข้า แสดงทุกเข็ม'}</DialogDescription>
+          <DialogDescription>{caption ?? 'ข้อมูลจาก HDC ที่นำเข้า แสดงทุกเข็ม'}</DialogDescription>
         </DialogHeader>
         <dl className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
           <div><dt className="text-zinc-500">ชื่อ-สกุล</dt><dd>{record.name} {record.lname}</dd></div>
@@ -55,7 +56,7 @@ export function VaccineHistoryModal({ isOpen, onClose, record, warnings, warning
           <TableBody>
             {rows.map(row => (
               <TableRow key={row.id}>
-                <TableCell><div>{row.name}</div><div className="text-xs text-zinc-500">{row.field}</div>{row.mappingNote && <div className="text-sm text-muted-foreground">ข้อมูลไม่พอประเมิน: {row.mappingNote}</div>}</TableCell>
+                <TableCell><div>{row.name}</div><div className="text-xs text-zinc-500">{row.field}</div>{row.note && <div className="text-sm text-muted-foreground">{row.note}</div>}</TableCell>
                 <TableCell className="whitespace-pre-wrap">{formatHdcDate(row.date)}</TableCell>
                 <TableCell>{row.facility}</TableCell>
                 <TableCell>{row.inputFacility}</TableCell>
