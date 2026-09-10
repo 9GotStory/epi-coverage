@@ -98,6 +98,13 @@ export const ruleHasDataError = (record: EpiRecord, rule: VaccineRule, allRules?
   return getRuleDateWarnings(record, rule, allRules || [rule])[0] || null;
 };
 
+/**
+ * ข้อความ error ของ rule — ถ้า error ระบุชื่อ rule ไว้แล้ว (ป้ายจาก display_name ใน vaccine_rules)
+ * ไม่ต้องนำหน้าชื่อ rule ซ้ำ เช่น "DTP เข็ม 1: วันที่ฉีดก่อนวันเกิด"
+ */
+const formatRuleError = (rule: VaccineRule, error: string): string =>
+  error.startsWith(`${rule.display_name}:`) ? error : `${rule.display_name} (${error})`;
+
 export const getDataErrors = (record: EpiRecord, rules: VaccineRule[]): string[] => {
   const errors: string[] = [];
   if (!rules) return errors;
@@ -105,7 +112,7 @@ export const getDataErrors = (record: EpiRecord, rules: VaccineRule[]): string[]
   for (const rule of rules) {
     const err = ruleHasDataError(record, rule, rules);
     if (err) {
-      errors.push(`${rule.display_name} (${err})`);
+      errors.push(formatRuleError(rule, err));
     }
   }
 
@@ -172,7 +179,7 @@ export const evaluateDynamicV1 = (record: EpiRecord, rules: VaccineRule[], evalu
     const dataError = ruleHasDataError(record, rule, rules);
     if (dataError) {
       results[rule.display_name] = false;
-      missingVaccines.push(`${rule.display_name} (${dataError})`);
+      missingVaccines.push(formatRuleError(rule, dataError));
       continue;
     }
 
@@ -228,7 +235,7 @@ export const evaluateDynamicV2 = (record: EpiRecord, rules: VaccineRule[], evalu
   for (const rule of v2Rules) {
     const dataError = ruleHasDataError(record, rule, rules);
     if (dataError) {
-      missingVaccines.push(`${rule.display_name} (${dataError})`);
+      missingVaccines.push(formatRuleError(rule, dataError));
       continue;
     }
 

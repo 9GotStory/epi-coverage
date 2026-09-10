@@ -28,13 +28,20 @@ export function sortRulesForDisplay(rules: VaccineRule[]): VaccineRule[] {
  * สร้าง map field → display_name ของ rule แรก (ตามลำดับที่ส่งเข้ามา)
  * ที่ใช้ field นั้นใน required_fields หรือ branch_alt_fields
  * ใช้ทำป้ายชื่อวัคซีนใน dropdown "ตรวจสอบข้อมูลวันที่" แทนการ hardcode
+ *
+ * แคชตาม reference ของ array (WeakMap) เพราะถูกเรียกบ่อยมาก
+ * (ต่อ rule ต่อ record ในรอบการประเมิน) และผู้เรียกมักส่ง array เดิมซ้ำ ๆ
  */
+const labelMapCache = new WeakMap<VaccineRule[], Map<string, string>>();
 export function buildFieldLabelMap(rules: VaccineRule[]): Map<string, string> {
+  const cached = labelMapCache.get(rules);
+  if (cached) return cached;
   const map = new Map<string, string>();
   for (const rule of rules) {
     for (const field of [...rule.required_fields, ...(rule.branch_alt_fields || [])]) {
       if (field && !map.has(field)) map.set(field, rule.display_name || field);
     }
   }
+  labelMapCache.set(rules, map);
   return map;
 }
