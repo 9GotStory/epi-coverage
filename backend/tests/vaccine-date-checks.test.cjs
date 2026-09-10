@@ -54,3 +54,21 @@ test('explicit empty lists survive save and clone', () => {
   assert.equal(context.cloneRulesFromYear(2569, 2570, 'admin').success, true);
   assert.deepEqual(JSON.parse(JSON.stringify(context.getVaccineRules(2570, '1yr')[0].date_checks)), disabled);
 });
+
+test('suggestRuleDateChecks derives pairs from the single-source age map (HOSxP swap aware)', () => {
+  const { context } = setup();
+  const rules = [
+    { rule_id: 'hbv3', age_group: '1yr', required_fields: ['hbv4_date'], branch_alt_fields: [] },
+    { rule_id: 'hbv4', age_group: '1yr', required_fields: ['hbv3_date'], branch_alt_fields: [] },
+  ];
+  const res = context.suggestRuleDateChecks(rules);
+  const hbv3 = res.suggestions.find(s => s.rule_id === 'hbv3');
+  // hbv4_date = เข็ม 4 เดือน, hbv3_date = เข็ม 6 เดือน (HOSxP สลับคอลัมน์)
+  assert.equal(JSON.stringify(hbv3.date_checks.ordered_pairs), JSON.stringify([{ field: 'hbv4_date', other_field: 'hbv3_date' }]));
+  assert.equal(JSON.stringify(hbv3.date_checks.same_day_pairs), JSON.stringify([{ field: 'hbv4_date', other_field: 'hbv3_date' }]));
+  assert.equal(hbv3.date_checks.before_birth, true);
+  assert.equal(hbv3.date_checks.allow_on_birth, false);
+  // วัคซีนแรกเกิดต้องอนุญาตตรงวันเกิด
+  const birth = context.suggestRuleDateChecks([{ rule_id: 'bcg', age_group: '1yr', required_fields: ['bcg_date'], branch_alt_fields: [] }]);
+  assert.equal(birth.suggestions[0].date_checks.allow_on_birth, true);
+});

@@ -203,6 +203,42 @@ export const VaccineRuleManager = ({ onDirtyChange }: VaccineRuleManagerProps) =
     }
   };
 
+  const handleAutoSetDateChecks = async () => {
+    const currentRules = draftRules || rules;
+    if (!currentRules || currentRules.length === 0) return;
+
+    try {
+      setIsProcessing(true);
+      // ขอคู่เข็มที่ถูกต้องจาก backend — ตรรกะเดียวกับตอน seed (แหล่งเดียว TARGET_AGE_MONTHS_BY_FIELD)
+      const res = await fetchApi('suggestRuleDateChecks', { rules: currentRules });
+      const suggestions: { rule_id: string; date_checks: NonNullable<VaccineRule['date_checks']> }[] = res.data?.suggestions || [];
+      const byId = new Map<string, NonNullable<VaccineRule['date_checks']>>(
+        suggestions.map(s => [s.rule_id, s.date_checks] as [string, NonNullable<VaccineRule['date_checks']>]),
+      );
+
+      let hasChanges = false;
+      const newRules = currentRules.map((rule): VaccineRule => {
+        const suggested = byId.get(rule.rule_id);
+        if (!suggested) return rule;
+        if (JSON.stringify(rule.date_checks) === JSON.stringify(suggested)) return rule;
+        hasChanges = true;
+        return { ...rule, date_checks: suggested };
+      });
+
+      if (hasChanges) {
+        setDraftRules(newRules);
+        setHasUnsavedChanges(true);
+        toast.success('อัปเดตคู่เข็มตรวจวันที่จากค่าเริ่มต้นสำเร็จ! โปรดตรวจทาน diff และกดยืนยันบันทึก');
+      } else {
+        toast.info('คู่เข็มตรวจวันที่ทุกเกณฑ์ตรงกับค่าเริ่มต้นอยู่แล้ว');
+      }
+    } catch (err: any) {
+      toast.error('แนะนำคู่เข็มไม่สำเร็จ: ' + (err.message || 'Unknown error'));
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   const handleBatchSaveClick = () => {
     setShowConfirmModal(true);
   };
@@ -325,14 +361,23 @@ export const VaccineRuleManager = ({ onDirtyChange }: VaccineRuleManagerProps) =
           
           {displayRules.length > 0 && (
             <div className="flex items-end mb-1 gap-2">
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 onClick={handleAutoSetTargetAge}
                 className="bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100 hover:text-purple-800"
                 disabled={isProcessing}
               >
                 <Wand2 className="w-4 h-4 mr-2" />
                 อัปเดตอายุเป้าหมาย (Auto)
+              </Button>
+              <Button
+                variant="outline"
+                onClick={handleAutoSetDateChecks}
+                className="bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100 hover:text-purple-800"
+                disabled={isProcessing}
+              >
+                <Wand2 className="w-4 h-4 mr-2" />
+                อัปเดตคู่เข็มตรวจวันที่ (Auto)
               </Button>
               <Button 
                 variant="outline" 

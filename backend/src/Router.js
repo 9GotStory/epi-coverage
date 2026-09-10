@@ -57,7 +57,7 @@ function handleRequest(method, e) {
       'setup', 'getAllUsers', 'getUsers', 'updateUserStatus', 'updateUserFacility',
       'upsertFacility', 'upsertEpiData', 'cleanupEpiData', 'getAuditLogs',
       'saveDashboardSummary',
-      'seedVaccineRules', 'saveVaccineRule', 'cloneVaccineRules', 'batchSaveRules', 'suggestRuleTargetAges'
+      'seedVaccineRules', 'saveVaccineRule', 'cloneVaccineRules', 'batchSaveRules', 'suggestRuleTargetAges', 'suggestRuleDateChecks'
     ];
     if (adminActions.includes(action) && !['admin', 'superadmin'].includes(authResult.role)) {
       return responseJson({ error: 'Forbidden: Admin access required' }, 403);
@@ -88,6 +88,7 @@ function handleRequest(method, e) {
       case 'cloneVaccineRules': return responseJson(cloneRulesFromYear(body.fromYear, body.toYear, body.adminEmail));
       case 'batchSaveRules': return responseJson(batchSaveRules(body.fiscalYear, body.ageGroup, body.rules, body.adminEmail));
       case 'suggestRuleTargetAges': return responseJson(suggestRuleTargetAges(body.rules));
+      case 'suggestRuleDateChecks': return responseJson(suggestRuleDateChecks(body.rules));
       default:
         return responseJson({ error: 'Unknown action: ' + action }, 400);
     }

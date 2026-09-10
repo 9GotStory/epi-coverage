@@ -1,11 +1,12 @@
 import { getRuleDateChecks } from '../../../shared/utils/vaccine/dateWarnings';
 import { buildFieldLabelMap } from '../../../shared/utils/vaccine/rulePresentation';
 import { vaccineFieldLabel } from '../../../shared/utils/vaccine/hdcData';
-import { useEffect } from "react";
+import { fetchApi } from '../../../shared/lib/api';
+import { useEffect, useState } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import { useBlocker } from "react-router-dom";
 
@@ -129,6 +130,38 @@ export function RuleEditModal({ rule, allRules, isOpen, onClose, onSave, fiscalY
   const dateOptionLabel = (value: string) => {
     const label = fieldLabelMap.get(value) ?? vaccineFieldLabel(value);
     return label === value ? value : `${label} (${value})`;
+  };
+
+  // ขอคู่เข็มที่ถูกต้องจาก backend (แหล่งเดียว TARGET_AGE_MONTHS_BY_FIELD — ตรรกะเดียวกับตอน seed)
+  const [suggesting, setSuggesting] = useState(false);
+  const handleSuggestPairs = async () => {
+    const values = form.getValues();
+    const required = values.required_fields.map(f => f.value.trim()).filter(Boolean);
+    if (required.length === 0) {
+      toast.error('กรอก "ฟิลด์บังคับ" ก่อนจึงจะแนะนำคู่เข็มได้');
+      return;
+    }
+    try {
+      setSuggesting(true);
+      const draft = {
+        rule_id: rule?.rule_id || 'draft',
+        age_group: rule?.age_group || ageGroup,
+        required_fields: required,
+        branch_alt_fields: (values.branch_alt_fields || []).map(f => f.value.trim()).filter(Boolean),
+      };
+      // ตัดสำเนาเก่าของ rule ตัวเองออกจาก peers — ใช้เฉพาะฟิลด์ที่ admin พิมพ์ไว้ตอนนี้
+      const peers = allRules.filter(r => r.rule_id !== draft.rule_id);
+      const res = await fetchApi('suggestRuleDateChecks', { rules: [draft, ...peers] });
+      const suggestion = res.data?.suggestions?.[0]?.date_checks;
+      if (!suggestion) throw new Error('ไม่ได้รับคำแนะนำจากระบบ');
+      form.setValue('date_checks.same_day_pairs', suggestion.same_day_pairs, { shouldDirty: true });
+      form.setValue('date_checks.ordered_pairs', suggestion.ordered_pairs, { shouldDirty: true });
+      toast.success('เติมคู่เข็มตามค่าเริ่มต้นแล้ว กรุณาตรวจทานก่อนบันทึก');
+    } catch (err: any) {
+      toast.error(err.message || 'แนะนำคู่เข็มไม่สำเร็จ');
+    } finally {
+      setSuggesting(false);
+    }
   };
 
   const logicType = form.watch("logic_type");
@@ -518,7 +551,20 @@ export function RuleEditModal({ rule, allRules, isOpen, onClose, onSave, fiscalY
             )}
 
             <section className="border rounded-lg p-4 space-y-4">
-              <h3 className="font-semibold">ตรวจสอบข้อมูลวันที่</h3>
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="font-semibold">ตรวจสอบข้อมูลวันที่</h3>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleSuggestPairs}
+                  disabled={suggesting}
+                  className="h-8 text-xs bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100 hover:text-purple-800 shrink-0"
+                >
+                  <Wand2 className="w-3 h-3 mr-1" />
+                  {suggesting ? 'กำลังแนะนำ...' : 'แนะนำคู่เข็ม (Auto)'}
+                </Button>
+              </div>
               {!rule?.date_checks && <p className="text-sm text-zinc-500">เกณฑ์เดิมยังไม่มีการตั้งค่ารายคู่ ระบบแสดงค่าเริ่มต้นให้ตรวจทาน กดบันทึกฉบับร่างและยืนยันบันทึกเพื่อใช้ค่าที่เลือก</p>}
               <p className="text-sm text-zinc-500">ใช้กับเข็มในเกณฑ์นี้ แสดงรายละเอียดในประวัติการรับวัคซีน กฎวันซ้ำเป็นการตรวจข้อมูลตามที่ผู้ดูแลกำหนด ไม่ใช่ข้อห้ามฉีดวัคซีนร่วมกันทางการแพทย์</p>
               {(['before_birth', 'allow_on_birth'] as const).map(key => <FormField key={key} control={form.control} name={`date_checks.${key}`} render={({ field }) => <FormItem className="flex items-center justify-between gap-3">
