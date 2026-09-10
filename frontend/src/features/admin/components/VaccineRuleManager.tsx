@@ -5,17 +5,26 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../../shared/components/ui/card';
 import { Button } from '../../../shared/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../../shared/components/ui/select';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '../../../shared/components/ui/dropdown-menu';
 import { useVaccineRules } from '../../../shared/hooks/useVaccineRules';
+import { useAuth } from '../../../shared/contexts/AuthContext';
 import { fetchApi } from '../../../shared/lib/api';
 import { toast } from 'sonner';
 import { RuleEditModal } from './RuleEditModal';
-import { Pencil, ArrowRight, Wand2 } from 'lucide-react';
+import { Pencil, ArrowRight, Wand2, ChevronDown, SlidersHorizontal } from 'lucide-react';
 import type { VaccineRule } from '../../../shared/utils/vaccine/ruleEngine';
 import { getCurrentFiscalYear } from '../../../shared/utils/dateUtils';
 import { useAvailableYears } from '../../../shared/hooks/useAvailableYears';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link, useBlocker } from 'react-router-dom';
-import { AlertCircle, CheckCircle2, RotateCw, RotateCcw } from 'lucide-react';
+import { AlertCircle, CheckCircle2, RotateCw, RotateCcw } from 'lucide-react'; // RotateCcw ใช้ในเมนูเครื่องมือ
 
 // หมายเหตุ: "ค่าเริ่มต้นอายุเป้าหมาย" ไม่ได้ฮาร์ดโค้ดที่นี่อีกต่อไป
 // แหล่งเดียวคือ TARGET_AGE_MONTHS_BY_FIELD ฝั่ง Backend (VaccineRules.js)
@@ -40,6 +49,9 @@ function describeDateChecks(rule: VaccineRule, rules: VaccineRule[]) {
 
 export const VaccineRuleManager = ({ onDirtyChange }: VaccineRuleManagerProps) => {
   const currentYear = getCurrentFiscalYear();
+  // เครื่องมือจัดการเกณฑ์ (Auto/Restore) แสดงเฉพาะ admin และ superadmin
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
   const [fiscalYear, setFiscalYear] = useState<number>(currentYear);
   const { years: availableYears } = useAvailableYears();
   const [ageGroup, setAgeGroup] = useState<string>('1yr');
@@ -359,35 +371,42 @@ export const VaccineRuleManager = ({ onDirtyChange }: VaccineRuleManagerProps) =
             </Select>
           </div>
           
-          {displayRules.length > 0 && (
-            <div className="flex items-end mb-1 gap-2">
-              <Button
-                variant="outline"
-                onClick={handleAutoSetTargetAge}
-                className="bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100 hover:text-purple-800"
-                disabled={isProcessing}
-              >
-                <Wand2 className="w-4 h-4 mr-2" />
-                อัปเดตอายุเป้าหมาย (Auto)
-              </Button>
-              <Button
-                variant="outline"
-                onClick={handleAutoSetDateChecks}
-                className="bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100 hover:text-purple-800"
-                disabled={isProcessing}
-              >
-                <Wand2 className="w-4 h-4 mr-2" />
-                อัปเดตคู่เข็มตรวจวันที่ (Auto)
-              </Button>
-              <Button 
-                variant="outline" 
-                onClick={handleRestoreDefaults}
-                className="bg-red-50 text-red-700 border-red-200 hover:bg-red-100 hover:text-red-800"
-                disabled={isProcessing}
-              >
-                <RotateCcw className="w-4 h-4 mr-2" />
-                คืนค่าเริ่มต้น (Restore)
-              </Button>
+          {isAdmin && displayRules.length > 0 && (
+            <div className="flex items-end mb-1">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" className="bg-white" disabled={isProcessing}>
+                    <SlidersHorizontal className="w-4 h-4 mr-2" />
+                    เครื่องมือจัดการเกณฑ์
+                    <ChevronDown className="w-4 h-4 ml-1 text-slate-400" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-72">
+                  <DropdownMenuLabel>ตั้งค่าจากค่าเริ่มต้นของระบบ (Auto)</DropdownMenuLabel>
+                  <DropdownMenuItem onClick={handleAutoSetTargetAge} disabled={isProcessing}>
+                    <Wand2 className="w-4 h-4 mr-2 text-purple-600 shrink-0" />
+                    <div className="flex flex-col">
+                      <span>อัปเดตอายุเป้าหมาย (Auto)</span>
+                      <span className="text-xs text-slate-500">ดึงอายุเป้าหมายทุกเกณฑ์จากตารางมาตรฐาน</span>
+                    </div>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={handleAutoSetDateChecks} disabled={isProcessing}>
+                    <Wand2 className="w-4 h-4 mr-2 text-purple-600 shrink-0" />
+                    <div className="flex flex-col">
+                      <span>อัปเดตคู่เข็มตรวจวันที่ (Auto)</span>
+                      <span className="text-xs text-slate-500">เติมคู่ห้ามวันซ้ำ / ลำดับวันที่ให้ทุกเกณฑ์</span>
+                    </div>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={handleRestoreDefaults} disabled={isProcessing} className="text-red-600 focus:text-red-700 focus:bg-red-50">
+                    <RotateCcw className="w-4 h-4 mr-2 shrink-0" />
+                    <div className="flex flex-col">
+                      <span>คืนค่าเริ่มต้น (Restore)</span>
+                      <span className="text-xs text-red-400">ล้างกฎของปีนี้ทั้งหมดแล้ว seed ใหม่ — การแก้ไขทั้งหมดจะหาย</span>
+                    </div>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           )}
         </div>
