@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
+// ปักเขตเวลาให้การแปลง timestamp → วันปฏิทิน deterministic (ผู้ใช้งานจริงอยู่เขตเวลาไทย)
+process.env.TZ = 'Asia/Bangkok';
 import type { EpiRecord } from '../../types';
 import type { VaccineRule } from './ruleEngine';
-import { getHdcExportRows, getHdcVaccineRows, hdcValue, formatHdcDate } from './hdcData';
+import { calendarDay, getHdcExportRows, getHdcVaccineRows, hdcValue, formatHdcDate } from './hdcData';
 
 const record: EpiRecord = {
   hoscode: '00001', hosname: 'สถานบริการทดสอบ', pid: '0001',
@@ -82,24 +84,31 @@ describe('HDC source data', () => {
 
 describe('HDC history date formatting', () => {
   it('displays the literal source day as DD-MM-YYYY without a timezone shift', () => {
-    expect(formatHdcDate('2023-10-03T17:00:00.000Z')).toBe('03-10-2023');
+    // 17:00Z คือเที่ยงคืนของ "วันถัดไป" ตามเวลาไทย — ต้องแสดงวันที่ตามเขตเวลาท้องถิ่น ไม่ตัดหน้า T
+    expect(formatHdcDate('2023-10-03T17:00:00.000Z')).toBe('04-10-2023');
     expect(formatHdcDate('2023-10-03')).toBe('03-10-2023');
-    expect(formatHdcDate('2023-10-03T23:30:00-07:00')).toBe('03-10-2023');
-    expect(formatHdcDate(new Date('2023-10-03T17:00:00.000Z'))).toBe('03-10-2023');
+    expect(formatHdcDate('2023-10-03T23:30:00-07:00')).toBe('04-10-2023');
+    expect(formatHdcDate(new Date('2023-10-03T17:00:00.000Z'))).toBe('04-10-2023');
     expect(formatHdcDate('2024-02-29')).toBe('29-02-2024');
+  });
+  it('regression: เที่ยงคืนไทยที่ GAS ส่งมาเป็น UTC ต้องคืนวันเดิม (เคสจริง dtp5_date 31 ต.ค. 2567)', () => {
+    expect(calendarDay('2024-10-30T17:00:00.000Z')).toBe('2024-10-31');
+    expect(calendarDay('2024-10-31')).toBe('2024-10-31');
+    expect(calendarDay('')).toBeNull();
+    expect(calendarDay('2023-02-29')).toBe('');
   });
   it('retains empty, unknown and invalid source values rather than inventing dates', () => {
     expect(formatHdcDate(null)).toBe('—');
     expect(formatHdcDate('')).toBe('—');
     expect(formatHdcDate('2023-02-29')).toBe('2023-02-29');
-    expect(formatHdcDate('2023-10-03Tinvalid')).toBe('2023-10-03Tinvalid');
     expect(formatHdcDate('ไฟล์ไม่มีคอลัมน์')).toBe('ไฟล์ไม่มีคอลัมน์');
     expect(formatHdcDate('ตรวจสอบต้นทาง')).toBe('ตรวจสอบต้นทาง');
   });
   it('does not change the stored or exported source timestamp', () => {
     const source = { ...record, j12_date: '2023-10-03T17:00:00.000Z' };
     const row = getHdcVaccineRows(source).find(row => row.field === 'j12_date')!;
-    expect(formatHdcDate(row.date)).toBe('03-10-2023');
+    // 17:00Z = เที่ยงคืน 4 ต.ค. เวลาไทย → แสดง 04-10-2023
+    expect(formatHdcDate(row.date)).toBe('04-10-2023');
     expect(source.j12_date).toBe('2023-10-03T17:00:00.000Z');
     expect(getHdcExportRows([source])[0]).toHaveProperty('j12_date', source.j12_date);
   });

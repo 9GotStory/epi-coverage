@@ -2,16 +2,11 @@ import type { EpiRecord } from '../../types';
 import type { VaccineDateChecks, VaccineDatePair } from '../../types/vaccineDateChecks';
 import type { VaccineRule } from './ruleEngine';
 import { buildFieldLabelMap } from './rulePresentation';
-import { vaccineFieldLabel } from './hdcData';
+import { calendarDay, vaccineFieldLabel } from './hdcData';
 
+/** คีย์วันที่สำหรับการประเมิน — timestamp ที่มี timezone แปลงตามเขตเวลาท้องถิ่น (กันวันเลื่อนหลัง 1 วัน) */
 export function dateKey(value: unknown): string | null {
-  if (value instanceof Date && Number.isNaN(value.getTime())) return '';
-  const text = value instanceof Date ? value.toISOString() : String(value ?? '').trim();
-  if (!text || text === '-' || text === '—') return null;
-  const day = text.split('T')[0];
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return '';
-  const parsed = new Date(`${day}T00:00:00Z`);
-  return Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== day ? '' : day;
+  return calendarDay(value);
 }
 
 // Compatibility defaults for unsaved legacy rules. Once saved, the explicit pairs are authoritative.

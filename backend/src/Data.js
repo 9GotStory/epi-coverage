@@ -67,6 +67,27 @@ function upsertFacility(hoscode, hosname, isActive, adminEmail) {
  * @param {string} targetTable - ชื่อตาราง Base (e.g. 'Epi_1_Year')
  * @param {string|number|null} fiscalYear - ปีงบประมาณ (e.g. 2568) ถ้ามีจะใช้ Sheet แบบแยกปี
  */
+/**
+ * ช่องวันที่ในชีตอาจเป็น Date จริง (ข้อมูลเดิมหรือกรอกด้วยมือ) — ถ้าส่งออกดิบ ๆ
+ * JSON.stringify จะได้ UTC timestamp แบบ "2024-10-30T17:00:00.000Z" ทำให้หน้าเว็บ
+ * แสดงวันเลื่อนหลัง 1 วัน (เที่ยงคืน 31 ต.ค. ไทย = 17:00 ของวันก่อนตาม UTC)
+ * จึงแปลงเป็น "วันปฏิทิน" yyyy-MM-dd ตามเขตเวลาของสเปรดชีตก่อนส่งออกทุกครั้ง
+ * @param {string} timeZone — หาไว้ครั้งเดียวนอก loop (เป็น GAS API call ห้ามเรียกต่อ record)
+ */
+function normalizeEpiDateFields_(obj, timeZone) {
+  for (const key of Object.keys(obj)) {
+    if (key !== 'birth' && !/_date$/.test(key)) continue;
+    const value = obj[key];
+    if (value instanceof Date) {
+      obj[key] = Utilities.formatDate(value, timeZone, 'yyyy-MM-dd');
+    } else if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(value)) {
+      const parsed = new Date(value);
+      if (!isNaN(parsed.getTime())) obj[key] = Utilities.formatDate(parsed, timeZone, 'yyyy-MM-dd');
+    }
+  }
+  return obj;
+}
+
 function getEpiData(hoscode, targetTable = 'Epi_1_Year', fiscalYear = null) {
   const ss = getSpreadsheet();
   // ใช้ตาราง Base ตรงๆ (เช่น Epi_1_Year) ตามที่ตกลงกันไว้ ไม่แยก Sheet ตามปี
@@ -84,9 +105,10 @@ function getEpiData(hoscode, targetTable = 'Epi_1_Year', fiscalYear = null) {
   const headers = data[0];
   
   const records = [];
+  const timeZone = getSpreadsheet().getSpreadsheetTimeZone();
   for (let i = 1; i < data.length; i++) {
     const row = data[i];
-    const obj = arrayToObj(headers, row);
+    const obj = normalizeEpiDateFields_(arrayToObj(headers, row), timeZone);
     
     // 1. สสอ. (00588) เห็นข้อมูลทั้งหมด | รพ.สต. อื่นเห็นเฉพาะของตนเอง
     // 2. เฉพาะบรรทัดที่ Active

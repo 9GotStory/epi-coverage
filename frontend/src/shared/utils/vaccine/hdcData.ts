@@ -1,6 +1,29 @@
 import { hasSourceColumn } from './sourceColumns';
 import type { EpiRecord } from '../../types';
 import type { VaccineRule } from './ruleEngine';
+import { format } from 'date-fns';
+
+/**
+ * วันปฏิทิน yyyy-MM-dd — จัดการ 3 รูปแบบให้ถูกต้อง:
+ * 1. วันที่ล้วน "2024-10-31" → ใช้ตรง ๆ ตาม literal
+ * 2. Timestamp ที่มี timezone (เช่น "2024-10-30T17:00:00.000Z" ที่ GAS สร้างจากเที่ยงคืนไทย)
+ *    → แปลงเป็นวันตามเขตเวลาท้องถิ่นของผู้ใช้ ไม่ตัดข้อความหน้า T ตรง ๆ (วันจะเลื่อนหลัง 1 วัน)
+ * คืนค่า: null = ไม่มีค่า/ขีด, '' = รูปแบบไม่ถูกต้อง, ไม่งั้นคืน "yyyy-MM-dd"
+ */
+export function calendarDay(value: unknown): string | null {
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? '' : format(value, 'yyyy-MM-dd');
+  const text = String(value ?? '').trim();
+  if (!text || text === '-' || text === '—') return null;
+  const match = /^(\d{4}-\d{2}-\d{2})(T.*)?$/.exec(text);
+  if (!match) return '';
+  if (match[2]) {
+    const parsed = new Date(text);
+    return Number.isNaN(parsed.getTime()) ? '' : format(parsed, 'yyyy-MM-dd');
+  }
+  const day = match[1];
+  const parsed = new Date(`${day}T00:00:00Z`);
+  return Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== day ? '' : day;
+}
 
 // Column labels only: no dose requirements or clinical evaluation.
 export function vaccineFieldLabel(field: string): string {
@@ -19,16 +42,12 @@ export function hdcValue(value: unknown): string {
   return value instanceof Date ? value.toISOString() : String(value);
 }
 
-/** Display the source calendar day, without shifting it to the browser timezone. */
+/** Display the source calendar day — timestamp ที่มี timezone ถูกแปลงตามเขตเวลาท้องถิ่นก่อน */
 export function formatHdcDate(value: unknown): string {
   const text = hdcValue(value).trim();
-  const match = /^(\d{4})-(\d{2})-(\d{2})(?:T.*)?$/.exec(text);
-  if (!match || (text.includes('T') && Number.isNaN(Date.parse(text)))) return text;
-  const [, year, month, day] = match;
-  const datePart = `${year}-${month}-${day}`;
-  const parsed = new Date(`${datePart}T00:00:00Z`);
-  if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== datePart) return text;
-  return `${day}-${month}-${year}`;
+  if (text === '—') return text;
+  const day = calendarDay(text);
+  return day ? `${day.slice(8, 10)}-${day.slice(5, 7)}-${day.slice(0, 4)}` : text;
 }
 
 export function getHdcVaccineRows(record: EpiRecord, rules?: VaccineRule[]) {

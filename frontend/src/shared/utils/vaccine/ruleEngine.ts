@@ -2,6 +2,7 @@ import { hasSourceColumn } from './sourceColumns';
 import { isOutPlanRule } from './rulePresentation';
 import type { VaccineDateChecks } from '../../types/vaccineDateChecks';
 import { dateKey, getRuleDateWarnings } from './dateWarnings';
+import { calendarDay } from './hdcData';
 import { differenceInMonths, isValid } from 'date-fns';
 import type { EpiRecord, VaccineStatus } from '../../types';
 export interface View1Evaluation {
@@ -17,7 +18,9 @@ export interface View1Evaluation {
 
 export const getAgeInMonths = (birthDateStr: string | Date | undefined, evaluationDate: Date = new Date()): number => {
   if (!birthDateStr) return 999; // If no birth date, assume reached age
-  const birthDate = typeof birthDateStr === 'string' ? new Date(birthDateStr) : birthDateStr;
+  const day = calendarDay(birthDateStr);
+  if (!day) return 999;
+  const birthDate = new Date(`${day}T00:00:00`);
 
   if (!isValid(birthDate)) return 999;
 
@@ -52,13 +55,11 @@ export interface VaccineRule {
  */
 export const hasFieldDataError = (record: EpiRecord, field: keyof EpiRecord, allowOnBirth: boolean = false): boolean => {
   const val = record[field];
-  if (!val || typeof val !== 'string' || !record.birth) return false;
+  if (val === null || val === undefined || val === '' || !record.birth) return false;
 
-  const birthStr = typeof record.birth === 'string' ? record.birth : record.birth.toISOString();
-  const cleanBirth = birthStr.split('T')[0].trim();
-  const cleanVal = val.split('T')[0].trim();
-
-  if (cleanVal === '' || cleanVal === '-') return false;
+  const cleanBirth = calendarDay(record.birth);
+  const cleanVal = calendarDay(val);
+  if (!cleanBirth || !cleanVal) return false;
 
   // 1. Check Date before Birth
   if (cleanVal < cleanBirth) {
@@ -80,12 +81,9 @@ export const hasFieldDataError = (record: EpiRecord, field: keyof EpiRecord, all
  */
 export const hasDose = (record: EpiRecord, field: keyof EpiRecord, allowOnBirth: boolean = false): boolean => {
   const val = record[field];
-  if (!val || typeof val !== 'string') return false;
+  if (val === null || val === undefined || val === '') return false;
 
-  // ตัด Time ออกถ้ามี
-  const cleanVal = val.split('T')[0].trim();
-  if (cleanVal === '' || cleanVal === '-') return false;
-
+  if (!calendarDay(val)) return false;
   if (hasFieldDataError(record, field, allowOnBirth)) return false;
 
   return true;
