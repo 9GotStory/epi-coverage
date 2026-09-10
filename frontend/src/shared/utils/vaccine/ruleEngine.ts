@@ -112,64 +112,15 @@ export const getDataErrors = (record: EpiRecord, rules: VaccineRule[]): string[]
   return Array.from(new Set(errors));
 };
 
-const resolveSmartVaccineNames = (record: EpiRecord, rule: VaccineRule, currentAgeMonths: number): { names: string[], isPending: boolean } => {
-  let targetAge: number | undefined = rule.target_age_months;
-
-  // ถ้าระบบไม่ได้ตั้งอายุเป้าหมายมา ให้ถือว่าไม่ใช่ Pending แน่นอน (ถ้าไม่ได้ฉีดคือ Missing ทันที)
-  let isPending = false;
-  if (targetAge !== undefined && targetAge !== null) {
-    isPending = currentAgeMonths < targetAge;
-  }
-
-  // Smart Rota Logic
-  if (rule.vaccine_group === 'Rota' && rule.logic_type === 'BRANCH') {
-    // If it's the complete series rule (it requires BOTH Dose 1 AND the final dose in either path, AND targetAge >= 6)
-    const reqStr = (rule.required_fields || []).join(',');
-    const altStr = (rule.branch_alt_fields || []).join(',');
-    const isCompleteSeries =
-      (
-        (reqStr.includes('rv21_date') && reqStr.includes('rv22_date')) ||
-        (altStr.includes('rv21_date') && altStr.includes('rv22_date')) ||
-        (reqStr.includes('rv31_date') && reqStr.includes('rv33_date')) ||
-        (altStr.includes('rv31_date') && altStr.includes('rv33_date'))
-      ) &&
-      (targetAge !== undefined && targetAge !== null && targetAge >= 6);
-
-    if (isCompleteSeries) {
-      const hasRv21 = Boolean(dateKey(record['rv21_date']));
-      const hasRv31 = Boolean(dateKey(record['rv31_date']));
-
-      if (!hasRv21 && !hasRv31) {
-        let pending = false;
-        if (targetAge !== undefined && targetAge !== null) {
-          pending = currentAgeMonths < Math.max(0, targetAge - 4);
-        }
-        return { names: ['Rota เข็ม 1'], isPending: pending };
-      }
-
-      const hasRv22 = Boolean(dateKey(record['rv22_date']));
-      const hasRv32 = Boolean(dateKey(record['rv32_date']));
-
-      if (!hasRv22 && !hasRv32) {
-        let pending = false;
-        if (targetAge !== undefined && targetAge !== null) {
-          pending = currentAgeMonths < Math.max(0, targetAge - 2);
-        }
-        return { names: ['Rota เข็ม 2'], isPending: pending };
-      }
-
-      // If we reach here, they have at least one Dose 1 and one Dose 2.
-      // Since evaluateDynamicV1/V2 already checked if they completed their specific path (and they failed),
-      // they MUST be missing Dose 3.
-      let pending = false;
-      if (targetAge !== undefined && targetAge !== null) {
-        pending = currentAgeMonths < targetAge;
-      }
-      return { names: ['Rota เข็ม 3 (rv33)'], isPending: pending };
-      // If neither, fallback to default display_name
-    }
-  }
-
+/**
+ * ชื่อที่ใช้แจ้งเมื่อ rule ไม่ผ่าน — มาจาก display_name ของ rule เท่านั้น (rules-driven ไม่มี hardcode)
+ * ถ้าอยากได้รายละเอียดรายเข็ม ให้แยกเป็น rule ย่อยๆ ใน vaccine_rules (ดู seed แบบ Single Responsibility)
+ * @param isPending true เมื่อเด็กยังเล็กกว่าอายุเป้าหมาย (target_age_months) ของ rule
+ */
+const resolveMissingRuleNames = (rule: VaccineRule, currentAgeMonths: number): { names: string[], isPending: boolean } => {
+  // ถ้า rule ไม่ได้ตั้งอายุเป้าหมายมา ให้ถือว่าไม่ใช่ Pending แน่นอน (ถ้าไม่ได้ฉีดคือ Missing ทันที)
+  const targetAge = rule.target_age_months;
+  const isPending = targetAge !== undefined && targetAge !== null && currentAgeMonths < targetAge;
   return { names: [rule.display_name], isPending };
 };
 
@@ -246,7 +197,7 @@ export const evaluateDynamicV1 = (record: EpiRecord, rules: VaccineRule[], evalu
 
     results[rule.display_name] = passed;
     if (!passed) {
-      const { names, isPending } = resolveSmartVaccineNames(record, rule, currentAgeMonths);
+      const { names, isPending } = resolveMissingRuleNames(rule, currentAgeMonths);
       if (isPending) {
         pendingVaccines.push(...names);
         pendingRuleNames.push(rule.display_name);
@@ -296,7 +247,7 @@ export const evaluateDynamicV2 = (record: EpiRecord, rules: VaccineRule[], evalu
 
     if (!passed) {
 
-      const { names, isPending } = resolveSmartVaccineNames(record, rule, currentAgeMonths);
+      const { names, isPending } = resolveMissingRuleNames(rule, currentAgeMonths);
       if (isPending) {
         pendingVaccines.push(...names);
       } else {

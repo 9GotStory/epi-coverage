@@ -86,13 +86,13 @@ describe('ruleEngine', () => {
       // DTP1 ไม่ใช่วัคซีนแรกเกิด ถ้าลงเป็นวันเกิด = ผิด
       const rec: EpiRecord = { ...mockRecord, birth: '2024-10-08', dtp1_date: '2024-10-08' };
       const errors = getDataErrors(rec, birthDoseRules);
-      expect(errors).toContain('DTP1 (031) (DTP เข็ม 1: วันที่ฉีดตรงวันเกิดตามเกณฑ์ที่ไม่อนุญาต)');
+      expect(errors).toContain('DTP1 (031) (DTP1 (031): วันที่ฉีดตรงวันเกิดตามเกณฑ์ที่ไม่อนุญาต)');
     });
 
     it('flags any vaccine when the date is before the birth date', () => {
       const rec: EpiRecord = { ...mockRecord, birth: '2024-10-08', bcg_date: '2024-10-07' };
       const errors = getDataErrors(rec, birthDoseRules);
-      expect(errors).toContain('BCG (010) (BCG: วันที่ฉีดก่อนวันเกิด)');
+      expect(errors).toContain('BCG (010) (BCG (010): วันที่ฉีดก่อนวันเกิด)');
     });
 
     it('flags a birth-date dose when the rule does NOT config target_age_months=0 (config คือความจริงเดียว)', () => {
@@ -102,7 +102,7 @@ describe('ruleEngine', () => {
       ];
       const rec: EpiRecord = { ...mockRecord, birth: '2024-10-08', bcg_date: '2024-10-08' };
       const errors = getDataErrors(rec, noConfigRules);
-      expect(errors).toContain('BCG (010) (BCG: วันที่ฉีดตรงวันเกิดตามเกณฑ์ที่ไม่อนุญาต)');
+      expect(errors).toContain('BCG (010) (BCG (010): วันที่ฉีดตรงวันเกิดตามเกณฑ์ที่ไม่อนุญาต)');
     });
   });
 
@@ -166,7 +166,7 @@ describe('ruleEngine', () => {
       const result = evaluateDynamicV1(rec, rules);
       expect(result.results['DTP1']).toBe(false);
       expect(result.missingVaccines).not.toContain('DTP1');
-      expect(getDataErrors(rec, rules)).toContain('DTP1 (DTP เข็ม 1: วันที่ฉีดตรงวันเกิดตามเกณฑ์ที่ไม่อนุญาต)');
+      expect(getDataErrors(rec, rules)).toContain('DTP1 (DTP1: วันที่ฉีดตรงวันเกิดตามเกณฑ์ที่ไม่อนุญาต)');
     });
 
     it('classifies a not-yet-due child as PENDING and reports pendingRuleNames', () => {

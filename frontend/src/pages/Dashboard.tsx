@@ -22,6 +22,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 // ──────────────────────────────────────────────
 const AgeGroupSection = memo(function AgeGroupSection({
   age,
+  ageGroup,
   summary,
   updatedAt,
   targetView1,
@@ -32,6 +33,7 @@ const AgeGroupSection = memo(function AgeGroupSection({
   path
 }: {
   age: string;
+  ageGroup: string;
   summary: ReturnType<typeof calcGroupSummary>;
   updatedAt?: string | null;
   targetView1?: number;
@@ -170,7 +172,7 @@ const AgeGroupSection = memo(function AgeGroupSection({
       </div>
 
       {isExpanded && (
-        <AgeGroupExpandedView summary={summary} targetView1={targetView1} targetView2={targetView2} fiscalYear={fiscalYear} quarter={quarter} />
+        <AgeGroupExpandedView summary={summary} targetView1={targetView1} targetView2={targetView2} fiscalYear={fiscalYear} quarter={quarter} ageGroup={ageGroup} />
       )}
     </section>
   );
@@ -252,6 +254,7 @@ export function Dashboard() {
         {/* ── Age Group Sections ── */}
         <AgeGroupSection
           age="1 ปี"
+          ageGroup="1yr"
           summary={summary1yr.data}
           updatedAt={summary1yr.updatedAt}
           targetView1={targetView1}
@@ -264,6 +267,7 @@ export function Dashboard() {
         
         <AgeGroupSection
           age="2 ปี"
+          ageGroup="2yr"
           summary={summary2yr.data}
           updatedAt={summary2yr.updatedAt}
           targetView1={targetView1}
@@ -276,6 +280,7 @@ export function Dashboard() {
 
         <AgeGroupSection
           age="3 ปี"
+          ageGroup="3yr"
           summary={summary3yr.data}
           updatedAt={summary3yr.updatedAt}
           targetView1={targetView1}
@@ -288,6 +293,7 @@ export function Dashboard() {
 
         <AgeGroupSection
           age="5 ปี"
+          ageGroup="5yr"
           summary={summary5yr.data}
           updatedAt={summary5yr.updatedAt}
           targetView1={targetView1}

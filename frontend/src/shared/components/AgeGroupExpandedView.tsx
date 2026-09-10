@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import type { GroupSummary } from '../utils/dashboardLogic';
 import { useTargetSettings } from '../hooks/useTargetSettings';
+import { useVaccineRules } from '../hooks/useVaccineRules';
 
 function shortenFacilityName(name: string) {
   return name.replace(/โรงพยาบาลส่งเสริมสุขภาพตำบล/g, 'รพ.สต.')
@@ -22,6 +23,7 @@ interface AgeGroupExpandedViewProps {
   targetView2?: number;
   fiscalYear: number;
   quarter: number | 'all';
+  ageGroup: string;
 }
 
 interface FacilityGroupProps {
@@ -92,23 +94,14 @@ const FacilityGroup = ({ title, facilities, target, isPassedGroup }: FacilityGro
   );
 };
 
-export function AgeGroupExpandedView({ summary, targetView1, targetView2, fiscalYear, quarter }: AgeGroupExpandedViewProps) {
+export function AgeGroupExpandedView({ summary, targetView1, targetView2, fiscalYear, quarter, ageGroup }: AgeGroupExpandedViewProps) {
   const { getTarget } = useTargetSettings();
-  
+  const { rules } = useVaccineRules(fiscalYear, ageGroup);
+  // จับคู่ชื่อเกณฑ์ (display_name จาก summary) → vaccine_group จาก vaccine_rules — ไม่เดาจากชื่อ
+  const groupByDisplayName = useMemo(() => new Map(rules.map(rule => [rule.display_name, rule.vaccine_group])), [rules]);
+
   const getSpecificTarget = (name: string, defaultTarget: number | undefined, view: 1 | 2) => {
-    const lowerName = name.toLowerCase();
-    let vaccineKey = '';
-    if (lowerName.includes('mmr')) vaccineKey = 'mmr';
-    else if (lowerName.includes('bcg')) vaccineKey = 'bcg';
-    else if (lowerName.includes('hbv')) vaccineKey = 'hbv';
-    else if (lowerName.includes('dtp')) vaccineKey = 'dtp';
-    else if (lowerName.includes('opv')) vaccineKey = 'opv';
-    else if (lowerName.includes('ipv')) vaccineKey = 'ipv';
-    else if (lowerName.includes('hib')) vaccineKey = 'hib';
-    else if (lowerName.includes('rota') || lowerName.includes('rv')) vaccineKey = 'rota';
-    else if (lowerName.includes('je') || lowerName.includes('laje')) vaccineKey = 'je';
-    else if (lowerName.includes('hpv')) vaccineKey = 'hpv';
-    
+    const vaccineKey = (groupByDisplayName.get(name) || '').toLowerCase();
     if (vaccineKey) {
       const targetQuarter = quarter === 'all' ? 4 : quarter;
       return getTarget(targetQuarter, view, vaccineKey, fiscalYear);

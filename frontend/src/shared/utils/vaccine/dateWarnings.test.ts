@@ -3,7 +3,8 @@ import type { EpiRecord } from '../../types';
 import { getRecordDateWarnings as checkWarnings } from './dateWarnings';
 import type { VaccineRule } from './ruleEngine';
 const fields = ['bcg_date', 'dtp1_date', 'dtp2_date', 'hib1_date', 'rv21_date', 'rv31_date', 'j11_date', 'j12_date', 'je1_date'];
-const rules: VaccineRule[] = fields.map(field => ({ rule_id: field, fiscal_year: 2569, age_group: '1yr', view_type: 1, vaccine_group: field, display_name: field, hdc_code: '', required_fields: [field], logic_type: 'ALL', is_active: true, is_required_for_v2: true, target_age_months: field === 'bcg_date' ? 0 : 2 }));
+const names: Record<string, string> = { bcg_date: 'BCG', dtp1_date: 'DTP เข็ม 1', dtp2_date: 'DTP เข็ม 2', hib1_date: 'Hib เข็ม 1', rv21_date: 'Rota เข็ม 1 (ชนิด 2 เข็ม)', rv31_date: 'Rota เข็ม 1 (ชนิด 3 เข็ม)', j11_date: 'LAJE เข็ม 1', j12_date: 'LAJE เข็ม 2', je1_date: 'JE เข็ม 1' };
+const rules: VaccineRule[] = fields.map(field => ({ rule_id: field, fiscal_year: 2569, age_group: '1yr', view_type: 1, vaccine_group: field, display_name: names[field], hdc_code: '', required_fields: [field], logic_type: 'ALL', is_active: true, is_required_for_v2: true, target_age_months: field === 'bcg_date' ? 0 : 2 }));
 const getRecordDateWarnings = (input: EpiRecord) => checkWarnings(input, rules);
 const record = (values: Partial<EpiRecord>) => ({ birth: '2024-01-01', ...values }) as EpiRecord;
 describe('record date warnings', () => {
@@ -32,6 +33,10 @@ describe('record date warnings', () => {
   });
   it('ignores empty dates and permits birth doses', () => {
     expect(getRecordDateWarnings(record({ bcg_date: '2024-01-01', dtp1_date: '', dtp2_date: '-' }))).toEqual([]);
+  });
+  it('labels warnings with the display_name from vaccine_rules (ไม่ hardcode)', () => {
+    const renamed = rules.map(rule => rule.rule_id === 'dtp2_date' ? { ...rule, display_name: 'DTP โดสที่สอง' } : rule);
+    expect(checkWarnings(record({ dtp1_date: '2024-05-01', dtp2_date: '2024-03-01' }), renamed).join()).toContain('DTP โดสที่สอง: วันที่ฉีดก่อน DTP เข็ม 1');
   });
 });
 

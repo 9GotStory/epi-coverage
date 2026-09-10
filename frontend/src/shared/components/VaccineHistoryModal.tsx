@@ -43,7 +43,6 @@ export function VaccineHistoryModal({ isOpen, onClose, record, warnings, warning
           <p className="text-zinc-500">ข้อสังเกตนี้ไม่เปลี่ยนผลจาก HDC และยังไม่ยืนยันว่าเป็นการบันทึกผิด</p>
           <ul className="list-disc pl-5">{dateWarnings.map(warning => <li key={warning}>{warning}</li>)}</ul>
         </div>}
-        {rows.some(row => /^rv[23]/.test(row.field)) && <p className="text-sm text-zinc-500">ข้อมูล Rota แยกเป็นชุด 2 เข็ม (rv21, rv22) และชุด 3 เข็ม (rv31, rv32, rv33) ส่วน “Rota เข็ม 1” และ “Rota (ครบถ้วน)” เป็นชื่อเกณฑ์ตรวจเข็มแรกและตรวจครบชุด</p>}
         <Table>
           <TableHeader>
             <TableRow>
