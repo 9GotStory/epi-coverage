@@ -418,15 +418,21 @@ export const VaccineRuleManager = ({ onDirtyChange }: VaccineRuleManagerProps) =
         ) : displayRules.length === 0 ? (
           <div className="py-12 text-center bg-slate-50 rounded-lg border border-dashed border-slate-200">
             <h3 className="text-lg font-medium text-slate-700 mb-2">ยังไม่มีเกณฑ์วัคซีนสำหรับปี {fiscalYear}</h3>
-            <p className="text-slate-500 mb-6">คุณสามารถสร้างเกณฑ์เริ่มต้น (Default) หรือคัดลอกเกณฑ์จากปีที่ผ่านมา</p>
-            <div className="flex justify-center gap-4">
-              <Button onClick={handleSeedRules} disabled={isProcessing}>
-                สร้างเกณฑ์เริ่มต้น (Default Rules)
-              </Button>
-              <Button variant="outline" onClick={() => handleCloneRules(fiscalYear - 1)} disabled={isProcessing}>
-                คัดลอกเกณฑ์จากปี {fiscalYear - 1}
-              </Button>
-            </div>
+            {isAdmin ? (
+              <>
+                <p className="text-slate-500 mb-6">คุณสามารถสร้างเกณฑ์เริ่มต้น (Default) หรือคัดลอกเกณฑ์จากปีที่ผ่านมา</p>
+                <div className="flex justify-center gap-4">
+                  <Button onClick={handleSeedRules} disabled={isProcessing}>
+                    สร้างเกณฑ์เริ่มต้น (Default Rules)
+                  </Button>
+                  <Button variant="outline" onClick={() => handleCloneRules(fiscalYear - 1)} disabled={isProcessing}>
+                    คัดลอกเกณฑ์จากปี {fiscalYear - 1}
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <p className="text-slate-500 mb-6">กรุณาติดต่อผู้ดูแลระบบเพื่อสร้างเกณฑ์วัคซีนสำหรับปีนี้</p>
+            )}
           </div>
         ) : (
           <div className="overflow-x-auto">

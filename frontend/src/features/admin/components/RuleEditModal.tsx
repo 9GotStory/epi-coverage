@@ -2,6 +2,7 @@ import { getRuleDateChecks } from '../../../shared/utils/vaccine/dateWarnings';
 import { buildFieldLabelMap } from '../../../shared/utils/vaccine/rulePresentation';
 import { vaccineFieldLabel } from '../../../shared/utils/vaccine/hdcData';
 import { fetchApi } from '../../../shared/lib/api';
+import { useAuth } from '../../../shared/contexts/AuthContext';
 import { useEffect, useState } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -133,6 +134,9 @@ export function RuleEditModal({ rule, allRules, isOpen, onClose, onSave, fiscalY
   };
 
   // ขอคู่เข็มที่ถูกต้องจาก backend (แหล่งเดียว TARGET_AGE_MONTHS_BY_FIELD — ตรรกะเดียวกับตอน seed)
+  // ปุ่มแนะนำแสดงเฉพาะ admin / superadmin
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
   const [suggesting, setSuggesting] = useState(false);
   const handleSuggestPairs = async () => {
     const values = form.getValues();
@@ -553,17 +557,19 @@ export function RuleEditModal({ rule, allRules, isOpen, onClose, onSave, fiscalY
             <section className="border rounded-lg p-4 space-y-4">
               <div className="flex items-center justify-between gap-2">
                 <h3 className="font-semibold">ตรวจสอบข้อมูลวันที่</h3>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={handleSuggestPairs}
-                  disabled={suggesting}
-                  className="h-8 text-xs bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100 hover:text-purple-800 shrink-0"
-                >
-                  <Wand2 className="w-3 h-3 mr-1" />
-                  {suggesting ? 'กำลังแนะนำ...' : 'แนะนำคู่เข็ม (Auto)'}
-                </Button>
+                {isAdmin && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleSuggestPairs}
+                    disabled={suggesting}
+                    className="h-8 text-xs bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100 hover:text-purple-800 shrink-0"
+                  >
+                    <Wand2 className="w-3 h-3 mr-1" />
+                    {suggesting ? 'กำลังแนะนำ...' : 'แนะนำคู่เข็ม (Auto)'}
+                  </Button>
+                )}
               </div>
               {!rule?.date_checks && <p className="text-sm text-zinc-500">เกณฑ์เดิมยังไม่มีการตั้งค่ารายคู่ ระบบแสดงค่าเริ่มต้นให้ตรวจทาน กดบันทึกฉบับร่างและยืนยันบันทึกเพื่อใช้ค่าที่เลือก</p>}
               <p className="text-sm text-zinc-500">ใช้กับเข็มในเกณฑ์นี้ แสดงรายละเอียดในประวัติการรับวัคซีน กฎวันซ้ำเป็นการตรวจข้อมูลตามที่ผู้ดูแลกำหนด ไม่ใช่ข้อห้ามฉีดวัคซีนร่วมกันทางการแพทย์</p>
