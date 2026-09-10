@@ -37,8 +37,12 @@ export function View1AgeRecords({ age, fiscalYear, quarter, data, isLoading, err
       const warnings = getRecordDateWarnings(record, ageRules);
       const missing = evaluation.missingVaccines.filter(value => !warnings.some(warning => value.includes(warning)));
       const unknown = rulesLoading || rulesError || !rules.length || !!evaluation.unknownVaccines?.length;
-      // สถานะเต็ม (ใช้กับ filter + tooltip): unknown > missing > pending > ครบ
-      const status = unknown ? STATUS_UNKNOWN : missing.length ? STATUS_INCOMPLETE : evaluation.pendingVaccines?.length ? STATUS_PENDING : STATUS_COMPLETE;
+      // สถานะเต็ม (ใช้กับ filter + tooltip): unknown > missing > warnings > pending > ครบ
+      // (กรณีมี date warning เช่น ลงวันที่ตรงวันเกิด → rule นั้นไม่ผ่าน จึงต้องเป็น ไม่ครบ ไม่ใช่ ครบ)
+      const status = unknown ? STATUS_UNKNOWN
+        : missing.length || warnings.length ? STATUS_INCOMPLETE
+        : evaluation.pendingVaccines?.length ? STATUS_PENDING
+        : STATUS_COMPLETE;
       // badge แสดงเฉพาะ ครบ/ไม่ครบ — เหตุผลเต็มอยู่ใน tooltip
       const badge = status === STATUS_COMPLETE ? STATUS_COMPLETE : STATUS_INCOMPLETE;
       const details = [...missing, ...(evaluation.pendingVaccines || []), ...(evaluation.unknownVaccines || [])];

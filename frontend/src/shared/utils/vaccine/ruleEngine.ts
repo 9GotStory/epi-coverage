@@ -174,12 +174,17 @@ const resolveSmartVaccineNames = (record: EpiRecord, rule: VaccineRule, currentA
 };
 
 /**
- * ติดป้าย source_aware ให้ทุก rule (ค่าเริ่มต้น true) เพื่อเปิดการตรวจ
- * "ไฟล์ไม่มีคอลัมน์ที่จำเป็น → ข้อมูลไม่พอประเมิน" ใน evaluateDynamicV1
- * สำหรับ rules ที่ดึงจากฐานข้อมูล (แหล่งเดียวคือ vaccine_rules)
+ * เตรียม rules ที่ดึงจากฐานข้อมูล (แหล่งเดียวคือ vaccine_rules) ก่อนใช้งาน:
+ * - ติดป้าย source_aware (ค่าเริ่มต้น true) เพื่อเปิดการตรวจ
+ *   "ไฟล์ไม่มีคอลัมน์ที่จำเป็น → ข้อมูลไม่พอประเมิน" ใน evaluateDynamicV1
+ * - normalize target_age_months: Google Sheet เก็บค่าว่างเป็น '' → เปลี่ยนเป็น undefined
  */
 export function markSourceAware(rules: VaccineRule[]): VaccineRule[] {
-  return rules.map(rule => ({ ...rule, source_aware: rule.source_aware ?? true }));
+  return rules.map(rule => ({
+    ...rule,
+    source_aware: rule.source_aware ?? true,
+    target_age_months: typeof rule.target_age_months === 'number' ? rule.target_age_months : undefined,
+  }));
 }
 
 /**

@@ -241,6 +241,14 @@ describe('rules-driven View 1 evaluation (no hardcode)', () => {
     expect(result.pendingVaccines).toEqual([]);
     expect(result.results).toEqual({});
   });
+
+  it('markSourceAware normalizes empty-string target_age_months from the sheet', () => {
+    const [normalized] = markSourceAware([v1Rule({ target_age_months: '' as unknown as number })]);
+    expect(normalized.source_aware).toBe(true);
+    expect(normalized.target_age_months).toBeUndefined();
+    const [kept] = markSourceAware([v1Rule({ target_age_months: 9 })]);
+    expect(kept.target_age_months).toBe(9);
+  });
 });
 
 describe('date configuration drives evaluation', () => {

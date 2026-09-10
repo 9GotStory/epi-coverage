@@ -118,8 +118,9 @@ export function useUploadManager() {
       if (!Array.isArray(rules)) throw new Error('รูปแบบข้อมูล vaccine rules ไม่ถูกต้อง (ต้องเป็น array)');
       
       // View 1 ใช้ rules จากฐานข้อมูล (view_type=1) ร่วมกับหน้ารายบุคคล; View 2 ใช้ view_type=2
-      evalV1 = (r: EpiRecord) => evaluateDynamicV1(r, markSourceAware(rules));
-      evalV2 = (r: EpiRecord) => evaluateDynamicV2(r, rules);
+      const dbRules = markSourceAware(rules);
+      evalV1 = (r: EpiRecord) => evaluateDynamicV1(r, dbRules);
+      evalV2 = (r: EpiRecord) => evaluateDynamicV2(r, dbRules);
       
       const rangeAll = getBirthDateRangeForQuarter(Number(fiscalYear), 'all', getAgeFromTable(targetTable));
       const cohortAll = fullData.filter((record: EpiRecord) => new Date(record.birth) >= rangeAll.start && new Date(record.birth) <= rangeAll.end);
@@ -183,8 +184,9 @@ export function useUploadManager() {
         const rules: VaccineRule[] = rulesRes.data;
         if (!Array.isArray(rules)) throw new Error('รูปแบบข้อมูล vaccine rules ไม่ถูกต้อง (ต้องเป็น array)');
         
-        evalV1 = (r: EpiRecord) => evaluateDynamicV1(r, markSourceAware(rules));
-        evalV2 = (r: EpiRecord) => evaluateDynamicV2(r, rules);
+        const dbRules = markSourceAware(rules);
+        evalV1 = (r: EpiRecord) => evaluateDynamicV1(r, dbRules);
+        evalV2 = (r: EpiRecord) => evaluateDynamicV2(r, dbRules);
         
         const rangeAll = getBirthDateRangeForQuarter(Number(fiscalYear), 'all', getAgeFromTable(t));
         const cohortAll = fullData.filter((record: EpiRecord) => new Date(record.birth) >= rangeAll.start && new Date(record.birth) <= rangeAll.end);

@@ -13,9 +13,10 @@ export function isOutPlanRule(rule: VaccineRule): boolean {
  * แล้วเรียงตามกลุ่มวัคซีน และชื่อแสดงผล
  */
 export function sortRulesForDisplay(rules: VaccineRule[]): VaccineRule[] {
+  const ageOf = (rule: VaccineRule) => (typeof rule.target_age_months === 'number' ? rule.target_age_months : Number.POSITIVE_INFINITY);
   return [...rules].sort((a, b) => {
-    const ageA = a.target_age_months ?? Number.POSITIVE_INFINITY;
-    const ageB = b.target_age_months ?? Number.POSITIVE_INFINITY;
+    const ageA = ageOf(a);
+    const ageB = ageOf(b);
     if (ageA !== ageB) return ageA - ageB;
     const group = (a.vaccine_group || '').localeCompare(b.vaccine_group || '', 'th');
     if (group !== 0) return group;

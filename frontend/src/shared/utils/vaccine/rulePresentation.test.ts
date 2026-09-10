@@ -33,6 +33,14 @@ describe('sortRulesForDisplay', () => {
     sortRulesForDisplay(input);
     expect(input.map(r => r.rule_id)).toEqual(['b', 'a']);
   });
+
+  it('treats empty-string target age (as stored by the sheet) the same as unset', () => {
+    const sorted = sortRulesForDisplay([
+      rule({ rule_id: 'blank', target_age_months: '' as unknown as number }),
+      rule({ rule_id: 'aged', target_age_months: 48 }),
+    ]);
+    expect(sorted.map(r => r.rule_id)).toEqual(['aged', 'blank']);
+  });
 });
 
 describe('buildFieldLabelMap', () => {

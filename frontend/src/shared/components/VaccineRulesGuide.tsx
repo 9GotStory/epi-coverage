@@ -40,7 +40,7 @@ export function VaccineRulesGuide({ rules, viewType, isLoading, error }: Vaccine
               {isOutPlanRule(rule) && <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-800">นอกแผน — ไม่นับในความครบถ้วน</span>}
               <span className="text-muted-foreground">
                 {' '}{rule.vaccine_group && `· กลุ่ม ${rule.vaccine_group} `}· HDC: {rule.hdc_code || '-'}
-                {rule.target_age_months !== undefined && rule.target_age_months !== null && ` · อายุเป้าหมาย ${rule.target_age_months} เดือน`}
+                {typeof rule.target_age_months === 'number' && ` · อายุเป้าหมาย ${rule.target_age_months} เดือน`}
                 {' '}{describeLogic(rule)}
                 {rule.note && ` · ${rule.note}`}
               </span>
