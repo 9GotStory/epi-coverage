@@ -29,6 +29,21 @@ function epiBatchSheet(ss) {
   ]);
 }
 
+/** Ensure exactly one logical upload_excel audit event exists for (batchId, chunkIndex); repair reconstructs from ORIGINAL receipt metadata only. */
+function ensureUploadAudit(batchId, index, meta) {
+  if (!meta || (meta.userId == null && meta.email == null)) return; // legacy receipts carry nothing truthful to reconstruct from
+  const marker = `Batch ${batchId} chunk ${index + 1}/`;
+  const sheet = getSpreadsheet().getSheetByName('audit_logs');
+  if (sheet) {
+    const rows = sheet.getDataRange().getValues();
+    for (let i = 1; i < rows.length; i++) {
+      if (rows[i][3] === 'upload_excel' && String(rows[i][4]).includes(marker)) return; // event already exists (incl. ambiguous append failure)
+    }
+  }
+  logAction(meta.userId, meta.email, 'upload_excel',
+    `Batch ${batchId} chunk ${index + 1}/${meta.totalChunks} [${meta.targetTable} FY ${meta.fiscalYear} ${meta.mode}]: inserted ${meta.inserted}, updated ${meta.updated}`);
+}
+
 function writeEpiRows(sheet, headers, rows) {
   if (sheet.getMaxRows() < rows.length) sheet.insertRowsAfter(sheet.getMaxRows(), rows.length - sheet.getMaxRows());
   headers.forEach((field, index) => {
@@ -41,7 +56,7 @@ function writeEpiRows(sheet, headers, rows) {
   sheet.getRange(1, 1, rows.length, headers.length).setValues(safeRows);
 }
 
-function upsertEpiData(chunk, batchId, adminEmail, fiscalYear, targetTable = 'Epi_1_Year', options = {}) {
+function upsertEpiData(chunk, batchId, auth, fiscalYear, targetTable = 'Epi_1_Year', options = {}) {
   const schema = getEpiSchemas()[targetTable];
   const mode = options.mode || 'merge';
   const total = Number(options.totalChunks || 1);
@@ -81,9 +96,11 @@ function upsertEpiData(chunk, batchId, adminEmail, fiscalYear, targetTable = 'Ep
     const completed = JSON.parse(receipt[5]);
     const fingerprint = Utilities.base64Encode(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, JSON.stringify(chunk)));
     const replay = completed.find(item => item.index === index);
-    if (replay) return replay.fingerprint === fingerprint
-      ? { success: true, inserted: 0, updated: 0, replayed: true, batch_id: batchId }
-      : { success: false, error: 'Chunk contents differ from the original submission.' };
+    if (replay) {
+      if (replay.fingerprint !== fingerprint) return { success: false, error: 'Chunk contents differ from the original submission.' };
+      ensureUploadAudit(batchId, index, replay.audit); // repair a missing audit from ORIGINAL metadata; never duplicate an existing one
+      return { success: true, inserted: 0, updated: 0, replayed: true, batch_id: batchId };
+    }
     if (receipt[7] !== 'uploading') return { success: false, error: 'Batch is already finalized.' };
     const facilities = [...new Set([...JSON.parse(receipt[6]), ...chunk.map(record => record.hoscode)])];
     if (receiptIndex > 0 && receipts.slice(receiptIndex + 1).some(row => row[1] === targetTable &&
@@ -126,13 +143,16 @@ function upsertEpiData(chunk, batchId, adminEmail, fiscalYear, targetTable = 'Ep
       else { rows[rowIndex] = values; lookup.set(key, rowIndex); updated++; }
     });
     writeEpiRows(sheet, headers, rows);
-    completed.push({ index, fingerprint });
+    const auditMeta = { userId: auth && auth.userId, email: auth && auth.email, inserted, updated,
+      targetTable, fiscalYear: String(fiscalYear), mode, chunkIndex: index, totalChunks: total };
+    completed.push({ index, fingerprint, audit: auditMeta });
     receipt[5] = JSON.stringify(completed);
     receipt[6] = JSON.stringify([...new Set([...JSON.parse(receipt[6]), ...chunk.map(record => record.hoscode)])]);
     receipt[8] = new Date().toISOString();
     if (receiptIndex < 1) { receiptIndex = receipts.length; receipts.push(receipt); }
     else receipts[receiptIndex] = receipt;
     writeEpiRows(batches, receipts[0], receipts);
+    ensureUploadAudit(batchId, index, auditMeta); // after the receipt is durable; a failure here surfaces instead of a false audited success
     return { success: true, batch_id: batchId, inserted, updated };
   });
 }

@@ -66,7 +66,7 @@ function handleRequest(method, e) {
       case 'setup': return responseJson(setupDatabase());
       case 'forceSyncOpenData': return responseJson(syncOpenData());
       case 'setupOpenDataTrigger': return responseJson(setupOpenDataTrigger());
-      case 'upsertEpiData': return responseJson(upsertEpiData(body.chunk, body.batchId, authResult.email, body.fiscalYear, body.targetTable, body.options));
+      case 'upsertEpiData': return responseJson(upsertEpiData(body.chunk, body.batchId, authResult, body.fiscalYear, body.targetTable, body.options));
       case 'cleanupEpiData': return responseJson(cleanupEpiData(body.batchId, body.touchedHoscodes, authResult.email, body.fiscalYear, body.targetTable));
 
       case 'getUsers': return responseJson(getUsers());
