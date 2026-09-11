@@ -7,6 +7,7 @@ This document is an **evidence record of the legacy-roadmap reconciliation**. It
 - **Method**: classifications were derived from current canonical documentation (`CLAUDE.md`, `CONTEXT.md`, `docs/features.md`, `docs/schema.md`, `docs/spec.md`, `docs/adr/`, `docs/hdc-column-upgrade.md`, `docs/hdc-record-display.md`), the current implementation (`backend/src/`, `frontend/src/`), and verification evidence (`backend/tests/`, `frontend/src/**/*.test.*`). Checkbox state in `task.md` was never used as classification evidence.
 - **Baseline**: `main` at commit `89ca5ba0e7bf444504a4586b803d26ff4c2bba81`.
 - **Date**: 2026-09-11.
+- **Post-baseline operational evidence**: PR #2 received a successful Cloudflare Pages branch-preview deployment for reconciliation commit `3ef69db971ea8112281e6df3a23640619d7f07e9`. This evidence was discovered during PR validation, after the original baseline inspection; it informs legacy item 8.6 and Issue #4 only.
 
 ---
 
@@ -194,7 +195,7 @@ Beyond legacy scope (not counted): fiscal-year dropdown (`UploadDashboard.tsx:60
 | 8.3 | Soft-delete test | DONE | test: `backend/tests/hdc-import.test.cjs:115-135` — sync-mode scope, merge-never-deactivates, executed | ✅ | none | HIGH |
 | 8.4 | FI HBV test cases | **STILL NEEDED** | no HBV multi-dose V2 scenario exists (grep: only hbv1 birth-dose cases) | — | Issue #9 | HIGH |
 | 8.5 | GAS proxy OpenData CORS test | **STILL NEEDED** (integration) | `backend/src/OpenData.js` has no tests; live MOPH API involved | — | Issue #8 | HIGH |
-| 8.6 | Build production + deploy | **STILL NEEDED** (deployment) | no `.github/`, no wrangler/CNAME, `vite.config.ts` has no `base`; only `frontend/public/_redirects` (Cloudflare-Pages convention) — hosting configured out-of-band; `docs/spec.md:7` allows GitHub Pages or Cloudflare Pages | — | Issues #3 (CI) + #4 (hosting) | HIGH |
+| 8.6 | Build production + deploy | **STILL NEEDED** (partial — production deployment verification / configuration documentation) | Cloudflare Pages is the current deployment platform, confirmed by the successful PR #2 branch-preview deployment (post-baseline evidence, commit `3ef69db…`); branch-preview deployment is proven; production-main deployment verification is not yet retained as evidence in this reconciliation; deployment/build configuration is still not documented in-repo sufficiently for reproducibility (`vite.config.ts` lacks `base`; no deploy/CI configuration in-repo) | — | Issues #3 (CI) + #4 (production deployment verification/documentation) | HIGH |
 
 ### Phase 8b — Multi-Year Scope Upload (all DONE, no migration)
 
@@ -282,10 +283,10 @@ Per the `docs/schema.md:82-90` audit contract; finalization logging (`cleanup_ep
 ### P1 — production readiness / verification
 
 **#3 — CI pipeline**
-Independently actionable now, not blocked on any hosting decision: `cd frontend && npm test && npm run lint && npm run build`; `cd backend && npm test` (canonical commands, `CLAUDE.md` §11). No `.github/` exists today.
+Independently actionable now (hosting is settled — Cloudflare Pages; CI does not depend on deployment configuration): `cd frontend && npm test && npm run lint && npm run build`; `cd backend && npm test` (canonical commands, `CLAUDE.md` §11). No `.github/` exists today.
 
-**#4 — Hosting/deployment decision + configuration** [8.6]
-GitHub Pages vs Cloudflare Pages (`docs/spec.md:7` permits both; `frontend/public/_redirects` suggests Cloudflare configured out-of-band); `vite.config.ts` lacks `base`; no deploy configuration in-repo.
+**#4 — Cloudflare Pages production deployment verification + configuration documentation** [8.6]
+Cloudflare Pages is the current hosting platform; PR #2 proved branch-preview deployment succeeds (commit `3ef69db…`). Remaining work: verify the production-main deployment path and document the non-secret deployment/build configuration required to reproduce it (`vite.config.ts` lacks `base`; no deploy configuration in-repo). Secrets must not be committed.
 
 **#5 — Execute production-migration runbook**
 `docs/hdc-column-upgrade.md:61-68`: backup, deploy order preserving the `/exec` URL, `setupDatabase()`/admin setup, additive re-import, dashboard reprocessing, QA. Kept in production-readiness because #6/#4 depend on it.
@@ -366,7 +367,7 @@ All 18 candidates in §7, in this order:
 3. **#3** (CI — unblocks all other verification work; independently actionable)
 4. **#5** (runbook — prerequisite for #4/#6 end states)
 5. **#6, #7, #8** (verification pass)
-6. **#4** (hosting/deploy — after CI exists)
+6. **#4** (Cloudflare Pages production deployment verification + configuration documentation — after CI exists; hosting platform is settled)
 7. **#9** (ready-for-agent; can start any time after CI)
 8. **#12** (quick correctness check — FY selectors may be silently affected)
 9. **#10, #11, #13, #14, #15** (functional gaps, product-priority order to be decided)
@@ -380,7 +381,7 @@ All 65 DONE, 7 SUPERSEDED, and 1 OBSOLETE items — recorded here, never issued.
 
 - **#1 and #2** (P0 — security and data-integrity outrank features per `CLAUDE.md` §15).
 - A quick verification pass on **#12** (FY-selector consistency) because dashboards may depend on it.
-- A timing decision on **#3/#4**.
+- A timing decision on **#3** (CI) and **#4** (production deployment verification + configuration documentation); hosting itself is settled — Cloudflare Pages.
 
 ### Boundary statements preserved
 
