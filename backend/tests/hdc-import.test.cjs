@@ -7,6 +7,7 @@ const crypto = require('node:crypto');
 
 function setup() {
   const sheets = new Map();
+  const numberFormats = [];
   let locked = false;
   function createSheet(name, initial = []) {
     const cells = initial.map(row => [...row]);
@@ -33,7 +34,8 @@ function setup() {
             return this;
           },
           setValue(value) { cells[row - 1][column - 1] = value; return this; },
-          setNumberFormat() { return this; }, setFontWeight() { return this; }, setBackground() { return this; },
+          setNumberFormat(format) { numberFormats.push({ sheet: name, row, column, height, width, format }); return this; },
+          setFontWeight() { return this; }, setBackground() { return this; },
         };
       },
       appendRow(values) { cells.push([...values]); return this; },
@@ -57,7 +59,7 @@ function setup() {
     const values = sheets.get(table).getDataRange().getValues();
     return values.slice(1).map(row => Object.fromEntries(values[0].map((field, index) => [field, row[index]])));
   };
-  return { context, sheets, createSheet, read, isLocked: () => locked };
+  return { context, sheets, createSheet, read, isLocked: () => locked, numberFormats };
 }
 const person = (overrides = {}) => ({ hoscode: '00588', hosname: 'ทดสอบ', pid: '0001', cid: '0000000000001', name: 'ข้อมูล', lname: 'จำลอง', birth: '2025-01-01', bcg_date: '2025-01-01', ...(overrides.cid ? { pid: String(Number(overrides.cid) || 1) } : {}), ...overrides });
 const upload = (c, rows, batch, year = 2569, table = 'Epi_1_Year', options = {}) => c.upsertEpiData(rows, batch, 'admin', year, table, options);
@@ -509,4 +511,31 @@ test('an overlap-refused chunk creates no upload_excel audit event', () => {
   assert.equal(refused.success, false);
   assert.equal(refused.error, 'A newer import overlaps this batch. Start a new import.');
   assert.equal(uploads(), 2); // the rejected request audits nothing
+});
+
+test('import writes apply plain-text formatting to every canonical identifier column for all EPI schemas', () => {
+  // Canonical contract (schema.md header note + identifier rules), stated independently of the write-path predicate:
+  // the responsible facility code, every per-dose facility/recording-unit code, the person identifiers,
+  // and the text classification columns must be stored as text. PID is a digit string of no fixed length —
+  // formatting only, never padding.
+  const isIdentifierColumn = field => field === 'hoscode' || field === 'cid' || field === 'pid'
+    || ['addr', 'check_vhid', 'check_typearea', 'nation', 'discharge'].includes(field)
+    || field.endsWith('_hospcode') || field.endsWith('_input_hosp');
+  const tables = Object.keys(setup().context.getEpiSchemas());
+  assert.deepEqual(tables.sort(), ['Epi_1_Year', 'Epi_2_Year', 'Epi_3_Year', 'Epi_5_Year']);
+  for (const table of tables) {
+    const { context: c, sheets, numberFormats } = setup();
+    assert.equal(upload(c, [person({ addr: '001/2', check_typearea: '1', bcg_hospcode: '00001', bcg_input_hosp: '00002' })], `fmt-${table}`, 2569, table).success, true);
+    const headers = sheets.get(table).cells[0];
+    const written = sheets.get(table).cells.length;
+    for (const [index, field] of headers.entries()) {
+      if (!isIdentifierColumn(field)) continue;
+      const column = index + 1;
+      // Creation-time hardening may add its own '@' call; the contract to prove is that the
+      // import write itself formats the identifier column across the entire written range.
+      const covering = numberFormats.some(call => call.sheet === table && call.column === column
+        && call.format === '@' && call.row === 1 && call.height === written);
+      assert.ok(covering, `${table}: identifier column '${field}' lacks '@' formatting covering the full written range`);
+    }
+  }
 });
