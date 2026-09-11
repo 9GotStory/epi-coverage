@@ -370,3 +370,143 @@ test('logout deletes only the authenticated session, never a caller-supplied for
   assert.equal(response.status, 200);
   assert.deepEqual(sheets.get('sessions').cells.slice(1).map(row => row[0]), ['sess-B']);
 });
+
+function auditSheet(createSheet) {
+  return createSheet('audit_logs', [['log_id', 'user_id', 'email', 'action', 'details', 'timestamp']]);
+}
+const importer = { userId: 'u1', email: 'importer@example.test' };
+
+test('accepted chunks audit one logical upload_excel event with server-derived identity and durable repair metadata', () => {
+  const { context: c, createSheet, sheets, read } = setup();
+  const auditLogs = auditSheet(createSheet);
+  const audit = [];
+  c.logAction = (userId, email, action, details) => {
+    audit.push({ userId, email, action, details });
+    auditLogs.appendRow(['uuid', userId, email, action, details, new Date().toISOString()]);
+  };
+  assert.equal(c.upsertEpiData([person()], 'audit-1', importer, 2569).success, true);
+  assert.equal(audit.length, 1);
+  assert.equal(audit[0].action, 'upload_excel');
+  assert.equal(audit[0].userId, 'u1');
+  assert.equal(audit[0].email, 'importer@example.test');
+  const details = audit[0].details;
+  assert.ok(details.includes('audit-1') && details.includes('chunk 1/1') && details.includes('inserted 1') && details.includes('updated 0'), details);
+  // Privacy: operational metadata only.
+  assert.equal(/\d{13}/.test(details), false);
+  assert.equal(details.includes('ข้อมูล') || details.includes('จำลอง'), false);
+  // Receipt carries the durable repair metadata of the original import.
+  const receipt = JSON.parse(sheets.get('epi_import_batches').cells[1][5]);
+  assert.equal(receipt[0].audit.userId, 'u1');
+  assert.equal(receipt[0].audit.email, 'importer@example.test');
+  assert.equal(receipt[0].audit.inserted, 1);
+  assert.equal(receipt[0].audit.updated, 0);
+  // Normal replay after successful audit: no duplicate logical event.
+  const replay = c.upsertEpiData([person()], 'audit-1', importer, 2569);
+  assert.deepEqual([replay.inserted, replay.updated, replay.replayed], [0, 0, true]);
+  assert.equal(audit.length, 1);
+  assert.equal(read().length, 1);
+});
+
+test('audit append failure after durable receipt is repaired on exact retry with the ORIGINAL actor', () => {
+  const { context: c, createSheet, sheets, read } = setup();
+  auditSheet(createSheet);
+  const audit = [];
+  c.logAction = () => { throw new Error('audit append failed'); };
+  assert.throws(() => c.upsertEpiData([person()], 'repair-1', importer, 2569), /audit append failed/);
+  // Data and receipt are durable despite the audit failure; the request did not report an audited success.
+  assert.equal(read().length, 1);
+  const receipt = JSON.parse(sheets.get('epi_import_batches').cells[1][5]);
+  assert.equal(receipt[0].audit.email, 'importer@example.test');
+  assert.equal(receipt[0].audit.inserted, 1);
+  // A DIFFERENT authenticated user retries the exact chunk: no re-mutation, original actor and counts restored.
+  c.logAction = (userId, email, action, details) => audit.push({ userId, email, action, details });
+  const retry = c.upsertEpiData([person()], 'repair-1', { userId: 'u2', email: 'retry@example.test' }, 2569);
+  assert.deepEqual([retry.inserted, retry.updated, retry.replayed], [0, 0, true]);
+  assert.equal(read().length, 1);
+  assert.equal(audit.length, 1);
+  assert.equal(audit[0].userId, 'u1');
+  assert.equal(audit[0].email, 'importer@example.test');
+  assert.ok(audit[0].details.includes('inserted 1'));
+});
+
+test('an audit append that physically succeeded but threw is deduplicated on retry', () => {
+  const { context: c, createSheet } = setup();
+  const auditLogs = auditSheet(createSheet);
+  // The append physically happens, then the caller observes an error.
+  c.logAction = (userId, email, action, details) => {
+    auditLogs.appendRow(['uuid', userId, email, action, details, new Date().toISOString()]);
+    throw new Error('ambiguous append failure');
+  };
+  assert.throws(() => c.upsertEpiData([person()], 'ambig-1', importer, 2569), /ambiguous append failure/);
+  assert.equal(auditLogs.cells.length, 2);
+  c.logAction = () => { throw new Error('must not append again'); };
+  const retry = c.upsertEpiData([person()], 'ambig-1', importer, 2569);
+  assert.deepEqual([retry.inserted, retry.updated, retry.replayed], [0, 0, true]);
+  assert.equal(auditLogs.cells.length, 2); // exactly one logical upload_excel event remains
+});
+
+test('legacy index+fingerprint receipts replay without fabricating audit history', () => {
+  const { context: c, createSheet, sheets } = setup();
+  auditSheet(createSheet);
+  const audit = [];
+  c.logAction = (...entry) => audit.push(entry);
+  assert.equal(c.upsertEpiData([person()], 'legacy-1', importer, 2569).success, true);
+  const batchSheet = sheets.get('epi_import_batches');
+  const completed = JSON.parse(batchSheet.cells[1][5]);
+  batchSheet.cells[1][5] = JSON.stringify([{ index: completed[0].index, fingerprint: completed[0].fingerprint }]); // legacy shape
+  audit.length = 0;
+  const replay = c.upsertEpiData([person()], 'legacy-1', { userId: 'u2', email: 'other@example.test' }, 2569);
+  assert.deepEqual([replay.inserted, replay.updated, replay.replayed], [0, 0, true]);
+  assert.equal(audit.length, 0); // nothing fabricated for legacy receipts
+});
+
+test('rejections never audit; sync finalize stays a separate cleanup_epi_data event', () => {
+  const { context: c, createSheet } = setup();
+  auditSheet(createSheet);
+  const audit = [];
+  c.logAction = (...entry) => audit.push(entry);
+  assert.equal(c.upsertEpiData([person({ birth: '2025-02-30' })], 'bad', importer, 2569).success, false);        // invalid record
+  assert.equal(c.upsertEpiData([person()], 'bad2', importer, '20X9').success, false);                            // invalid scope
+  assert.equal(audit.length, 0);
+  assert.equal(c.upsertEpiData([person()], 'mm', importer, 2569).success, true);                                 // merge import (no finalize)
+  assert.equal(c.upsertEpiData([person({ addr: 'changed' })], 'mm', importer, 2569).success, false);             // fingerprint mismatch
+  assert.equal(c.upsertEpiData([person()], 'mm', importer, 2569, 'Epi_1_Year', { mode: 'sync' }).success, false); // batch scope mismatch
+  assert.equal(c.upsertEpiData([person()], 'sync-1', importer, 2569, 'Epi_1_Year', { mode: 'sync' }).success, true);
+  c.cleanupEpiData('sync-1', [], 'admin', 2569);
+  assert.equal(audit.filter(entry => entry[2] === 'upload_excel').length, 2);   // only the two accepted chunks
+  assert.equal(audit.filter(entry => entry[2] === 'cleanup_epi_data').length, 1); // finalization remains separate
+});
+
+test('a finalized batch rejects unseen chunks at the finalized guard without auditing', () => {
+  const { context: c, createSheet, sheets } = setup();
+  auditSheet(createSheet);
+  const audit = [];
+  c.logAction = (...entry) => audit.push(entry);
+  // Finalized two-chunk batch with only chunk 0 recorded: chunk 1 misses the replay lookup
+  // and must be refused by the finalized guard (normal finalize requires completeness,
+  // so the guard is exercised through this smallest coherent fixture).
+  createSheet('epi_import_batches', [
+    ['batch_id', 'target_table', 'fiscal_year', 'mode', 'total_chunks', 'completed_chunks', 'hoscodes', 'status', 'updated_at'],
+    ['done-1', 'Epi_1_Year', '2569', 'merge', 2, JSON.stringify([{ index: 0, fingerprint: 'AAAA' }]), '["00002"]', 'complete', '2026-01-01T00:00:00Z'],
+  ]);
+  const result = c.upsertEpiData([person()], 'done-1', importer, 2569, 'Epi_1_Year', { chunkIndex: 1, totalChunks: 2 });
+  assert.equal(result.success, false);
+  assert.equal(result.error, 'Batch is already finalized.');
+  assert.equal(sheets.has('Epi_1_Year'), false); // no data sheet write happened
+  assert.equal(audit.length, 0);                 // no upload_excel audit entry
+});
+
+test('an overlap-refused chunk creates no upload_excel audit event', () => {
+  const { context: c, createSheet } = setup();
+  auditSheet(createSheet);
+  const audit = [];
+  c.logAction = (...entry) => audit.push(entry);
+  assert.equal(c.upsertEpiData([person()], 'older', importer, 2569, 'Epi_1_Year', { mode: 'sync', totalChunks: 2 }).success, true); // incomplete accepted chunk
+  assert.equal(c.upsertEpiData([person()], 'newer', importer, 2569).success, true);                                                 // overlapping newer import
+  const uploads = () => audit.filter(entry => entry[2] === 'upload_excel').length;
+  assert.equal(uploads(), 2); // only the two accepted chunks audited so far
+  const refused = c.upsertEpiData([person()], 'older', importer, 2569, 'Epi_1_Year', { mode: 'sync', totalChunks: 2, chunkIndex: 1 });
+  assert.equal(refused.success, false);
+  assert.equal(refused.error, 'A newer import overlaps this batch. Start a new import.');
+  assert.equal(uploads(), 2); // the rejected request audits nothing
+});

@@ -23,6 +23,7 @@
 - **ซิงค์ไฟล์เต็ม:** ใช้ไฟล์ครบทุกคนของหน่วยบริการที่มีอยู่ในไฟล์ หลังได้รับครบทุก chunk จึง deactivate รายชื่อที่ไม่อยู่ใน batch เฉพาะปีและหน่วยบริการที่ server ตรวจพบเอง หน่วยบริการที่ไม่มีสักแถวในไฟล์จะไม่ถูกล้าง
 - เก็บ receipt ใน `epi_import_batches`: `batch_id`, `target_table`, `fiscal_year`, `mode`, `total_chunks`, `completed_chunks`, `hoscodes`, `status`, `updated_at`
 - `completed_chunks` เก็บ index และ SHA-256 fingerprint ของ payload; chunk ซ้ำเดิมไม่เขียนซ้ำ แต่ payload ต่างกันใน index เดิมถูกปฏิเสธ
+- chunk ที่รับเข้าใหม่เก็บ metadata ซ่อมบันทึกตรวจสอบแบบ additive ใน entry เดิม (`audit`: actor จาก session ที่ยืนยันแล้ว userId/email จำนวน inserted/updated และขอบเขตการนำเข้า ตาราง/ปี/โหมด/ลำดับ chunk) เพื่อซ่อมสร้างเหตุการณ์ `upload_excel` ใน `audit_logs` จากข้อมูลต้นฉบับเมื่อการเขียน audit ล้มเหลวหลัง receipt ถาวรแล้ว และไม่เขียนซ้ำเมื่อเหตุการณ์นั้นมีอยู่แล้ว; receipt แบบเดิมที่มีเพียง index+fingerprint ยังอ่านและ replay ได้ตามปกติ โดยไม่สมมติ actor หรือจำนวนย้อนหลัง
 - ใช้ ScriptLock ครอบการเขียน ป้องกัน batch เก่าที่ขอบเขตทับ batch ใหม่กลับมาเขียนหรือ cleanup
 - การนำเข้าเป็นการเขียนทีละ chunk ไม่ใช่ transaction ทั้งไฟล์: ถ้าล้มเหลว แถวจาก chunk ที่สำเร็จอาจแสดงแล้ว แต่ batch ที่ไม่ครบ cleanup ไม่ได้ ให้นำเข้าไฟล์ครบใหม่ แล้วประมวลผล summary อีกครั้ง
 - Metadata ระบบและ AI ไม่รับจากไฟล์นำเข้า; ค่า AI เดิมรักษาไว้ ไม่ถือว่าเป็นผลวิเคราะห์ใหม่หลังข้อมูลเปลี่ยน
