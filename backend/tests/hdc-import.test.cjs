@@ -32,9 +32,12 @@ function setup() {
             });
             return this;
           },
+          setValue(value) { cells[row - 1][column - 1] = value; return this; },
           setNumberFormat() { return this; }, setFontWeight() { return this; }, setBackground() { return this; },
         };
       },
+      appendRow(values) { cells.push([...values]); return this; },
+      deleteRow(n) { cells.splice(n - 1, 1); return this; },
     };
     if (sheet.getLastColumn() > maxColumns) maxColumns = sheet.getLastColumn();
     sheets.set(name, sheet);
@@ -46,7 +49,7 @@ function setup() {
     arrayToObj: (headers, row) => Object.fromEntries(headers.map((field, index) => [field, row[index]])),
     LockService: { getScriptLock: () => ({ waitLock() { assert.equal(locked, false); locked = true; }, releaseLock() { locked = false; } }) },
     SpreadsheetApp: { flush() {} },
-    Utilities: { formatDate: (value, timeZone) => new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(value), DigestAlgorithm: { SHA_256: 'sha256' }, computeDigest: (_, data) => crypto.createHash('sha256').update(data).digest(), base64Encode: data => Buffer.from(data).toString('base64') },
+    Utilities: { formatDate: (value, timeZone) => new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(value), getUuid: () => 'uuid', DigestAlgorithm: { SHA_256: 'sha256' }, computeDigest: (_, data) => crypto.createHash('sha256').update(data).digest(), base64Encode: data => Buffer.from(data).toString('base64') },
   });
   for (const file of ['Setup.js', 'Upload.js', 'Data.js']) vm.runInContext(fs.readFileSync(path.join(__dirname, '../src', file), 'utf8'), context);
   context.logAction = () => {};
@@ -236,4 +239,134 @@ test('calendar birth dates from native Sheets Date cells match normalized import
   assert.equal(upload(c, [person({ sex: '1', check_vhid: null })], 'date-normalized').updated, 1);
   assert.equal(read().length, 1);
   assert.equal(read()[0].birth, '2025-01-01');
+});
+
+function routerContext(auth, extra = {}) {
+  const harness = setup();
+  const { context: c } = harness;
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/Auth.js'), 'utf8'), c);
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/Router.js'), 'utf8'), c);
+  c.responseJson = (data, status = 200) => ({ data, status });
+  let current = auth;
+  c.validateTokenAndGetRole = () => current;
+  c.setAuth = next => { current = next; };
+  Object.assign(c, extra);
+  return { ...harness, c, setAuth: c.setAuth, call: (action, body = {}) => c.handleRequest('POST', { parameter: { action }, postData: { contents: JSON.stringify({ action, ...body }) } }) };
+}
+
+const ordinary = { valid: true, userId: 'u1', role: 'user', hoscode: '00002', email: 'user@example.test' };
+const administrator = { valid: true, userId: 'a1', role: 'admin', hoscode: '00002', email: 'admin@example.test' };
+const superAdministrator = { valid: true, userId: 's1', role: 'superadmin', hoscode: '00002', email: 'sa@example.test' };
+const districtUser = { valid: true, userId: 'd1', role: 'user', hoscode: '00588', email: 'district@example.test' };
+const anonymous = { valid: false, error: 'No session' };
+const noAccess = { valid: true, userId: 'u2', role: 'user', hoscode: '99999', email: 'other@example.test' };
+
+test('OpenData admin actions are closed to the public and gated by role', () => {
+  let syncs = 0, triggers = 0;
+  const { c, call, setAuth } = routerContext(anonymous, { syncOpenData: () => { syncs++; return { synced: true }; }, setupOpenDataTrigger: () => { triggers++; return { installed: true }; }, getVaccineRules: () => [] });
+  for (const action of ['forceSyncOpenData', 'setupOpenDataTrigger']) {
+    setAuth(anonymous); assert.equal(call(action).status, 401);
+    setAuth(ordinary); assert.equal(call(action).status, 403);
+    setAuth(administrator); assert.equal(call(action).status, 200);
+    setAuth(superAdministrator); assert.equal(call(action).status, 200);
+  }
+  assert.equal(syncs, 2); assert.equal(triggers, 2); // only the two district roles reach the actions
+  // Unrelated public read posture is unchanged (observation-only per Issue #3).
+  setAuth(anonymous); assert.equal(call('getVaccineRules', { fiscalYear: 2569 }).status, 200);
+});
+
+test('standalone updateLastLogin is closed while loginWithGoogle still updates last_login', () => {
+  const { context: c, createSheet } = setup();
+  const users = createSheet('Users', [['id', 'google_id', 'email', 'hoscode', 'role', 'status', 'last_login'],
+    ['u1', 'g-1', 'user@example.test', '00002', 'user', 'approved', '']]);
+  createSheet('sessions', [['session_id', 'user_id', 'token', 'ip_address', 'user_agent', 'expires_at', 'created_at']]);
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/Auth.js'), 'utf8'), c);
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/Router.js'), 'utf8'), c);
+  c.responseJson = (data, status = 200) => ({ data, status });
+  c.validateTokenAndGetRole = () => ({ valid: false, error: 'No session' });
+  c.UrlFetchApp = { fetch: () => ({ getResponseCode: () => 200, getContentText: () => JSON.stringify({ sub: 'g-1' }) }) };
+  assert.equal(c.handleRequest('POST', { parameter: { action: 'updateLastLogin' }, postData: { contents: JSON.stringify({ action: 'updateLastLogin', googleId: 'g-1' }) } }).status, 401);
+  assert.equal(users.cells[1][6], '');
+  assert.equal(c.loginWithGoogle('access-token', '127.0.0.1', 'agent').success, true);
+  assert.notEqual(users.cells[1][6], '');
+});
+
+test('AI analysis is facility-scoped with server-derived audit identity and rejects before Gemini', () => {
+  const { c, call, read } = routerContext(ordinary);
+  const audit = [];
+  c.logAction = (userId, email, action, details) => audit.push({ userId, email, action, details });
+  let geminiCalls = 0;
+  c.PropertiesService = { getScriptProperties: () => ({ getProperty: () => 'test-key' }) };
+  c.UrlFetchApp = { fetch: () => { geminiCalls++; return { getResponseCode: () => 200, getContentText: () => JSON.stringify({ candidates: [{ content: { parts: [{ text: 'synthetic analysis' }] } }] }) }; } };
+  const own = person({ hoscode: '00002', cid: '0000000000002', sex: '1', check_vhid: '00123456' });
+  const foreign = person({ sex: '1', check_vhid: '00123456' });
+  upload(c, [own, foreign], 'ai');
+  const keyOf = row => ({ hoscode: row.hoscode, pid: row.pid, cid: row.cid, sex: row.sex, birth: row.birth, check_vhid: row.check_vhid });
+  const rows = read();
+  const ownIndex = rows.findIndex(row => row.hoscode === '00002'), foreignIndex = rows.findIndex(row => row.hoscode === '00588');
+
+  // saveAiAnalysis: own facility allowed with server-derived audit actor (caller adminEmail/userId ignored).
+  assert.equal(call('saveAiAnalysis', { recordKey: keyOf(own), targetTable: 'Epi_1_Year', aiAnalysis: 'ok', adminEmail: 'spoof@example.test', userId: 'spoofed-id' }).data.success, true);
+  assert.equal(read()[ownIndex].ai_analysis, 'ok');
+  assert.equal(audit.at(-1).userId, 'u1');
+  assert.notEqual(audit.at(-1).userId, 'SYSTEM');
+  assert.notEqual(audit.at(-1).userId, 'spoofed-id');
+  assert.equal(audit.at(-1).email, 'user@example.test');
+  assert.notEqual(audit.at(-1).email, 'spoof@example.test');
+
+  // saveAiAnalysis: foreign facility refused with no write and no audit entry.
+  assert.equal(call('saveAiAnalysis', { recordKey: keyOf(foreign), targetTable: 'Epi_1_Year', aiAnalysis: 'nope' }).data.success, false);
+  assert.equal(read()[foreignIndex].ai_analysis, '');
+  assert.equal(audit.length, 1);
+
+  // saveAiAnalysis: district scope allowed on any facility.
+  c.setAuth(administrator);
+  assert.equal(call('saveAiAnalysis', { recordKey: keyOf(foreign), targetTable: 'Epi_1_Year', aiAnalysis: 'district' }).data.success, true);
+  assert.equal(read()[foreignIndex].ai_analysis, 'district');
+
+  // analyzeVaccineData: unauthorized target fails closed before any Gemini call or write.
+  c.setAuth(noAccess);
+  assert.equal(call('analyzeVaccineData', { prompt: 'p', recordKey: keyOf(own), targetTable: 'Epi_1_Year', adminEmail: 'spoof@example.test', userId: 'spoofed-id' }).data.success, false);
+  assert.equal(geminiCalls, 0);
+  assert.equal(read()[ownIndex].ai_analysis, 'ok'); // unchanged by the rejected request
+
+  // analyzeVaccineData: nonexistent own-facility composite key fails closed before Gemini — recordKey.hoscode alone proves nothing.
+  const auditBeforeGhost = audit.length;
+  const ghost = { hoscode: '00002', pid: '9999', cid: '0000000000999', sex: '1', birth: '2025-01-01', check_vhid: '00123456' };
+  c.setAuth(ordinary);
+  assert.equal(call('analyzeVaccineData', { prompt: 'p', recordKey: ghost, targetTable: 'Epi_1_Year' }).data.success, false);
+  assert.equal(geminiCalls, 0);
+  assert.equal(audit.length, auditBeforeGhost);
+
+  // analyzeVaccineData: authorized caller invokes Gemini once and persists with server-derived actor.
+  c.setAuth(ordinary);
+  assert.equal(call('analyzeVaccineData', { prompt: 'p', recordKey: keyOf(own), targetTable: 'Epi_1_Year', adminEmail: 'spoof@example.test', userId: 'spoofed-id' }).data.success, true);
+  assert.equal(geminiCalls, 1);
+  assert.equal(read()[ownIndex].ai_analysis, 'synthetic analysis');
+  assert.equal(audit.at(-1).userId, 'u1');
+  assert.notEqual(audit.at(-1).userId, 'SYSTEM');
+  assert.equal(audit.at(-1).email, 'user@example.test');
+  assert.notEqual(audit.at(-1).email, 'spoof@example.test');
+
+  // 00588 ordinary-role account: district scope by facility code alone, with its own audit identity.
+  c.setAuth(districtUser);
+  assert.equal(call('saveAiAnalysis', { recordKey: keyOf(own), targetTable: 'Epi_1_Year', aiAnalysis: 'district-user' }).data.success, true);
+  assert.equal(read()[ownIndex].ai_analysis, 'district-user');
+  assert.equal(audit.at(-1).userId, 'd1');
+  assert.equal(audit.at(-1).email, 'district@example.test');
+  const geminiBeforeDistrict = geminiCalls;
+  assert.equal(call('analyzeVaccineData', { prompt: 'p', recordKey: keyOf(foreign), targetTable: 'Epi_1_Year' }).data.success, true);
+  assert.equal(geminiCalls, geminiBeforeDistrict + 1);
+  assert.equal(read()[foreignIndex].ai_analysis, 'synthetic analysis');
+  assert.equal(audit.at(-1).userId, 'd1');
+  assert.equal(audit.at(-1).email, 'district@example.test');
+});
+
+test('logout deletes only the authenticated session, never a caller-supplied foreign token', () => {
+  const { sheets, createSheet, call } = routerContext(ordinary);
+  createSheet('sessions', [['session_id', 'user_id', 'token', 'ip_address', 'user_agent', 'expires_at', 'created_at'],
+    ['sess-A', 'u1', '', '', '', '2099-01-01', ''], ['sess-B', 'u2', '', '', '', '2099-01-01', '']]);
+  const response = call('deleteSession', { token: 'sess-B', auth_token: 'sess-A' });
+  assert.equal(response.status, 200);
+  assert.deepEqual(sheets.get('sessions').cells.slice(1).map(row => row[0]), ['sess-B']);
 });

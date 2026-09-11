@@ -124,68 +124,84 @@ function getEpiData(hoscode, targetTable = 'Epi_1_Year', fiscalYear = null) {
   return records;
 }
 
-/**
- * บันทึกผลการวิเคราะห์จาก AI (Gemini) ลงฐานข้อมูล
- */
-function saveAiAnalysis(recordKey, targetTable, aiAnalysis, adminEmail) {
-  const ss = getSpreadsheet();
-  let sheet = ss.getSheetByName(targetTable);
-  
-  if (!sheet) {
-    return { success: false, error: `Sheet not found: ${targetTable}` };
-  }
-  
-  const data = sheet.getDataRange().getValues();
-  const headers = data[0];
-  
+/** Locate the AI target by the exact composite key (hoscode + pid/cid + sex + birth + check_vhid); 1-based sheet row, or -1 when absent. */
+function findAiTargetRow(data, headers, recordKey) {
   const iHoscode = headers.indexOf('hoscode');
   const iPid = headers.indexOf('pid');
   const iCid = headers.indexOf('cid');
   const iSex = headers.indexOf('sex');
   const iBirth = headers.indexOf('birth');
   const iCheckVhid = headers.indexOf('check_vhid');
-  const aiAnalysisCol = headers.indexOf('ai_analysis');
-  const aiAnalyzedAtCol = headers.indexOf('ai_analyzed_at');
-  
-  if (iHoscode === -1 || iPid === -1 || iCid === -1 || iSex === -1 || iBirth === -1 || iCheckVhid === -1 || aiAnalysisCol === -1 || aiAnalyzedAtCol === -1) {
-    return { success: false, error: "Missing required columns in database schema for AI Analysis (Composite Key)." };
-  }
-  
-  const now = new Date();
-  let updatedCount = 0;
-  
+  if (iHoscode === -1 || iPid === -1 || iCid === -1 || iSex === -1 || iBirth === -1 || iCheckVhid === -1) return -1;
   const targetBirth = new Date(recordKey.birth).getTime();
-  
   for (let i = 1; i < data.length; i++) {
     const row = data[i];
-    const rowBirth = new Date(row[iBirth]).getTime();
-    
     if (
       String(row[iHoscode]) === String(recordKey.hoscode) &&
       String(row[iPid]) === String(recordKey.pid) &&
       String(row[iCid]) === String(recordKey.cid) &&
       String(row[iSex]) === String(recordKey.sex) &&
-      rowBirth === targetBirth &&
+      new Date(row[iBirth]).getTime() === targetBirth &&
       String(row[iCheckVhid] || '') === String(recordKey.check_vhid || '')
     ) {
-      sheet.getRange(i + 1, aiAnalysisCol + 1, 1, 2).setValues([[aiAnalysis, now.toISOString()]]);
-      updatedCount++;
-      break;
+      return i + 1;
     }
   }
-  
-  if (updatedCount > 0) {
-    logAction('SYSTEM', adminEmail || 'Admin', 'save_ai_analysis', `Saved AI analysis for CID ${recordKey.cid} in ${targetTable}`);
-    return { success: true, message: "AI Analysis saved", aiAnalyzedAt: now.toISOString() };
-  } else {
+  return -1;
+}
+
+/**
+ * บันทึกผลการวิเคราะห์จาก AI (Gemini) ลงฐานข้อมูล
+ * อนุญาตเฉพาะขอบเขตหน่วยบริการของบัญชีที่ยืนยันตัวแล้ว (auth) — ไม่ใช้ identity จาก client
+ */
+function saveAiAnalysis(recordKey, targetTable, aiAnalysis, auth) {
+  if (!auth || (!isDistrictScope(auth) && String(recordKey.hoscode) !== String(auth.hoscode))) {
+    return { success: false, error: 'Forbidden: AI analysis is limited to your facility.' };
+  }
+  const ss = getSpreadsheet();
+  let sheet = ss.getSheetByName(targetTable);
+
+  if (!sheet) {
+    return { success: false, error: `Sheet not found: ${targetTable}` };
+  }
+
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0];
+
+  const aiAnalysisCol = headers.indexOf('ai_analysis');
+  const aiAnalyzedAtCol = headers.indexOf('ai_analyzed_at');
+  const hasKeyColumns = ['hoscode', 'pid', 'cid', 'sex', 'birth', 'check_vhid'].every(field => headers.includes(field));
+  if (!hasKeyColumns || aiAnalysisCol === -1 || aiAnalyzedAtCol === -1) {
+    return { success: false, error: "Missing required columns in database schema for AI Analysis (Composite Key)." };
+  }
+
+  const targetRow = findAiTargetRow(data, headers, recordKey);
+  if (targetRow === -1) {
     return { success: false, error: "Record not found for Composite Key" };
   }
+
+  const now = new Date();
+  sheet.getRange(targetRow, aiAnalysisCol + 1, 1, 2).setValues([[aiAnalysis, now.toISOString()]]);
+  logAction(auth.userId, auth.email, 'save_ai_analysis', `Saved AI analysis for CID ${recordKey.cid} in ${targetTable}`);
+  return { success: true, message: "AI Analysis saved", aiAnalyzedAt: now.toISOString() };
 }
 
 /**
  * ส่งคำขอไปยัง Gemini API เพื่อวิเคราะห์ข้อมูล และบันทึกผลลัพธ์
+ * ต้องพิสูจน์ว่า target มีจริงและอยู่ในขอบเขตที่อนุญาต ก่อนเรียกทรัพยากรภายนอกทุกครั้ง (fail-closed)
  */
-function analyzeVaccineData(prompt, recordKey, targetTable, adminEmail) {
+function analyzeVaccineData(prompt, recordKey, targetTable, auth) {
+  if (!auth) return { success: false, error: 'Forbidden: AI analysis is limited to your facility.' };
+  if (!getEpiSchemas()[targetTable]) return { success: false, error: 'Unknown EPI table' };
+  // Read-only resolution of the exact target record: recordKey.hoscode alone proves nothing.
+  const sheet = getSpreadsheet().getSheetByName(targetTable);
+  const data = sheet ? sheet.getDataRange().getValues() : [];
+  const targetRow = findAiTargetRow(data, data[0] || [], recordKey);
+  if (targetRow === -1) return { success: false, error: 'Record not found for Composite Key' };
+  const actualHoscode = String(data[targetRow - 1][data[0].indexOf('hoscode')]);
+  if (!isDistrictScope(auth) && actualHoscode !== String(auth.hoscode)) {
+    return { success: false, error: 'Forbidden: AI analysis is limited to your facility.' };
+  }
   try {
     // 1. Get API Key from Script Properties (Security Best Practice)
     const scriptProperties = PropertiesService.getScriptProperties();
@@ -220,7 +236,7 @@ function analyzeVaccineData(prompt, recordKey, targetTable, adminEmail) {
       const aiAnalysis = result.candidates[0].content.parts[0].text;
       
       // 3. Save to DB
-      const saveResult = saveAiAnalysis(recordKey, targetTable, aiAnalysis, adminEmail);
+      const saveResult = saveAiAnalysis(recordKey, targetTable, aiAnalysis, auth);
       
       return { 
         success: true, 
@@ -346,10 +362,15 @@ function getAvailableYears() {
   return Array.from(years).sort((a, b) => a - b);
 }
 
+/** District scope: admins and the สสอ. account (00588) operate across all facilities. */
+function isDistrictScope(auth) {
+  return ['admin', 'superadmin'].includes(auth.role) || auth.hoscode === '00588';
+}
+
 /** Facility access is derived from the authenticated account. */
 function getAuthorizedEpiData(auth, requestedHoscode, targetTable, fiscalYear) {
   if (!getEpiSchemas()[targetTable]) throw new Error('Unknown EPI table');
-  const district = ['admin', 'superadmin'].includes(auth.role) || auth.hoscode === '00588';
+  const district = isDistrictScope(auth);
   if (!district && !auth.hoscode) throw new Error('No facility assigned');
   const scope = district ? (requestedHoscode || '00588') : auth.hoscode;
   return getEpiData(scope, targetTable, fiscalYear);
