@@ -2,6 +2,7 @@ import type { EpiRecord } from '../types';
 import type { VaccineRule } from '../utils/vaccine/ruleEngine';
 import { getAgeInMonths } from '../utils/vaccine/ruleEngine';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from './ui/dialog';
+import { AlertTriangle } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { getHdcVaccineRows, hdcValue, formatHdcDate, calendarDay } from '../utils/vaccine/hdcData';
 import { formatDateStr } from '../utils/dateUtils';
@@ -11,6 +12,8 @@ interface VaccineHistoryModalProps {
   caption?: string;
   warnings?: string[];
   warningsStatus?: string;
+  /** แสดงหัวข้อ "ผลจาก HDC" — เฉพาะมุมมองที่ 2 (ข้อมูลนี้เป็นของมุมมองที่ 2 ไม่เกี่ยวกับการประเมินรายชนิด) */
+  showHdcResult?: boolean;
   isOpen: boolean;
   onClose: () => void;
   record: EpiRecord | null;
@@ -33,7 +36,7 @@ function dateCellTooltip(record: EpiRecord, value: string): string | undefined {
   return months === 0 ? 'ฉีดเมื่อแรกเกิด (0 เดือน)' : `ฉีดเมื่ออายุประมาณ ${months} เดือน`;
 }
 
-export function VaccineHistoryModal({ isOpen, onClose, record, warnings, warningsStatus, rules, caption }: VaccineHistoryModalProps) {
+export function VaccineHistoryModal({ isOpen, onClose, record, warnings, warningsStatus, rules, caption, showHdcResult = true }: VaccineHistoryModalProps) {
   if (!record) return null;
   const rows = getHdcVaccineRows(record, rules);
   const dateWarnings = warnings ?? [];
@@ -49,17 +52,20 @@ export function VaccineHistoryModal({ isOpen, onClose, record, warnings, warning
           <div><dt className="text-zinc-500">ชื่อ-สกุล</dt><dd>{record.name} {record.lname}</dd></div>
           <div><dt className="text-zinc-500">CID</dt><dd>{record.cid}</dd></div>
           <div><dt className="text-zinc-500">วันเกิด</dt><dd>{formatDateStr(record.birth)}</dd></div>
-          <div><dt className="text-zinc-500">ผลจาก HDC</dt><dd className="whitespace-pre-wrap">{hdcValue(record.result)}</dd></div>
+          {showHdcResult && <div><dt className="text-zinc-500">ผลจาก HDC</dt><dd className="whitespace-pre-wrap">{hdcValue(record.result)}</dd></div>}
           <div><dt className="text-muted-foreground">ที่อยู่</dt><dd>{hdcValue(record.addr)}</dd></div>
           <div><dt className="text-muted-foreground">ประเภทพื้นที่</dt><dd>{hdcValue(record.check_typearea)}</dd></div>
           <div><dt className="text-muted-foreground">รหัสหมู่บ้าน</dt><dd>{hdcValue(record.check_vhid)}</dd></div>
         </dl>
         <p className="text-sm text-zinc-500">{rows.length} รายการ · — หมายถึงไม่มีค่าในข้อมูลที่โหลดมา · ชี้เมาส์ที่แต่ละเซลล์เพื่อดูรายละเอียดเพิ่มเติม</p>
         {warningsStatus && <p role="status" className="text-sm text-zinc-500">{warningsStatus}</p>}
-        {dateWarnings.length > 0 && <div className="border rounded-lg p-3 text-sm space-y-2">
-          <p className="font-semibold">ข้อสังเกตข้อมูลวันที่ — โปรดตรวจสอบต้นทาง</p>
-          <p className="text-zinc-500">ข้อสังเกตนี้ไม่เปลี่ยนผลจาก HDC และยังไม่ยืนยันว่าเป็นการบันทึกผิด</p>
-          <ul className="list-disc pl-5">{dateWarnings.map(warning => <li key={warning}>{warning}</li>)}</ul>
+        {dateWarnings.length > 0 && <div className="border border-amber-200 bg-amber-50 rounded-lg p-3 text-sm space-y-2">
+          <p className="font-semibold text-amber-900 flex items-center gap-1.5">
+            <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
+            ข้อสังเกตข้อมูลวันที่ — โปรดตรวจสอบต้นทาง
+          </p>
+          <p className="text-amber-700">ข้อสังเกตนี้ไม่เปลี่ยนผลจาก HDC และยังไม่ยืนยันว่าเป็นการบันทึกผิด</p>
+          <ul className="list-disc pl-5 text-amber-800 marker:text-amber-500">{dateWarnings.map(warning => <li key={warning}>{warning}</li>)}</ul>
         </div>}
         <Table>
           <TableHeader>

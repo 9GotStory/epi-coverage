@@ -233,7 +233,9 @@ export const evaluateDynamicV2 = (record: EpiRecord, rules: VaccineRule[], evalu
   for (const rule of v2Rules) {
     const dataError = ruleHasDataError(record, rule, rules);
     if (dataError) {
-      missingVaccines.push(formatRuleError(rule, dataError));
+      // V2 เก็บ "ชื่อกฎสะอาด" เท่านั้น — ข้อความ warning ต้องไม่หลุดมาเป็นชื่อวัคซีนใน
+      // breakdown (สัดส่วนตามกฎประเมินภายใน) รายละเอียดวันที่แสดงที่ layer คำเตือนของ modal
+      missingVaccines.push(rule.display_name);
       continue;
     }
 

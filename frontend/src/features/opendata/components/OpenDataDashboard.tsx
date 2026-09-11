@@ -1,7 +1,7 @@
 import { useFacilities } from '../../../shared/hooks/useFacilities';
 import { useState, useMemo } from 'react';
 import { useOpenData } from '../hooks/useOpenData';
-import { CoverageBarChart } from './CoverageBarChart';
+import { CumulativeCoverageChart } from './CumulativeCoverageChart';
 import { formatEpiDataForChart, formatEpiAllVaccines, formatCompleteDataForChart } from '../utils/chartUtils';
 import { VaccineGaugeGrid } from './VaccineGaugeGrid';
 import { VaccineRadarChart } from './VaccineRadarChart';
@@ -172,6 +172,10 @@ export function OpenDataDashboard({ targetTable = 's_epi1' }: OpenDataDashboardP
   // เป้าหมายสำหรับ Radar (ใช้ค่าพื้นฐานของไตรมาส ไม่แยกวัคซีน)
   const radarTarget = getTarget(quarter, 1, undefined, Number(year));
 
+  // สำหรับ Hero KPI (tab ครบชุด): สถานะเทียบเป้า + เดือนล่าสุดที่มีข้อมูล
+  const heroMet = dynamicTarget !== undefined && summary.coverage >= dynamicTarget;
+  const lastActiveMonth = [...chartData].reverse().find((m: any) => m.target > 0 || m.result > 0)?.name as string | undefined;
+
   // Handle Export
   const handleExportExcel = () => {
     const exportData = chartData.map((row: any) => ({
@@ -204,8 +208,8 @@ export function OpenDataDashboard({ targetTable = 's_epi1' }: OpenDataDashboardP
             ภาพรวมข้อมูล HDC (เด็ก {isEpi1 ? '1' : (isEpi3 ? '3' : (isEpi5 ? '5' : '2'))} ปี)
           </h2>
           <p className="text-zinc-500 text-sm mt-1">
-            ความครอบคลุมการได้รับวัคซีนตามเกณฑ์ในเด็ก อายุครบ {isEpi1 ? '1' : (isEpi3 ? '3' : (isEpi5 ? '5' : '2'))} ปี แบบแยกรายชนิด (ดึงข้อมูลจาก HDC OpenData) <br/>
-            <span className="text-blue-600 font-medium">* หมายเหตุ: ข้อมูลสถิติในหน้านี้ใช้เกณฑ์การประเมินแบบเดียวกับ "มุมมองที่ 1"</span>
+            ความครอบคลุมการได้รับวัคซีนตามเกณฑ์ในเด็ก อายุครบ {isEpi1 ? '1' : (isEpi3 ? '3' : (isEpi5 ? '5' : '2'))} ปี {viewMode === 'complete' ? 'แบบรับวัคซีนครบชุด' : 'แบบแยกรายชนิด'} (ดึงข้อมูลจาก HDC OpenData) <br/>
+            <span className="text-blue-600 font-medium">* หมายเหตุ: ข้อมูลสถิติในหน้านี้ใช้เกณฑ์การประเมินแบบเดียวกับ "{viewMode === 'complete' ? 'มุมมองที่ 2' : 'มุมมองที่ 1'}"</span>
           </p>
         </div>
         
@@ -328,6 +332,47 @@ export function OpenDataDashboard({ targetTable = 's_epi1' }: OpenDataDashboardP
         </div>
       ) : (
         <div className="space-y-6">
+          {viewMode === 'complete' ? (
+            /* ── Hero KPI: ตัวเลขเดี่ยวเป็นพระเอกของ tab รับวัคซีนครบชุด ── */
+            <div className="bg-white p-6 rounded-xl border border-zinc-200">
+              <div className="flex flex-col lg:flex-row lg:items-center gap-8">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-zinc-500 font-medium">ความครอบคลุมรับวัคซีนครบชุด (สะสม{lastActiveMonth ? `ถึง ${lastActiveMonth}` : ''})</p>
+                  <p className={`text-5xl font-bold tracking-tight mt-1 ${heroMet ? 'text-green-600' : 'text-red-600'}`}>
+                    {summary.coverage.toFixed(2)}%
+                  </p>
+                  <p className="text-sm text-zinc-500 mt-1">
+                    {dynamicTarget !== undefined
+                      ? `เทียบเป้า ${dynamicTarget}% · ${heroMet ? 'ผ่านเป้าหมายแล้ว' : `ยังขาดอีก ${(dynamicTarget - summary.coverage).toFixed(1)} จุด`}`
+                      : 'ยังไม่ได้กำหนดเป้าหมาย'}
+                  </p>
+                  <div className="relative h-2 bg-zinc-100 rounded-full mt-4">
+                    <div
+                      className={`absolute inset-y-0 left-0 rounded-full ${heroMet ? 'bg-green-500' : 'bg-red-500'}`}
+                      style={{ width: `${Math.min(summary.coverage, 100)}%` }}
+                    />
+                    {dynamicTarget !== undefined && dynamicTarget > 0 && (
+                      <div className="absolute -top-1 h-4 w-0.5 bg-zinc-400 rounded" style={{ left: `${Math.min(dynamicTarget, 100)}%` }} title={`เป้า ${dynamicTarget}%`} />
+                    )}
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 lg:grid-cols-1 lg:gap-3 lg:text-right lg:border-l lg:pl-8 min-w-0">
+                  <div>
+                    <p className="text-xs text-zinc-400 font-medium">เป้าหมายรวม (คน)</p>
+                    <p className="text-2xl font-bold text-zinc-900 mt-0.5">{summary.target.toLocaleString()}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-zinc-400 font-medium">ได้รับครบชุด (คน)</p>
+                    <p className="text-2xl font-bold text-blue-600 mt-0.5">{summary.result.toLocaleString()}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-zinc-400 font-medium">ยังขาดอีก (คน)</p>
+                    <p className="text-2xl font-bold text-amber-600 mt-0.5">{Math.max(0, summary.target - summary.result).toLocaleString()}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
           <div className={`grid grid-cols-1 ${allVaccinesData.length >= 3 ? 'lg:grid-cols-3' : 'lg:grid-cols-1 max-w-4xl mx-auto'} gap-6 mb-8`}>
             {allVaccinesData.length >= 3 && (
               <div className="lg:col-span-1 h-full">
@@ -338,12 +383,13 @@ export function OpenDataDashboard({ targetTable = 's_epi1' }: OpenDataDashboardP
               <VaccineGaugeGrid data={allVaccinesData} goalTarget={radarTarget} />
             </div>
           </div>
+          )}
           
           <div className="pt-8 border-t border-zinc-200 mt-8">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
               <div>
-                <h3 className="text-xl font-bold text-zinc-900 tracking-tight">เจาะลึกรายวัคซีน</h3>
-                <p className="text-sm text-zinc-500 mt-1">ดูแนวโน้มความครอบคลุมรายเดือนของแต่ละวัคซีน</p>
+                <h3 className="text-xl font-bold text-zinc-900 tracking-tight">{viewMode === 'complete' ? 'แนวโน้มรายเดือน' : 'เจาะลึกรายวัคซีน'}</h3>
+                <p className="text-sm text-zinc-500 mt-1">{viewMode === 'complete' ? 'ความครอบคลุมสะสมของการรับวัคซีนครบชุด' : 'ดูแนวโน้มความครอบคลุมสะสมของแต่ละวัคซีน'}</p>
               </div>
               
               {viewMode === 'individual' && (
@@ -365,6 +411,7 @@ export function OpenDataDashboard({ targetTable = 's_epi1' }: OpenDataDashboardP
             }
             </div>
 
+            {viewMode === 'individual' && (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
               <div className="bg-white p-5 rounded-xl border border-zinc-200">
                 <p className="text-sm text-zinc-500 font-medium">เป้าหมายรวม {selectedVaccineLabel} (คน)</p>
@@ -383,10 +430,11 @@ export function OpenDataDashboard({ targetTable = 's_epi1' }: OpenDataDashboardP
                 <div className={`absolute bottom-0 left-0 h-1 transition-all ${dynamicTarget !== undefined && summary.coverage >= dynamicTarget ? 'bg-green-500' : (dynamicTarget !== undefined ? 'bg-red-500' : 'bg-zinc-300')}`} style={{ width: `${Math.min(summary.coverage, 100)}%` }}></div>
               </div>
             </div>
+            )}
 
-            <CoverageBarChart 
-              data={chartData} 
-              title={`ร้อยละความครอบคลุมวัคซีน ${selectedVaccineLabel} รายเดือน (อ้างอิง HDC OpenData)`} 
+            <CumulativeCoverageChart
+              data={chartData}
+              title={`แนวโน้มความครอบคลุมสะสม ${viewMode === 'complete' ? 'รับวัคซีนครบชุด' : `วัคซีน ${selectedVaccineLabel}`} (อ้างอิง HDC OpenData)`}
               targetLine={dynamicTarget}
             />
           </div>

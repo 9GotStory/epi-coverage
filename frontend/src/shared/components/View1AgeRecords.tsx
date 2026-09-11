@@ -103,6 +103,6 @@ export function View1AgeRecords({ age, fiscalYear, quarter, data, isLoading, err
     </div>
     <p className="text-sm text-muted-foreground">แสดง {filtered.length} จาก {processed.length} คน</p>
     <EpiDataTable data={filtered} columns={columns} />
-    <VaccineHistoryModal rules={ageRules} caption={`รายการวัคซีนสำหรับกลุ่มอายุ ${age} ปี`} record={selected} isOpen={!!selected} onClose={() => setSelected(null)} warnings={selected ? getRecordDateWarnings(selected, ageRules) : []} warningsStatus={rulesLoading ? 'กำลังโหลดเกณฑ์...' : rulesError || undefined} />
+    <VaccineHistoryModal rules={ageRules} caption={`รายการวัคซีนสำหรับกลุ่มอายุ ${age} ปี`} showHdcResult={false} record={selected} isOpen={!!selected} onClose={() => setSelected(null)} warnings={selected ? getRecordDateWarnings(selected, ageRules) : []} warningsStatus={rulesLoading ? 'กำลังโหลดเกณฑ์...' : rulesError || undefined} />
   </div>;
 }
