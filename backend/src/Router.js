@@ -38,7 +38,12 @@ function handleRequest(method, e) {
         case 'getDashboardSummariesMultiYear': return responseJson(getDashboardSummariesMultiYear(body.fiscalYears));
         case 'getVaccineRules': return responseJson(getVaccineRules(body.fiscalYear || e.parameter.fiscalYear, body.ageGroup || e.parameter.ageGroup));
         case 'getAvailableYears': return responseJson(getAvailableYears());
-        case 'getOpenData': return responseJson(getCachedOpenData(body.payload.tableName, body.payload.year, body.payload.amp ? 'all' : 'all'));
+        case 'getOpenData': {
+          // Issue #14: deterministic public-boundary validation before any cache/fallback/upstream access
+          const validation = validateOpenDataRequest(body.payload);
+          if (!validation.valid) return responseJson({ error: validation.error }, 400);
+          return responseJson(getCachedOpenData(body.payload.tableName, validation.year));
+        }
 
       }
     }
