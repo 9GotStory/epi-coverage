@@ -1,57 +1,136 @@
 /**
+ * Issue #14: แหล่งค่าคงที่เชิงปฏิบัติการของ OpenData แห่งเดียว (ไม่ใช่ระบบ config แบบไดนามิก)
+ * ข้อเท็จจริงระดับอำเภอ (จังหวัด/อำเภอ) เป็นค่าคงที่ฝั่งเซิร์ฟเวอร์ ห้ามรับจากผู้ใช้
+ */
+const OPENDATA_CONSTANTS = {
+  DATASETS: ['s_epi1', 's_epi2', 's_epi3', 's_epi5', 's_epi_complete'],
+  ENDPOINT: 'https://opendata.moph.go.th/api/report_data',
+  PROVINCE: '54',           // แพร่
+  AREACODE_PREFIX: '5406',  // อำเภอสอง
+  LIMIT: 10000,
+  CACHE_TTL_SECONDS: 21600, // 6 ชั่วโมง
+};
+
+/**
+ * Issue #14: นโยบายปีงบประมาณที่รองรับ อนุมานจากแหล่งเดียวคือ getAvailableYears() ฝั่งเซิร์ฟเวอร์
+ * ปรับเป็น string ทุกค่า; ถ้าแหล่งหลักประเมินไม่ได้ ให้ fail closed (ไม่มีปีที่พิสูจน์ได้ว่ารองรับ)
+ * ห้ามสร้าง allowlist ปีแบบสแตติกชุดที่สอง
+ */
+function supportedOpenDataYears() {
+  try {
+    const years = getAvailableYears();
+    return (Array.isArray(years) ? years : Array.from(years || [])).map(String);
+  } catch (e) {
+    console.error('supportedOpenDataYears failed, failing closed:', e);
+    return [];
+  }
+}
+
+/**
+ * Issue #14: ตัวจัดประเภทการตอบกลับอัปสตรีมแบบใช้ร่วมกัน — ไม่โยน SyntaxError ดิบออกมาเลย
+ * ลำดับการพิจารณา: (A) non-2xx → http_error โดยไม่อ่าน body; (B) 2xx แล้ว parse ไม่ได้ →
+ * non_json (HTML/ข้อความ) หรือ malformed_json (คล้าย JSON แต่พัง); (C) JSON ที่ parse ได้ →
+ * json_error (มี error ตามสัญญาอัปสตรีม) / success (data เป็น array, รวมแถวว่าง) / invalid_contract
+ * การวินิจฉัยเป็น metadata แบบมีขอบเขตเท่านั้น — ห้ามเก็บ body ดิบของอัปสตรีม
+ */
+function classifyOpenDataResponse(response) {
+  const status = response.getResponseCode();
+  const contentType = String((response.getHeaders && response.getHeaders()['Content-Type']) || '');
+  const diagnostic = `opendata_upstream status=${status} content-type=${contentType || 'unknown'}`.slice(0, 200);
+  if (status < 200 || status >= 300) {
+    return { category: 'http_error', diagnostic };
+  }
+  const content = response.getContentText();
+  let parsed;
+  try {
+    parsed = JSON.parse(content);
+  } catch (e) {
+    const trimmed = String(content || '').trim();
+    const category = trimmed.startsWith('{') || trimmed.startsWith('[') ? 'malformed_json' : 'non_json';
+    return { category, diagnostic };
+  }
+  if (parsed && typeof parsed === 'object' && parsed.error != null) {
+    return { category: 'json_error', error: String(parsed.error).slice(0, 200), diagnostic };
+  }
+  if (parsed && typeof parsed === 'object' && Array.isArray(parsed.data)) {
+    return { category: 'success', data: parsed.data, response: parsed, diagnostic };
+  }
+  return { category: 'invalid_contract', diagnostic };
+}
+
+/**
+ * Issue #14: ตรวจคำขอสาธารณะ getOpenData ก่อนแตะ cache/fallback/upstream —
+ * ปฏิเสธแบบ deterministic ทั้ง payload ผิดรูป / dataset ไม่รองรับ / ปีผิดรูปแบบ / ปีไม่รองรับ
+ */
+function validateOpenDataRequest(payload) {
+  if (payload == null || typeof payload !== 'object' || Array.isArray(payload)) {
+    return { valid: false, error: 'Invalid getOpenData payload.' };
+  }
+  if (!OPENDATA_CONSTANTS.DATASETS.includes(payload.tableName)) {
+    return { valid: false, error: 'Unsupported OpenData dataset: ' + String(payload.tableName).slice(0, 50) };
+  }
+  const year = String(payload.year == null ? '' : payload.year);
+  if (!/^\d{4}$/.test(year)) {
+    return { valid: false, error: 'Malformed fiscal year: ' + year.slice(0, 10) };
+  }
+  if (!supportedOpenDataYears().includes(year)) {
+    return { valid: false, error: 'Unsupported fiscal year: ' + year };
+  }
+  return { valid: true, year };
+}
+
+/**
  * Proxy สำหรับดึงข้อมูลจาก MOPH OpenData API เพื่อแก้ปัญหา CORS ฝั่ง Frontend
- * และเพิ่มระบบ Cache 6 ชั่วโมง ป้องกันการดึงข้อมูลซ้ำซ้อนจนโดนบล็อก
- * @param {object} payload - ตัวแปรที่ต้องการส่งไป เช่น { tableName: "s_epi1", year: "2567", province: "54", amp: "06" }
+ * และเพิ่มระบบ Cache 6 ชั่วโมง ป้องกันการดึงข้อมูลซ้ำซ้อนจนโดนบล็อก (เก็บเฉพาะผลสำเร็จ)
+ * การจัดประเภทการตอบกลับทั้งหมดผ่าน classifyOpenDataResponse แห่งเดียว
+ * @param {object} payload - เช่น { tableName: "s_epi1", year: "2567", province: "54" }
  */
 function fetchOpenDataProxy(payload) {
-  const url = "https://opendata.moph.go.th/api/report_data";
-  
   // 1. สร้าง Cache Key จาก Payload (ใช้ v2 เพื่อล้าง Cache เดิมที่ติด Error)
   const cacheKey = "opendata_v3_" + payload.tableName + "_" + payload.year + "_" + payload.province + "_" + (payload.amp || "all");
   const cache = CacheService.getScriptCache();
   const cachedData = cache.get(cacheKey);
-  
+
   // 2. ถ้ามีใน Cache ส่งกลับทันที
   if (cachedData) {
     return JSON.parse(cachedData);
   }
-  
+
   // 3. ถ้าไม่มีใน Cache ให้ยิง API ไปขอกระทรวง
   try {
     // ตาม Spec HDC ต้องแนบ type: "json" ไปด้วยเสมอ
-    const requestPayload = { ...payload, type: "json", limit: 10000 };
-    
+    const requestPayload = { ...payload, type: "json", limit: OPENDATA_CONSTANTS.LIMIT };
+
     const options = {
       method: "POST",
       contentType: "application/json",
       payload: JSON.stringify(requestPayload),
       muteHttpExceptions: true
     };
-    
-    const response = UrlFetchApp.fetch(url, options);
-    const content = response.getContentText();
-    
-    // ตรวจสอบว่าใช่ JSON หรือไม่ ถ้าใช่ให้แปลง
-    let resultData;
-    try {
-      resultData = JSON.parse(content);
-    } catch (e) {
-      return { error: "Invalid JSON from OpenData", details: content };
+
+    const response = UrlFetchApp.fetch(OPENDATA_CONSTANTS.ENDPOINT, options);
+    const result = classifyOpenDataResponse(response);
+    if (result.category !== 'success') {
+      // ความล้มเหลวที่จัดประเภทแล้ว: ส่งกลับซอง error แบบปลอดภัย ไม่แคช ไม่โยน SyntaxError ดิบ
+      console.error('OpenData upstream failure:', result.diagnostic);
+      return { error: 'OpenData upstream ' + result.category + (result.error ? ': ' + result.error : ''), diagnostic: result.diagnostic };
     }
-    
-    // 4. เก็บลง Cache เฉพาะกรณีที่ดึงสำเร็จเท่านั้น (ป้องกันการจำ Error)
-    if (!resultData.error && resultData.statusCode !== 404 && resultData.statusCode !== 400) {
+
+    // 4. เก็บลง Cache เฉพาะกรณีที่ดึงสำเร็จ และ body ไม่ได้ประกาศ statusCode 400/404
+    //    (สัญญาเดิมก่อน Issue #14: ส่งกลับให้คำขอปัจจุบัน แต่ห้ามจำ error ลง cache)
+    const bodyStatus = result.response && result.response.statusCode;
+    if (bodyStatus !== 400 && bodyStatus !== 404) {
       try {
-        cache.put(cacheKey, JSON.stringify(resultData), 21600);
+        cache.put(cacheKey, JSON.stringify(result.response), OPENDATA_CONSTANTS.CACHE_TTL_SECONDS);
       } catch (e) {
-        console.error("Failed to cache OpenData:", e); 
+        console.error("Failed to cache OpenData:", e);
       }
     }
-    
-    return resultData;
+
+    return result.response;
   } catch (error) {
     console.error("OpenData Fetch Error: ", error);
-    return { error: "Failed to fetch OpenData: " + error.toString() };
+    return { error: "Failed to fetch OpenData: " + String(error).slice(0, 200) };
   }
 }
 
@@ -70,7 +149,7 @@ function syncOpenData() {
     sheet.setFrozenRows(1);
   }
   
-  const targetTables = ['s_epi1', 's_epi2', 's_epi3', 's_epi5', 's_epi_complete'];
+  const targetTables = OPENDATA_CONSTANTS.DATASETS;
   
   // Best Practice 1: Sync multiple years (current and previous) or based on active years
   // Fallback if getAvailableYears doesn't exist
@@ -84,8 +163,8 @@ function syncOpenData() {
     yearsToSync = [String(currentYear), String(currentYear - 1)];
   }
   
-  const province = "54"; // แพร่
-  const targetAreacodePrefix = "5406"; // อำเภอสอง
+  const province = OPENDATA_CONSTANTS.PROVINCE; // แพร่
+  const targetAreacodePrefix = OPENDATA_CONSTANTS.AREACODE_PREFIX; // อำเภอสอง
   
   const syncId = Utilities.getUuid();
   const updatedAt = new Date().toISOString();
@@ -99,13 +178,13 @@ function syncOpenData() {
     for (const tableName of targetTables) {
       let fetchSuccess = false;
       try {
-        const url = "https://opendata.moph.go.th/api/report_data";
+        const url = OPENDATA_CONSTANTS.ENDPOINT;
         const payload = {
           tableName: tableName,
           year: year,
           province: province,
           type: "json",
-          limit: 10000 
+          limit: OPENDATA_CONSTANTS.LIMIT
         };
         
         const options = {
@@ -176,7 +255,7 @@ function getCachedOpenData(tableName, year, hospcode = 'all') {
   const sheet = ss.getSheetByName('opendata_cache');
   if (!sheet || sheet.getLastRow() <= 1) {
     // Fallback: ถ้ายังไม่มี Cache เลย ให้ไปดึงผ่าน Proxy
-    return fetchOpenDataProxy({ tableName, year, province: "54" });
+    return fetchOpenDataProxy({ tableName, year, province: OPENDATA_CONSTANTS.PROVINCE });
   }
   
   const data = sheet.getDataRange().getValues();
