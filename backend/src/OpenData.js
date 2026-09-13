@@ -12,6 +12,57 @@ const OPENDATA_CONSTANTS = {
 };
 
 /**
+ * Issue #15: นิยามคอลัมน์ที่จำเป็นของ `opendata_cache` แหล่งเดียว (authoritative)
+ * syncOpenData / setupDatabase / getCachedOpenData ต้องใช้นิยามนี้ ห้ามสร้างรายการซ้ำ
+ */
+const OPENDATA_CACHE_COLUMNS = ['sync_id', 'table_name', 'fiscal_year', 'hospcode', 'areacode', 'raw_json', 'updated_at'];
+
+/** คอลัมน์ที่เส้นทางอ่านต้องใช้จริง (data-bearing) — ขาด/ซ้ำ ต้อง fail closed */
+const OPENDATA_CACHE_READ_COLUMNS = ['table_name', 'fiscal_year', 'hospcode', 'raw_json'];
+
+/**
+ * Issue #15: ตรวจหัวคอลัมน์จริงของชีต — คืน duplicate/missing ของคอลัมน์ที่จำเป็น
+ * พร้อมแผนที่ชื่อ → ดัชนีจริง (zero-based) ของคอลัมน์ที่หาเจอเท่านั้น ไม่สันนิษฐานตำแหน่ง
+ */
+function inspectOpenDataCacheHeaders(sheet) {
+  const lastColumn = sheet.getLastColumn();
+  const headers = lastColumn > 0 ? sheet.getRange(1, 1, 1, lastColumn).getValues()[0].map(String) : [];
+  const duplicates = OPENDATA_CACHE_COLUMNS.filter(column => headers.filter(header => header === column).length > 1);
+  const missing = OPENDATA_CACHE_COLUMNS.filter(column => !headers.includes(column));
+  const columns = {};
+  for (const column of OPENDATA_CACHE_COLUMNS) {
+    const index = headers.indexOf(column);
+    if (index !== -1) columns[column] = index;
+  }
+  return { duplicates, missing, columns, headerWidth: headers.length };
+}
+
+/**
+ * Issue #15: สัญญาสคีมา `opendata_cache` แห่งเดียว (ใช้ร่วมกับ setupDatabase และ sync)
+ * - ครบและไม่ซ้ำ → { ok: true, columns } โดยไม่แตะชีต
+ * - ขาดบางคอลัมน์ → เติมเฉพาะคอลัมน์ที่ขาดต่อท้ายตามลำดับนิยาม ไม่สลับ/ไม่เขียนแถวเกา
+ *   และห้ามสร้าง sync_id/updated_at ย้อนหลังให้แถวประวัติ (เซลล์ใหม่คงว่าง)
+ * - คอลัมน์ที่จำเป็นซ้ำ → fail closed ไม่กลายพันธุ์ชีต ไม่เลือกตัวซ้ำตัวแรกโดยเงียบ ๆ
+ */
+function ensureOpenDataCacheSchema(sheet) {
+  const inspection = inspectOpenDataCacheHeaders(sheet);
+  if (inspection.duplicates.length > 0) {
+    return { ok: false, error: 'opendata_cache duplicate required columns: ' + inspection.duplicates.join(', ') };
+  }
+  if (inspection.missing.length > 0) {
+    const startColumn = inspection.headerWidth + 1;
+    const neededWidth = inspection.headerWidth + inspection.missing.length;
+    if (sheet.getMaxColumns() < neededWidth) {
+      sheet.insertColumnsAfter(sheet.getMaxColumns(), neededWidth - sheet.getMaxColumns());
+    }
+    // เขียนเฉพาะแถวหัวคอลัมน์ใหม่ — แถวข้อมูลเดิมไม่ถูกเขียนใหม่ เซลล์ใหม่คงว่างตามธรรมชาติ
+    sheet.getRange(1, startColumn, 1, inspection.missing.length).setValues([inspection.missing]);
+    return ensureOpenDataCacheSchema(sheet);
+  }
+  return { ok: true, columns: inspection.columns };
+}
+
+/**
  * Issue #14: นโยบายปีงบประมาณที่รองรับ อนุมานจากแหล่งเดียวคือ getAvailableYears() ฝั่งเซิร์ฟเวอร์
  * ปรับเป็น string ทุกค่า; ถ้าแหล่งหลักประเมินไม่ได้ ให้ fail closed (ไม่มีปีที่พิสูจน์ได้ว่ารองรับ)
  * ห้ามสร้าง allowlist ปีแบบสแตติกชุดที่สอง
@@ -142,10 +193,10 @@ function syncOpenData() {
   const ss = getSpreadsheet();
   let sheet = ss.getSheetByName('opendata_cache');
   if (!sheet) {
+    // Issue #15: สร้างหัวคอลัมน์จากนิยามสคีมาแหล่งเดียว (ไม่มีรายการ hardcode ซ้ำ)
     sheet = ss.insertSheet('opendata_cache');
-    const headers = ['sync_id', 'table_name', 'fiscal_year', 'hospcode', 'areacode', 'raw_json', 'updated_at'];
-    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
-    sheet.getRange(1, 1, 1, headers.length).setFontWeight("bold");
+    ensureOpenDataCacheSchema(sheet);
+    sheet.getRange(1, 1, 1, OPENDATA_CACHE_COLUMNS.length).setFontWeight("bold");
     sheet.setFrozenRows(1);
   }
   
@@ -257,14 +308,24 @@ function getCachedOpenData(tableName, year, hospcode = 'all') {
     // Fallback: ถ้ายังไม่มี Cache เลย ให้ไปดึงผ่าน Proxy
     return fetchOpenDataProxy({ tableName, year, province: OPENDATA_CONSTANTS.PROVINCE });
   }
-  
+
+  // Issue #15: อ่านผ่านชื่อหัวคอลัมน์เท่านั้น — สคีมาซ้ำ/ขาดคอลัมน์ที่ใช้อ่านต้อง fail closed
+  // (ห้ามเปลี่ยนสคีมาไม่ถูกต้องให้กลายเป็นผลลัพธ์ว่างที่สำเร็จโดยเงียบ ๆ)
+  const inspection = inspectOpenDataCacheHeaders(sheet);
+  const duplicatedReadColumns = OPENDATA_CACHE_READ_COLUMNS.filter(column => inspection.duplicates.includes(column));
+  const missingReadColumns = OPENDATA_CACHE_READ_COLUMNS.filter(column => !(column in inspection.columns));
+  if (duplicatedReadColumns.length > 0 || missingReadColumns.length > 0) {
+    const problem = duplicatedReadColumns.length > 0
+      ? 'duplicate columns: ' + duplicatedReadColumns.join(', ')
+      : 'missing columns: ' + missingReadColumns.join(', ');
+    return { statusCode: 500, error: 'opendata_cache schema invalid (' + problem + ')' };
+  }
+  const tableIdx = inspection.columns.table_name;
+  const yearIdx = inspection.columns.fiscal_year;
+  const hospIdx = inspection.columns.hospcode;
+  const jsonIdx = inspection.columns.raw_json;
+
   const data = sheet.getDataRange().getValues();
-  const headers = data[0];
-  const tableIdx = headers.indexOf('table_name');
-  const yearIdx = headers.indexOf('fiscal_year');
-  const hospIdx = headers.indexOf('hospcode');
-  const jsonIdx = headers.indexOf('raw_json');
-  
   const records = [];
   for (let i = 1; i < data.length; i++) {
     const row = data[i];
@@ -276,7 +337,7 @@ function getCachedOpenData(tableName, year, hospcode = 'all') {
       }
     }
   }
-  
+
   // จำลองโครงสร้าง Response ให้เหมือน MOPH API
   return { statusCode: 200, data: records, isFromCache: true };
 }
