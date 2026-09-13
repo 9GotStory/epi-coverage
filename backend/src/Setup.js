@@ -197,6 +197,17 @@ function setupDatabase() {
     setupSheetWithHeaders(ss, sheetName, columns);
   }
 
+  // Issue #15: opendata_cache ใช้สัญญาสคีมาแหล่งเดียวจาก OpenData.js (ไม่มีรายการคอลัมน์ซ้ำที่นี่)
+  const opendataSheet = ss.getSheetByName('opendata_cache') || ss.insertSheet('opendata_cache');
+  const opendataSchema = ensureOpenDataCacheSchema(opendataSheet);
+  if (!opendataSchema.ok) {
+    // Fail closed: ห้ามรายงาน setup สำเร็จทับสคีมาที่คลุมเครือ (คอลัมน์ที่จำเป็นซ้ำ) — ไม่แก้สคีมาอัตโนมัติ
+    return {
+      success: false,
+      error: 'opendata_cache schema invalid: ' + String(opendataSchema.error || 'unknown schema error').slice(0, 200)
+    };
+  }
+
   // ลบชีตตั้งต้น (Sheet1) ถ้ามีและไม่ได้ใช้งาน
   const defaultSheet = ss.getSheetByName('Sheet1');
   if (defaultSheet && ss.getSheets().length > 1) {
