@@ -189,113 +189,164 @@ function fetchOpenDataProxy(payload) {
  * ฟังก์ชัน ETL (Data Lake): ดึงข้อมูลจาก HDC OpenData เก็บลง Google Sheet อัตโนมัติ
  * ทำงานผ่าน Time-driven trigger ทุกวัน
  */
+/** Issue #16: bounded sync-lock timeout (ms) — implementation-owned, finite/positive */
+const OPENDATA_SYNC_LOCK_TIMEOUT_MS = 30000;
+
+/**
+ * Issue #16: Transaction-safe OpenData sync lifecycle.
+ * Bounded ScriptLock ครอบ lifecycle ทั้งหมด (schema → inventory → fetch → build
+ * → commit → verification → audit) ปล่อย lock ใน finally เสมอ; busy → ไม่ทำงานใด ๆ
+ * ใช้ classifier (#14) ตัดสินผลต่อคู่ dataset/FY, สคีมา/คอลัมน์อ้างชื่อ (#15),
+ * แทนที่แคชด้วย setValues สี่เหลี่ยมเดียว (padding ลบหางเดิม ไม่ clear ก่อนเขียน),
+ * ตรวจ commit แบบมีขอบเขต และ audit สรุปกระชับ sanitized หนึ่งรายการ
+ */
 function syncOpenData() {
-  const ss = getSpreadsheet();
-  let sheet = ss.getSheetByName('opendata_cache');
-  if (!sheet) {
-    // Issue #15: สร้างหัวคอลัมน์จากนิยามสคีมาแหล่งเดียว (ไม่มีรายการ hardcode ซ้ำ)
-    sheet = ss.insertSheet('opendata_cache');
-    ensureOpenDataCacheSchema(sheet);
-    sheet.getRange(1, 1, 1, OPENDATA_CACHE_COLUMNS.length).setFontWeight("bold");
-    sheet.setFrozenRows(1);
+  // 1. Bounded lock BEFORE any schema/inventory/upstream/cache work (Issue #16)
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(OPENDATA_SYNC_LOCK_TIMEOUT_MS)) {
+    return { success: false, status: 'sync_busy', error: 'OpenData sync lock busy; no sync work performed.' };
   }
-  
-  const targetTables = OPENDATA_CONSTANTS.DATASETS;
-  
-  // Best Practice 1: Sync multiple years (current and previous) or based on active years
-  // Fallback if getAvailableYears doesn't exist
-  let yearsToSync = [];
   try {
-    yearsToSync = getAvailableYears(); // Set object
-    yearsToSync = Array.from(yearsToSync).map(String);
-  } catch (e) {
-    const d = new Date();
-    const currentYear = d.getFullYear() + 543 + (d.getMonth() >= 9 ? 1 : 0);
-    yearsToSync = [String(currentYear), String(currentYear - 1)];
-  }
-  
-  const province = OPENDATA_CONSTANTS.PROVINCE; // แพร่
-  const targetAreacodePrefix = OPENDATA_CONSTANTS.AREACODE_PREFIX; // อำเภอสอง
-  
-  const syncId = Utilities.getUuid();
-  const updatedAt = new Date().toISOString();
-  
-  // Best Practice 2: Resilient ETL - Keep old data if fetch fails
-  const oldDataRows = sheet.getLastRow() > 1 ? sheet.getRange(2, 1, sheet.getLastRow() - 1, sheet.getLastColumn()).getValues() : [];
-  let finalRows = [];
-  let totalFetched = 0;
-  
-  for (const year of yearsToSync) {
-    for (const tableName of targetTables) {
-      let fetchSuccess = false;
-      try {
-        const url = OPENDATA_CONSTANTS.ENDPOINT;
-        const payload = {
-          tableName: tableName,
-          year: year,
-          province: province,
-          type: "json",
-          limit: OPENDATA_CONSTANTS.LIMIT
-        };
-        
-        const options = {
-          method: "POST",
-          contentType: "application/json",
-          payload: JSON.stringify(payload),
-          muteHttpExceptions: true
-        };
-        
-        const response = UrlFetchApp.fetch(url, options);
-        const resultData = JSON.parse(response.getContentText());
-        
-        if (!resultData.error && Array.isArray(resultData.data)) {
-          const filteredData = resultData.data.filter(row => row.areacode && String(row.areacode).startsWith(targetAreacodePrefix));
-          
-          for (const row of filteredData) {
-            finalRows.push([
-              syncId,
-              tableName,
-              year,
-              row.hospcode || "",
-              row.areacode || "",
-              JSON.stringify(row),
-              updatedAt
-            ]);
-          }
-          fetchSuccess = true;
-          totalFetched += filteredData.length;
-        }
-      } catch (e) {
-        console.error(`Error syncing ${tableName} (${year}): ${e.toString()}`);
-      }
-      
-      // If fetch failed, retain old data for this specific table and year
-      if (!fetchSuccess && oldDataRows.length > 0) {
-        const retainedRows = oldDataRows.filter(row => row[1] === tableName && String(row[2]) === String(year));
-        finalRows = finalRows.concat(retainedRows);
-        console.log(`Retained ${retainedRows.length} old rows for ${tableName} (${year}) due to fetch failure.`);
-      }
+    const ss = getSpreadsheet();
+    let sheet = ss.getSheetByName('opendata_cache');
+    if (!sheet) {
+      sheet = ss.insertSheet('opendata_cache');
+      ensureOpenDataCacheSchema(sheet);
+      sheet.getRange(1, 1, 1, OPENDATA_CACHE_COLUMNS.length).setFontWeight("bold");
+      sheet.setFrozenRows(1);
     }
-  }
-  
-  // 2. Load (Batch Write)
-  if (finalRows.length > 0) {
-    if (sheet.getLastRow() > 1) {
-      sheet.getRange(2, 1, sheet.getLastRow() - 1, sheet.getLastColumn()).clearContent();
+
+    // 2. Schema authority + semantic column mapping (Issue #15); fail closed on ambiguity
+    const schema = ensureOpenDataCacheSchema(sheet);
+    if (!schema.ok) {
+      return { success: false, status: 'schema_invalid', error: schema.error };
     }
-    
-    // Best Practice 3: setValues (Batch Write) is highly optimized
-    sheet.getRange(2, 1, finalRows.length, finalRows[0].length).setValues(finalRows);
-    SpreadsheetApp.flush(); 
-    
+    const col = schema.columns;
+    const width = OPENDATA_CACHE_COLUMNS.length;
+
+    let yearsToSync = [];
     try {
-      logAction('SYSTEM', 'Cron', 'sync_opendata', `Synced ${totalFetched} new rows (Total cache: ${finalRows.length})`);
-    } catch(e) {}
-    
-    return { success: true, count: finalRows.length, newFetched: totalFetched, syncedAt: updatedAt };
+      yearsToSync = Array.from(getAvailableYears()).map(String);
+    } catch (e) {
+      const d = new Date();
+      const currentYear = d.getFullYear() + 543 + (d.getMonth() >= 9 ? 1 : 0);
+      yearsToSync = [String(currentYear), String(currentYear - 1)];
+    }
+
+    const syncId = Utilities.getUuid();
+    const updatedAt = new Date().toISOString();
+
+    // Inventory by header names — never row[1]/row[2] positional assumptions
+    const oldManagedRowCount = sheet.getLastRow() > 1 ? sheet.getLastRow() - 1 : 0;
+    const oldRows = oldManagedRowCount > 0
+      ? sheet.getRange(2, 1, oldManagedRowCount, width).getValues() : [];
+
+    let finalRows = [];
+    let successfulPairs = 0, failedPairs = 0, freshRows = 0, retainedRows = 0;
+    const failedPairIds = [];
+
+    const buildFreshRow = (tableName, year, source) => {
+      const row = Array(width).fill('');
+      row[col.sync_id] = syncId;
+      row[col.table_name] = tableName;
+      row[col.fiscal_year] = year;
+      row[col.hospcode] = source.hospcode || '';
+      row[col.areacode] = source.areacode || '';
+      row[col.raw_json] = JSON.stringify(source);
+      row[col.updated_at] = updatedAt;
+      return row;
+    };
+
+    for (const year of yearsToSync) {
+      for (const tableName of OPENDATA_CONSTANTS.DATASETS) {
+        // 3. Shared classifier decides every pair outcome (Issue #14)
+        let outcome;
+        try {
+          const response = UrlFetchApp.fetch(OPENDATA_CONSTANTS.ENDPOINT, {
+            method: "POST",
+            contentType: "application/json",
+            payload: JSON.stringify({ tableName: tableName, year: year, province: OPENDATA_CONSTANTS.PROVINCE, type: "json", limit: OPENDATA_CONSTANTS.LIMIT }),
+            muteHttpExceptions: true
+          });
+          outcome = classifyOpenDataResponse(response);
+        } catch (e) {
+          outcome = { category: 'http_error', diagnostic: 'request_failed' };
+        }
+
+        if (outcome.category === 'success') {
+          successfulPairs++;
+          const filtered = (outcome.data || []).filter(row => row.areacode && String(row.areacode).startsWith(OPENDATA_CONSTANTS.AREACODE_PREFIX));
+          for (const source of filtered) finalRows.push(buildFreshRow(tableName, year, source));
+          freshRows += filtered.length; // valid zero-row response still counts as a successful pair
+        } else {
+          failedPairs++;
+          failedPairIds.push(tableName + ':' + year); // compact sanitized identifier only
+          for (const row of oldRows) {
+            if (String(row[col.table_name]) === tableName && String(row[col.fiscal_year]) === String(year)) {
+              finalRows.push([...row]); // retained history stays byte-identical (no fabricated metadata)
+              retainedRows++;
+            }
+          }
+        }
+      }
+    }
+
+    // 4. Truthful upstream status from pair outcomes — never from finalRows.length
+    const status = failedPairs === 0 ? 'success' : (successfulPairs === 0 ? 'upstream_failure' : 'partial_success');
+
+    // 5. One padded rectangular replacement (no clear-before-write, no separate tail write)
+    // P2-1: commit-phase exceptions (write/flush/verification read) must not escape
+    // before a sanitized failure summary — they become deterministic non-success
+    // results with an audit emitted while the lock is still held.
+    const newRowCount = finalRows.length;
+    const replacementHeight = Math.max(oldManagedRowCount, newRowCount);
+    let commitState = 'verified';   // mismatch path: 'uncertain'
+    let commitFailure = null;       // thrown path: 'commit_failure' | 'commit_uncertain'
+    if (replacementHeight > 0) {
+      const matrix = finalRows.map(row => row.slice(0, width));
+      while (matrix.length < replacementHeight) matrix.push(Array(width).fill(''));
+      let writeCompleted = false;
+      try {
+        sheet.getRange(2, 1, replacementHeight, width).setValues(matrix);
+        writeCompleted = true;
+        SpreadsheetApp.flush();
+
+        // 6. Bounded post-write verification of the committed rectangle
+        const readBack = sheet.getRange(2, 1, replacementHeight, width).getValues();
+        if (JSON.stringify(readBack) !== JSON.stringify(matrix)) commitState = 'uncertain';
+      } catch (e) {
+        // Before the write returns → previous cache untouched → commit_failure.
+        // After the write returned (flush/read) → actual committed state unknown → commit_uncertain.
+        // No raw exception text into result/audit; no rollback; no retry.
+        commitFailure = writeCompleted ? 'commit_uncertain' : 'commit_failure';
+      }
+    }
+
+    // 7. One compact sanitized audit summary (semantic keys; no raw bodies)
+    const finalStatus = commitFailure || (commitState === 'uncertain' ? 'commit_uncertain' : status);
+    const commitFlag = commitFailure === 'commit_failure' || commitState === 'uncertain'
+      ? (commitFailure === 'commit_failure' ? 'failed' : 'uncertain') : 'verified';
+    const summary = JSON.stringify({
+      status: finalStatus,
+      success: successfulPairs, failed: failedPairs,
+      fresh: freshRows, retained: retainedRows,
+      failed_pairs: failedPairIds, commit: commitFlag
+    });
+    try { logAction('SYSTEM', 'Cron', 'sync_opendata', summary); } catch (e) { /* audit failure must not undo the committed cache or mask the intended result */ }
+
+    if (finalStatus === 'commit_failure' || finalStatus === 'commit_uncertain') {
+      return { success: false, status: finalStatus,
+        error: finalStatus === 'commit_failure'
+          ? 'OpenData cache commit failed.'
+          : 'OpenData cache commit verification uncertain.',
+        count: newRowCount, fresh_rows: freshRows, retained_rows: retainedRows,
+        successful_pairs: successfulPairs, failed_pairs: failedPairs, syncedAt: updatedAt };
+    }
+    return { success: true, status: status, count: newRowCount, fresh_rows: freshRows, retained_rows: retainedRows,
+      successful_pairs: successfulPairs, failed_pairs: failedPairs, syncedAt: updatedAt };
+  } finally {
+    lock.releaseLock(); // exactly once, on success and on every failure path
   }
-  
-  return { success: false, error: "No data synced and no old data retained" };
 }
 
 /**
