@@ -43,7 +43,6 @@ export function OpenDataDashboard({ targetTable = 's_epi1' }: OpenDataDashboardP
   const { years: availableYears } = useAvailableYears();
   const [year, setYear] = useState(currentFY);
   const [province] = useState('54'); // แพร่
-  const [amp] = useState('06'); // สอง
   const isEpi1 = targetTable === 's_epi1';
   const isEpi3 = targetTable === 's_epi3';
   const isEpi5 = targetTable === 's_epi5';
@@ -84,8 +83,7 @@ export function OpenDataDashboard({ targetTable = 's_epi1' }: OpenDataDashboardP
   const { data, isLoading, isError, error, refetch } = useOpenData({
     tableName: viewMode === 'complete' ? 's_epi_complete' : targetTable,
     year,
-    province,
-    amp
+    province
   });
 
   const chartData = useMemo(() => {
