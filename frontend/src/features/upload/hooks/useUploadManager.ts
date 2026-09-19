@@ -146,6 +146,10 @@ export function useUploadManager() {
       
       // Invalidate relevant queries to force dashboard and rules refresh
       queryClient.invalidateQueries({ queryKey: ['dashboardSummaries'] });
+      // Issue #22: Comparison reads must refresh too (separate query family), plus
+      // the summary-derived usable comparison years.
+      queryClient.invalidateQueries({ queryKey: ['dashboardSummariesMultiYear'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboardSummaryYears'] });
       queryClient.invalidateQueries({ queryKey: ['vaccineRules'] });
       queryClient.invalidateQueries({ queryKey: ['epiData'] });
       
@@ -208,9 +212,13 @@ export function useUploadManager() {
       
       // Invalidate relevant queries to force dashboard and rules refresh
       queryClient.invalidateQueries({ queryKey: ['dashboardSummaries'] });
+      // Issue #22: Comparison reads must refresh too (separate query family), plus
+      // the summary-derived usable comparison years.
+      queryClient.invalidateQueries({ queryKey: ['dashboardSummariesMultiYear'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboardSummaryYears'] });
       queryClient.invalidateQueries({ queryKey: ['vaccineRules'] });
       queryClient.invalidateQueries({ queryKey: ['epiData'] });
-      
+
       toast.success('ประมวลผล Dashboard สำหรับทุกกลุ่มอายุเรียบร้อยแล้ว!');
     } catch (error: any) {
       console.error(error);

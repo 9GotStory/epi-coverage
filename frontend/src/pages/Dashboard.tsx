@@ -14,6 +14,7 @@ import {
 
 import { AgeGroupExpandedView } from '../shared/components/AgeGroupExpandedView';
 import { calcGroupSummary } from '../shared/utils/dashboardLogic';
+import type { GroupSummary } from '../shared/utils/dashboardLogic';
 import { formatDateTimeStr } from '../shared/utils/dateUtils';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../shared/components/ui/select';
 
@@ -196,21 +197,20 @@ export function Dashboard() {
 
   // ดึง summary ของแต่ละกลุ่มอายุจาก Array ที่ได้กลับมา
   const getSummary = (table: string) => {
-    const tableSummaries = summaries.filter(s => s.targetTable === table);
-    if (tableSummaries.length > 0) {
-      // Sort by updated_at descending to prioritize the latest synced cache (e.g. over legacy cache)
-      tableSummaries.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
-      const found = tableSummaries[0];
-      if (found && found.summaryData) {
-        return { data: found.summaryData, updatedAt: found.updated_at };
-      }
+    // Backend resolves canonical annual precedence (_all > legacy) and returns one
+    // row per table — the frontend no longer picks a winner by updated_at (Issue #22).
+    const found = summaries.find(s => s.targetTable === table && s.summaryData);
+    if (found) {
+      // แถวสรุปจริงทุกรุ่น (legacy และปัจจุบัน) เขียนชุดฟิลด์ครบที่ Dashboard ใช้เสมอ —
+      // ชนิด optional บน wire contract มีไว้กันเฉพาะแถวไม่สมบูรณ์ในทางทฤษฎีเท่านั้น
+      return { data: found.summaryData as GroupSummary, updatedAt: found.updated_at };
     }
     // ส่งค่า Default กลับไปถ้ายังไม่มีข้อมูล Cache
     return {
       data: {
         total: 0,
-        view1Coverage: 0, view1PassedDoses: 0, view1TotalDoses: 0, view1Breakdown: {},
-        view2Coverage: 0, view2Passed: 0, view2Failed: 0, view2Breakdown: {},
+        view1Coverage: 0, view1PassedDoses: 0, view1TotalDoses: 0, view1Breakdown: [],
+        view2Coverage: 0, view2Passed: 0, view2Breakdown: [],
         facilityBreakdownV1: [],
         facilityBreakdownV2: []
       },
