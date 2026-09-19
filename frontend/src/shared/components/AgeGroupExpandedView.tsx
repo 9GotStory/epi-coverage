@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
-import type { GroupSummary } from '../utils/dashboardLogic';
+import type { LegacyCompatibleGroupSummary } from '../utils/dashboardLogic';
 import { useTargetSettings } from '../hooks/useTargetSettings';
 import { useVaccineRules } from '../hooks/useVaccineRules';
 
@@ -18,7 +18,7 @@ interface FacilityData {
 }
 
 interface AgeGroupExpandedViewProps {
-  summary: GroupSummary;
+  summary: LegacyCompatibleGroupSummary;
   targetView1?: number;
   targetView2?: number;
   fiscalYear: number;

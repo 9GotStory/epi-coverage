@@ -40,7 +40,8 @@ export interface DashboardSummaryData {
   view2Coverage: number;
   view2Passed: number;
 
-  /** Ticket #23 forward contract — optional until #23 persists them. */
+  /** Persisted by every newly generated summary (#23); historical snapshots may predate the
+   *  contract — optional here for legacy backward compatibility. */
   view2ApplicableTotal?: number;
   view2PendingCount?: number;
 

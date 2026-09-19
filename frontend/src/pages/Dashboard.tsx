@@ -13,8 +13,7 @@ import {
 } from 'lucide-react';
 
 import { AgeGroupExpandedView } from '../shared/components/AgeGroupExpandedView';
-import { calcGroupSummary } from '../shared/utils/dashboardLogic';
-import type { GroupSummary } from '../shared/utils/dashboardLogic';
+import type { LegacyCompatibleGroupSummary } from '../shared/utils/dashboardLogic';
 import { formatDateTimeStr } from '../shared/utils/dateUtils';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../shared/components/ui/select';
 
@@ -35,7 +34,7 @@ const AgeGroupSection = memo(function AgeGroupSection({
 }: {
   age: string;
   ageGroup: string;
-  summary: ReturnType<typeof calcGroupSummary>;
+  summary: LegacyCompatibleGroupSummary;
   updatedAt?: string | null;
   targetView1?: number;
   targetView2?: number;
@@ -141,7 +140,7 @@ const AgeGroupSection = memo(function AgeGroupSection({
               <p className="text-sm text-zinc-500 mt-1">
                 ผ่านเกณฑ์ <strong className="text-zinc-800">{summary.view2Passed.toLocaleString()}</strong> คน
                 <span className="mx-1.5 text-zinc-300">|</span>
-                ตกหล่น <strong className="text-zinc-800">{(summary.total - summary.view2Passed).toLocaleString()}</strong> คน
+                ตกหล่น <strong className="text-zinc-800">{typeof summary.view2ApplicableTotal === 'number' ? (summary.view2ApplicableTotal - summary.view2Passed).toLocaleString() : '—'}</strong> คน
               </p>
             </div>
             <div className="text-right">
@@ -201,9 +200,9 @@ export function Dashboard() {
     // row per table — the frontend no longer picks a winner by updated_at (Issue #22).
     const found = summaries.find(s => s.targetTable === table && s.summaryData);
     if (found) {
-      // แถวสรุปจริงทุกรุ่น (legacy และปัจจุบัน) เขียนชุดฟิลด์ครบที่ Dashboard ใช้เสมอ —
-      // ชนิด optional บน wire contract มีไว้กันเฉพาะแถวไม่สมบูรณ์ในทางทฤษฎีเท่านั้น
-      return { data: found.summaryData as GroupSummary, updatedAt: found.updated_at };
+      // แถวสรุปจริงทุกรุ่น (legacy และปัจจุบัน) เขียนชุดฟิลด์พื้นฐานครบที่ Dashboard ใช้เสมอ —
+      // ส่วน view2ApplicableTotal/view2PendingCount เป็น optional จริงตามสัญญา #23 (แถวเก่าอาจไม่มี)
+      return { data: found.summaryData as LegacyCompatibleGroupSummary, updatedAt: found.updated_at };
     }
     // ส่งค่า Default กลับไปถ้ายังไม่มีข้อมูล Cache
     return {

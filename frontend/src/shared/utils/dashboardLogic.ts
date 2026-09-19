@@ -14,7 +14,20 @@ export interface GroupSummary {
   view2Coverage: number;
   view2Breakdown: { name: string; passed: number; total: number; coverage: number }[];
   facilityBreakdownV2: { hoscode: string; hosname: string; total: number; passed: number; coverage: number }[];
+
+  /** Issue #23: records included in the View 2 coverage denominator for this snapshot (required on every newly generated summary). */
+  view2ApplicableTotal: number;
+  /** Issue #23: records excluded from the View 2 denominator by current pending semantics — counted directly (required on every newly generated summary). */
+  view2PendingCount: number;
 }
+
+/**
+ * Persisted-summary presentation shape (Issue #23): every newly generated summary carries the
+ * denominator contract above, but historical snapshots may predate it — the denominator fields
+ * are OPTIONAL here so legacy rows stay consumable without fabricating values.
+ */
+export type LegacyCompatibleGroupSummary = Omit<GroupSummary, 'view2ApplicableTotal' | 'view2PendingCount'> &
+  Partial<Pick<GroupSummary, 'view2ApplicableTotal' | 'view2PendingCount'>>;
 
 /**
  * คำนวณ Summary แยกมุมมองที่ 1 และ 2 สำหรับกลุ่มอายุ
@@ -33,7 +46,8 @@ export function calcGroupSummary(
   let view1PassedDoses = 0;
   let view1TotalDoses = 0;
   let view2Passed = 0;
-  let view2Total = 0; // NEW: track applicable total for view 2
+  let view2ApplicableTotal = 0; // Issue #23: the View 2 coverage denominator, counted directly
+  let view2PendingCount = 0;    // Issue #23: records excluded from that denominator by current pending semantics
   
   const view1Details: Record<string, number> = {};
   const view1TargetDetails: Record<string, number> = {}; // NEW: track applicable target per vaccine
@@ -81,7 +95,7 @@ export function calcGroupSummary(
     const v2Applicable = !(v2.pendingVaccines && v2.pendingVaccines.length > 0);
     
     if (v2Applicable) {
-      view2Total++;
+      view2ApplicableTotal++;
       if (v2.isFullyImmunized) view2Passed++;
       facilityMap[hoscode].totalV2 += 1;
       if (v2.isFullyImmunized) facilityMap[hoscode].passedV2 += 1;
@@ -112,11 +126,15 @@ export function calcGroupSummary(
           view2TargetDetails[vac]++;
         }
       }
+    } else {
+      // Issue #23: count pending records directly in the loop — the loop itself creates the
+      // exact partition view2ApplicableTotal + view2PendingCount === total (no post-loop derivation).
+      view2PendingCount++;
     }
   }
 
   const view1Coverage = view1TotalDoses > 0 ? (view1PassedDoses / view1TotalDoses) * 100 : 0;
-  const view2Coverage = view2Total > 0 ? (view2Passed / view2Total) * 100 : 0;
+  const view2Coverage = view2ApplicableTotal > 0 ? (view2Passed / view2ApplicableTotal) * 100 : 0;
   
   const view1Breakdown = Object.entries(view1Details).map(([name, passed]) => {
     const targetTotal = view1TargetDetails[name] || 0;
@@ -166,5 +184,7 @@ export function calcGroupSummary(
     view2Coverage,
     view2Breakdown,
     facilityBreakdownV2,
+    view2ApplicableTotal,
+    view2PendingCount,
   };
 }
