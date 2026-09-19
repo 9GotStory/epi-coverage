@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useDashboardSummariesMultiYear } from '../shared/hooks/useDashboardSummariesMultiYear';
-import { useAvailableYears } from '../shared/hooks/useAvailableYears';
+import { useDashboardSummaryYears } from '../shared/hooks/useDashboardSummaryYears';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../shared/components/ui/select';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle } from '../shared/components/ui/card';
@@ -12,7 +12,10 @@ export const YearComparison = () => {
   const [ageGroup, setAgeGroup] = useState<string>('Epi_1_Year');
   
   const { data, isLoading, error } = useDashboardSummariesMultiYear(selectedYears);
-  const { years: availableYears } = useAvailableYears();
+  // Issue #22: comparison year options come from usable annual summaries for the
+  // selected age group — not from the generic available-years source.
+  const { tables: summaryYearsByTable } = useDashboardSummaryYears();
+  const availableYears = summaryYearsByTable[ageGroup] ?? [];
 
   const handleYearToggle = (year: number) => {
     setSelectedYears(prev => 
@@ -22,20 +25,22 @@ export const YearComparison = () => {
     );
   };
 
-  // Prepare chart data
+  // Prepare chart data — a selected year without an annual summary stays null and is
+  // surfaced as "ไม่มีข้อมูลสรุป"; it is never fabricated as 0 (0 is a valid real value).
+  // Backend owns canonical annual precedence — no frontend updated_at sorting (Issue #22).
+  const missingYears: number[] = [];
   const chartData = selectedYears.map(year => {
-    const matchingItems = data.filter(d => d.targetTable === ageGroup && Number(d.fiscalYear) === year);
-    matchingItems.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
-    const summaryItem = matchingItems[0];
+    const summaryItem = data.find(d => d.targetTable === ageGroup && Number(d.fiscalYear) === year) ?? null;
     const summaryData = summaryItem ? summaryItem.summaryData : null;
-    
+    if (!summaryData) missingYears.push(year);
+
     return {
       name: `ปี ${year}`,
-      total: summaryData?.total || 0,
-      passedV1: summaryData?.view1PassedDoses || 0,
-      passedV2: summaryData?.view2Passed || 0,
-      percentV1: summaryData?.view1Coverage?.toFixed(2) || 0,
-      percentV2: summaryData?.view2Coverage?.toFixed(2) || 0,
+      total: summaryData ? summaryData.total : null,
+      passedV1: summaryData ? (summaryData.view1PassedDoses ?? null) : null,
+      passedV2: summaryData ? summaryData.view2Passed : null,
+      percentV1: typeof summaryData?.view1Coverage === 'number' ? summaryData.view1Coverage.toFixed(2) : null,
+      percentV2: typeof summaryData?.view2Coverage === 'number' ? summaryData.view2Coverage.toFixed(2) : null,
     };
   });
 
@@ -95,7 +100,13 @@ export const YearComparison = () => {
             กรุณาเลือกปีงบประมาณอย่างน้อย 1 ปี เพื่อดูข้อมูล
           </div>
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="space-y-6">
+            {missingYears.length > 0 && (
+              <div className="bg-amber-50 text-amber-700 p-4 rounded-lg" role="status">
+                ไม่มีข้อมูลสรุป ปีงบประมาณ {missingYears.join(', ')} — ปีที่ไม่มีข้อมูลสรุปจะไม่ถูกนำมาแสดงเป็น 0%
+              </div>
+            )}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             
             <Card className="shadow-sm border-slate-100">
               <CardHeader>
@@ -151,6 +162,7 @@ export const YearComparison = () => {
               </CardContent>
             </Card>
 
+            </div>
           </div>
         )}
       </main>

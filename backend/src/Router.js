@@ -26,7 +26,7 @@ function handleRequest(method, e) {
     // 4. Public Actions (ไม่ใช้ Token)
     const publicActions = [
       'verifyToken', 'loginWithGoogle', 'createUser',
-      'getTargetConfig', 'getDashboardSummaries', 'getDashboardSummariesMultiYear', 'getVaccineRules', 'getAvailableYears', 'getOpenData'
+      'getTargetConfig', 'getDashboardSummaries', 'getDashboardSummariesMultiYear', 'getDashboardSummaryYears', 'getVaccineRules', 'getAvailableYears', 'getOpenData'
     ];
     if (publicActions.includes(action)) {
       switch (action) {
@@ -36,6 +36,8 @@ function handleRequest(method, e) {
         case 'getTargetConfig': return responseJson(getTargetConfig());
         case 'getDashboardSummaries': return responseJson(getDashboardSummaries(body.fiscalYear || e.parameter.fiscalYear, body.quarter || e.parameter.quarter));
         case 'getDashboardSummariesMultiYear': return responseJson(getDashboardSummariesMultiYear(body.fiscalYears));
+        // Issue #22: aggregate-only comparison-usable years (public summary-read class)
+        case 'getDashboardSummaryYears': return responseJson(getDashboardSummaryYears());
         case 'getVaccineRules': return responseJson(getVaccineRules(body.fiscalYear || e.parameter.fiscalYear, body.ageGroup || e.parameter.ageGroup));
         case 'getAvailableYears': return responseJson(getAvailableYears());
         case 'getOpenData': {

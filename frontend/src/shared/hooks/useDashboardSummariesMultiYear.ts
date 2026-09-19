@@ -1,13 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { fetchApi } from '../lib/api';
-
-export interface MultiYearSummary {
-  id: string;
-  targetTable: string;
-  fiscalYear: number;
-  summaryData: any;
-  updated_at: string;
-}
+import type { DashboardSummaryRow } from '../types/dashboardSummary';
 
 export const useDashboardSummariesMultiYear = (fiscalYears: number[]) => {
   const { data, isLoading, error } = useQuery({
@@ -18,17 +11,19 @@ export const useDashboardSummariesMultiYear = (fiscalYears: number[]) => {
       }
       const res = await fetchApi('getDashboardSummariesMultiYear', { fiscalYears });
       if (res && res.data && res.data.summaries) {
-        return res.data.summaries as MultiYearSummary[];
+        // Backend resolves canonical annual precedence (_all > legacy) — the rows
+        // here are already one-per-(table, fiscalYear) (Issue #22).
+        return res.data.summaries as DashboardSummaryRow[];
       }
       throw new Error('ไม่สามารถดึงข้อมูลสรุปได้');
     },
     enabled: fiscalYears && fiscalYears.length > 0,
     staleTime: 5 * 60 * 1000, // Cache for 5 minutes
   });
-  
-  return { 
-    data: data || [], 
-    isLoading, 
-    error: error ? error.message : null 
+
+  return {
+    data: data || [],
+    isLoading,
+    error: error ? error.message : null
   };
 };
