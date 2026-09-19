@@ -155,7 +155,7 @@
 | `id` | String | `<targetTable>_<fiscalYear>_<quarter\|all>` เช่น `Epi_1_Year_2568_all`, `Epi_1_Year_2568_1` (ไตรมาส 1–4) และรูปแบบรุ่นเดิม `<targetTable>_<fiscalYear>` (legacy) |
 | `targetTable` | String | `Epi_1_Year` / `Epi_2_Year` / `Epi_3_Year` / `Epi_5_Year` |
 | `fiscalYear` | String/Number | ปีงบประมาณของสรุปชุดนั้น |
-| `summaryData` | String (JSON) | สรุปตามมุมมองที่ 1/2 (`total`, `view2Coverage`, `view2Passed`, breakdown ตามวัคซีน/หน่วยบริการ) — โครงสร้างมีการวิวัฒน์ตามรุ่น สรุปรุ่นเก่าอาจไม่มีฟิลด์ที่เพิ่มในภายหลัง |
+| `summaryData` | String (JSON) | สรุปตามมุมมองที่ 1/2 (`total`, `view2Coverage`, `view2Passed`, `view2ApplicableTotal`, `view2PendingCount`, breakdown ตามวัคซีน/หน่วยบริการ) — โครงสร้างมีการวิวัฒน์ตามรุ่น สรุปรุ่นเก่าอาจไม่มีฟิลด์ที่เพิ่มในภายหลัง |
 | `updated_at` | DateTime | เวลาที่คำนวณ/เขียนสรุปชุดนั้นล่าสุด (ไม่ใช่เวลาอัปโหลดไฟล์ต้นทาง) |
 
 ข้อตกลง (Issue #22):
@@ -163,3 +163,10 @@
 - การอ่านสรุปประจำปี: แถว `_all` เป็น canonical และมีลำดับเหนือ legacy เสมอ; legacy ถูกใช้เฉพาะเมื่อไม่มี `_all` ของ (ตาราง, ปี) นั้น — backend ตัดสินครั้งเดียวและคืนแถวเดียว ไม่ส่งคู่แถวให้ฝั่งหน้าเว็บเลือกด้วย `updated_at` และแถว `_all` ที่มีอยู่แม้ใช้งานไม่ได้ก็ไม่ถอยกลับไปใช้ legacy
 - การอ่านสรุปไตรมาส 1–4 ยังอิง id ระบุไตรมาสของแต่ละแถวตามเดิม
 - ปีที่ "ใช้งานได้" สำหรับ Comparison = ปีที่แถวที่ถูกเลือกตามกฎข้างต้นแยก JSON ได้และมี `total`/`view2Coverage`/`view2Passed` เป็นตัวเลขจริง (0 ถือว่าใช้ได้) — ปีที่ไม่ผ่านเงื่อนไขไม่ถูกแจ้งว่ามีข้อมูลสรุป
+
+ข้อตกลงสรุปรุ่นปัจจุบัน (Issue #23):
+
+- สรุปที่สร้างใหม่ทุกแถว (`_all` และ Q1–Q4) บันทึก `view2ApplicableTotal` (จำนวนที่เข้าเกณฑ์ประเมิน = ตัวหารความครอบคลุม) และ `view2PendingCount` (จำนวนที่ยังไม่เข้าเกณฑ์ตามเงื่อนไข pending ปัจจุบันของระบบ) โดยนับตรงจากการประเมินแต่ละรายการ
+- เงื่อนไขที่ระบบรับประกัน: `view2Passed <= view2ApplicableTotal <= total` และ `view2ApplicableTotal + view2PendingCount = total`
+- ไม่บันทึก `view2Failed` — ค่าที่ไม่ผ่านในกลุ่มที่เข้าเกณฑ์คำนวณ ณ ขณะใช้งานเป็น `view2ApplicableTotal - view2Passed`
+- แถวเก่า (legacy) อาจไม่มีสองฟิลด์นี้ ยังคงใช้งานได้ตามฟิลด์ที่มี และไม่มีการ migrate/backfill แถวเดิมใน Issue #นี้
