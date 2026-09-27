@@ -37,6 +37,35 @@ function parseDateChecks_(value) {
 }
 
 /**
+ * Issue #26 (Decision E — forward-only vaccine identity): a metric_key is
+ * ESTABLISHED only when stored as a non-empty string. Absent/null/undefined/
+ * empty means no established key; the effective runtime key is the rule_id.
+ */
+function establishedMetricKey_(value) {
+  return typeof value === 'string' && value.length > 0 ? value : null;
+}
+
+/** Resolve the metric_key to persist for an incoming rule against its stored state.
+ * Returns { error } when the caller attempts an unauthorized lineage change. */
+function resolveMetricKeyForSave_(rule, storedKey) {
+  const supplied = establishedMetricKey_(rule.metric_key);
+  const established = establishedMetricKey_(storedKey);
+  if (established) {
+    // Ordinary edits must preserve an established lineage; reassignment fails closed.
+    if (supplied && supplied !== established) {
+      return { error: 'metric_key is established for this rule and cannot be reassigned' };
+    }
+    return { key: established };
+  }
+  // No established lineage yet: a genuinely new/legacy rule starts from its own rule_id.
+  // A caller may not graft another lineage onto it by supplying a different key.
+  if (supplied && supplied !== rule.rule_id) {
+    return { error: 'metric_key cannot be set to another lineage on a rule without an established key' };
+  }
+  return { key: rule.rule_id };
+}
+
+/**
  * ──────────────────────────────────────────────────────────
  * TARGET_AGE_MONTHS_BY_FIELD — แหล่งเดียว (Single Source of Truth)
  * ของ "ค่าเริ่มต้นอายุเป้าหมาย (เดือน)" ราย field ของวัคซีน
@@ -211,6 +240,10 @@ function getVaccineRules(fiscalYear, ageGroup) {
         date_checks: parseDateChecks_(r.date_checks),
         required_fields: requiredFields,
         branch_alt_fields: branchAltFields,
+        // Issue #26 (Decision E): expose the EFFECTIVE forward identity — the stored
+        // key when established, otherwise this rule's own rule_id. Runtime identity
+        // only; it never claims equivalence with another fiscal year.
+        metric_key: establishedMetricKey_(r.metric_key) || r.rule_id,
         is_active: r.is_active === true || r.is_active === 'TRUE' || r.is_active === 'true',
         is_required_for_v2: r.is_required_for_v2 === true || r.is_required_for_v2 === 'TRUE' || r.is_required_for_v2 === 'true'
       };
@@ -266,6 +299,17 @@ function saveVaccineRule(rule, adminEmail) {
     }
   }
 
+  // Issue #26 (Decision E): resolve the forward identity BEFORE any sheet mutation —
+  // an unauthorized lineage change fails closed leaving the row fully untouched.
+  const metricKeyCol = headers.indexOf('metric_key');
+  const storedKey = existingRowIndex > 0 && metricKeyCol !== -1
+    ? data[existingRowIndex - 1][metricKeyCol]
+    : undefined;
+  const metricKeyResolution = resolveMetricKeyForSave_(rule, storedKey);
+  if (metricKeyResolution.error) {
+    return { success: false, error: metricKeyResolution.error };
+  }
+
   // ป้องกันเลข 0 นำหน้าหาย สำหรับ hdc_code
   const hdcCodeColIndex = headers.indexOf('hdc_code');
   if (hdcCodeColIndex !== -1) {
@@ -290,6 +334,7 @@ function saveVaccineRule(rule, adminEmail) {
       case 'target_age_months': return rule.target_age_months !== undefined ? rule.target_age_months : '';
       case 'date_checks': return rule.date_checks === undefined ? (existingRowIndex > 0 ? data[existingRowIndex - 1][headers.indexOf('date_checks')] || '' : '') : JSON.stringify(rule.date_checks);
       case 'note': return rule.note || '';
+      case 'metric_key': return metricKeyResolution.key;
       case 'updated_at': return now;
       case 'updated_by': return adminEmail || '';
       default: return '';
@@ -347,6 +392,27 @@ function batchSaveRules(fiscalYear, ageGroup, rules, adminEmail) {
     }
   }
 
+  // Issue #26 (Decision E): resolve every incoming rule's forward identity against its
+  // STORED key BEFORE any sheet mutation. Established keys survive older-client omission
+  // and replacement; attempted lineage reassignment fails the whole batch with the
+  // (FY, ageGroup) ruleset untouched.
+  const idColIndex = headers.indexOf('rule_id');
+  const metricKeyColIndex = headers.indexOf('metric_key');
+  const storedKeyByRuleId = new Map();
+  for (let i = 1; i < data.length; i++) {
+    if (String(arrayToObj(headers, data[i]).fiscal_year) === String(fiscalYear) && arrayToObj(headers, data[i]).age_group === ageGroup) {
+      storedKeyByRuleId.set(data[i][idColIndex], metricKeyColIndex !== -1 ? data[i][metricKeyColIndex] : undefined);
+    }
+  }
+  const resolvedMetricKeys = new Map();
+  for (const rule of rules) {
+    const resolution = resolveMetricKeyForSave_(rule, storedKeyByRuleId.get(rule.rule_id));
+    if (resolution.error) {
+      return { success: false, error: `rule ${rule.rule_id}: ${resolution.error}` };
+    }
+    resolvedMetricKeys.set(rule.rule_id, resolution.key);
+  }
+
   // 2. แปลง new rules ให้เป็นรูปแบบ row
   const now = new Date();
   const newRows = rules.map(rule => {
@@ -366,6 +432,7 @@ function batchSaveRules(fiscalYear, ageGroup, rules, adminEmail) {
         case 'is_active': return rule.is_active !== false;
         case 'target_age_months': return rule.target_age_months !== undefined ? rule.target_age_months : '';
         case 'date_checks': return rule.date_checks === undefined ? (data.slice(1).find(row => row[headers.indexOf('rule_id')] === rule.rule_id)?.[headers.indexOf('date_checks')] || '') : JSON.stringify(rule.date_checks);
+        case 'metric_key': return resolvedMetricKeys.get(rule.rule_id);
       case 'note': return rule.note || '';
         case 'updated_at': return now;
         case 'updated_by': return adminEmail || '';
@@ -442,8 +509,13 @@ function cloneRulesFromYear(fromYear, toYear, adminEmail) {
   const now = new Date();
   const newRows = sourceRules.map(row => {
     const obj = arrayToObj(headers, row);
+    // Issue #26 (Decision E): the clone is a NEW rule instance but preserves the source
+    // lineage — the stored key when established, otherwise the SOURCE rule_id (an empty
+    // stored key must never propagate as an empty lineage).
+    const sourceMetricKey = establishedMetricKey_(obj.metric_key) || obj.rule_id;
     return headers.map(header => {
       if (header === 'rule_id') return Utilities.getUuid();
+      if (header === 'metric_key') return sourceMetricKey;
       if (header === 'fiscal_year') return toYear;
       if (header === 'updated_at') return now;
       if (header === 'updated_by') return adminEmail || '';
@@ -737,9 +809,14 @@ function seedVaccineRules(fiscalYear, adminEmail, force = false) {
 
   const rows = seeded.map(r => {
     const targetAge = computeTargetAgeMonths(r);
+    // Issue #26 (Decision E): every seeded rule starts a NEW logical lineage — its
+    // metric_key is its own freshly generated rule_id. Independently seeded/reset years
+    // never recover continuity (safe split preferred over a false merge).
+    const newRuleId = Utilities.getUuid();
     return headers.map(header => {
       switch (header) {
-        case 'rule_id': return Utilities.getUuid();
+        case 'rule_id': return newRuleId;
+        case 'metric_key': return newRuleId;
         case 'fiscal_year': return fiscalYear;
         case 'age_group': return r.age_group;
         case 'view_type': return r.view_type;

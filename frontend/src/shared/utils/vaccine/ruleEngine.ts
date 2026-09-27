@@ -47,6 +47,9 @@ export interface VaccineRule {
   is_active: boolean;
   target_age_months?: number; // อายุที่รับวัคซีน (เดือน) เพื่อใช้เช็กสถานะ Pending
   note?: string;
+  /** Issue #26 (Decision E): forward cross-FY logical identity. Absent/empty on rules
+   * that predate the contract — the effective key is then this rule's own rule_id. */
+  metric_key?: string;
 }
 
 /**

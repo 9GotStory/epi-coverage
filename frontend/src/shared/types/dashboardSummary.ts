@@ -18,6 +18,10 @@ export interface VaccineBreakdownEntry {
   passed: number;
   total: number;
   coverage: number;
+  /** Issue #26 (Decision E) forward identity contract — optional because legacy
+   * snapshots predate it and remain valid without these fields. */
+  metric_key?: string;
+  vaccine_group?: string;
 }
 
 /** Facility identifiers are strings — never numerically normalized (CLAUDE.md §5). */

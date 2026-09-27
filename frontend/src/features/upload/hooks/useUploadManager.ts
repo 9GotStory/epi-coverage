@@ -124,7 +124,7 @@ export function useUploadManager() {
       
       const rangeAll = getBirthDateRangeForQuarter(Number(fiscalYear), 'all', getAgeFromTable(targetTable));
       const cohortAll = fullData.filter((record: EpiRecord) => new Date(record.birth) >= rangeAll.start && new Date(record.birth) <= rangeAll.end);
-      const summaryAll = calcGroupSummary(cohortAll, evalV1, evalV2, Number(fiscalYear));
+      const summaryAll = calcGroupSummary(cohortAll, evalV1, evalV2, Number(fiscalYear), dbRules);
       await saveSummary({ targetTable, fiscalYear, quarter: 'all', summaryData: JSON.stringify(summaryAll) });
 
       // Generate for each quarter
@@ -136,7 +136,7 @@ export function useUploadManager() {
           const bDate = new Date(record.birth);
           return bDate >= start && bDate <= end;
         });
-        const summaryQ = calcGroupSummary(quarterData, evalV1, evalV2, Number(fiscalYear));
+        const summaryQ = calcGroupSummary(quarterData, evalV1, evalV2, Number(fiscalYear), dbRules);
         await saveSummary({ targetTable, fiscalYear, quarter: q, summaryData: JSON.stringify(summaryQ) });
       }
 
@@ -194,7 +194,7 @@ export function useUploadManager() {
         
         const rangeAll = getBirthDateRangeForQuarter(Number(fiscalYear), 'all', getAgeFromTable(t));
         const cohortAll = fullData.filter((record: EpiRecord) => new Date(record.birth) >= rangeAll.start && new Date(record.birth) <= rangeAll.end);
-        const summaryAll = calcGroupSummary(cohortAll, evalV1, evalV2, Number(fiscalYear));
+        const summaryAll = calcGroupSummary(cohortAll, evalV1, evalV2, Number(fiscalYear), dbRules);
         await saveSummary({ targetTable: t, fiscalYear: Number(fiscalYear), quarter: 'all', summaryData: JSON.stringify(summaryAll) });
         
         const targetAge = getAgeFromTable(t);
@@ -205,7 +205,7 @@ export function useUploadManager() {
             const bDate = new Date(record.birth);
             return bDate >= start && bDate <= end;
           });
-          const summaryQ = calcGroupSummary(quarterData, evalV1, evalV2, Number(fiscalYear));
+          const summaryQ = calcGroupSummary(quarterData, evalV1, evalV2, Number(fiscalYear), dbRules);
           await saveSummary({ targetTable: t, fiscalYear: Number(fiscalYear), quarter: q, summaryData: JSON.stringify(summaryQ) });
         }
       }
