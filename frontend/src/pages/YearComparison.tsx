@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import * as Recharts from 'recharts';
 import type { ReactElement } from 'react';
 import { useDashboardSummariesMultiYear } from '../shared/hooks/useDashboardSummariesMultiYear';
@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Card, CardContent, CardHeader, CardTitle } from '../shared/components/ui/card';
 import { SubNav } from '../widgets/layout/SubNav';
 import { formatDateTimeStr, getCurrentFiscalYear } from '../shared/utils/dateUtils';
-import type { DashboardSummaryRow } from '../shared/types/dashboardSummary';
+import type { DashboardSummaryRow, FacilityBreakdownEntry } from '../shared/types/dashboardSummary';
 
 const MAX_SELECTED_YEARS = 5;
 
@@ -70,6 +70,23 @@ interface ChartRow {
   failed: number | null;
   pending: number | null;
   target: number | null;
+}
+
+/**
+ * Facility cross-year comparison (Issue #25). Per selected FY, the stored annual
+ * snapshot's facility aggregates (facilityBreakdownV1/V2) keyed by the EXACT
+ * hoscode string — identity, join, and React keys all use the raw string
+ * (leading zeroes preserved; never numerically normalized; never joined by name).
+ */
+interface FacilityYearEntry {
+  view1: number | null;
+  view2: number | null;
+}
+
+interface FacilityComparisonRow {
+  hoscode: string;
+  hosname: string;
+  years: Map<number, FacilityYearEntry>;
 }
 
 /**
@@ -211,6 +228,50 @@ export const YearComparison = () => {
   }));
 
   const capReached = selectedYears.length >= MAX_SELECTED_YEARS;
+
+  // ── Facility preparation layer (Issue #25) ── one derived structure from the SAME
+  // selected-FY / active-age-group annual summaries. Target and snapshot time reuse
+  // the annual rows' already-resolved values — no second authority, no recomputation.
+  const targetByFy = new Map(rows.map(row => [row.fiscalYear, row.target]));
+  const facilitiesByCode = new Map<string, FacilityComparisonRow>();
+  for (const fiscalYear of selectedYears) {
+    const summary = data.find(d => d.targetTable === ageGroup && Number(d.fiscalYear) === fiscalYear);
+    if (!summary) continue; // no annual summary for this selected FY → no facility data, never zeros
+    const absorb = (breakdown: FacilityBreakdownEntry[] | undefined, view: keyof FacilityYearEntry) => {
+      for (const entry of breakdown ?? []) {
+        let facility = facilitiesByCode.get(entry.hoscode);
+        if (!facility) {
+          facility = { hoscode: entry.hoscode, hosname: '', years: new Map() };
+          facilitiesByCode.set(entry.hoscode, facility);
+        }
+        const year = facility.years.get(fiscalYear) ?? { view1: null, view2: null };
+        year[view] = entry.coverage; // an entry is a real value — coverage 0 stays a real zero
+        facility.years.set(fiscalYear, year);
+        // Display-name policy: the most recent selected FY's non-empty name wins
+        // (selectedYears is ascending) — display metadata only, never the join key.
+        if (entry.hosname) facility.hosname = entry.hosname;
+      }
+    };
+    absorb(summary.summaryData.facilityBreakdownV1, 'view1');
+    absorb(summary.summaryData.facilityBreakdownV2, 'view2');
+  }
+  const facilities = [...facilitiesByCode.values()]
+    .map(facility => ({ ...facility, hosname: facility.hosname || facility.hoscode }))
+    .sort((a, b) => (a.hoscode < b.hoscode ? -1 : a.hoscode > b.hoscode ? 1 : 0)); // exact string sort
+
+  /** View 2 delta vs the previous selected FY where THIS facility has View 2 data. */
+  const facilityDelta = (facility: FacilityComparisonRow): number | null => {
+    let previous: number | null = null;
+    let delta: number | null = null;
+    for (const fiscalYear of selectedYears) {
+      const view2 = facility.years.get(fiscalYear)?.view2 ?? null;
+      if (view2 !== null) {
+        delta = previous !== null ? view2 - previous : null;
+        previous = view2;
+      }
+    }
+    return delta;
+  };
 
   // FY chips render whenever the age group's usable years are known — independent of the
   // summary fetch lifecycle, so selection stays interactive while summaries load.
@@ -419,6 +480,80 @@ export const YearComparison = () => {
               </tbody>
             </table>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card className="border-zinc-200 shadow-sm">
+        <CardHeader>
+          <CardTitle className="text-lg">การเปรียบเทียบสถานบริการ (รพ.สต.) ข้ามปีงบประมาณ</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-zinc-500 mb-3">
+            {rows.map(row =>
+              row.updatedAt ? (
+                <span key={row.fiscalYear}>ปี {row.fiscalYear}: ข้อมูลสรุป ณ วันที่ {formatDateTimeStr(row.updatedAt)}</span>
+              ) : null,
+            )}
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm text-zinc-700">
+              <thead>
+                <tr className="border-b border-zinc-200 text-left text-xs text-zinc-500">
+                  <th rowSpan={2} className="py-2 pr-4 font-medium">รหัสสถานบริการ</th>
+                  <th rowSpan={2} className="py-2 pr-4 font-medium">ชื่อสถานบริการ</th>
+                  {selectedYears.map(fiscalYear => (
+                    <th key={fiscalYear} colSpan={3} className="py-2 pr-4 pl-4 font-medium text-center border-l border-zinc-100">ปีงบประมาณ {fiscalYear}</th>
+                  ))}
+                  <th rowSpan={2} className="py-2 font-medium">เปลี่ยนแปลงจากปีที่มีข้อมูลก่อนหน้า (pp)</th>
+                </tr>
+                <tr className="border-b border-zinc-200 text-left text-xs text-zinc-500">
+                  {selectedYears.map(fiscalYear => (
+                    <Fragment key={fiscalYear}>
+                      <th className="py-2 pr-3 pl-4 font-medium border-l border-zinc-100">View 1</th>
+                      <th className="py-2 pr-3 font-medium">View 2</th>
+                      <th className="py-2 pr-4 font-medium">ส่วนต่างจากเป้าหมาย</th>
+                    </Fragment>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {facilities.length === 0 ? (
+                  <tr>
+                    <td colSpan={2 + selectedYears.length * 3 + 1} className="py-3 text-zinc-500">ไม่มีข้อมูลรายสถานบริการสำหรับปีที่เลือก</td>
+                  </tr>
+                ) : (
+                  facilities.map(facility => {
+                    const delta = facilityDelta(facility);
+                    return (
+                      <tr key={facility.hoscode} className="border-b border-zinc-100">
+                        <td className="py-2 pr-4 font-medium text-zinc-900">{facility.hoscode}</td>
+                        <td className="py-2 pr-4">{facility.hosname}</td>
+                        {selectedYears.map(fiscalYear => {
+                          const entry = facility.years.get(fiscalYear);
+                          const view1 = entry?.view1 ?? null;
+                          const view2 = entry?.view2 ?? null;
+                          const target = targetByFy.get(fiscalYear);
+                          return (
+                            <Fragment key={fiscalYear}>
+                              <td className="py-2 pr-3 pl-4 border-l border-zinc-100">{view1 !== null ? `${view1.toFixed(2)}%` : '—'}</td>
+                              <td className="py-2 pr-3">{view2 !== null ? `${view2.toFixed(2)}%` : '—'}</td>
+                              <td className="py-2 pr-4">
+                                {target === undefined ? 'ไม่ได้กำหนดเป้าหมาย' : view2 === null ? '—' : formatPp(view2 - target)}
+                              </td>
+                            </Fragment>
+                          );
+                        })}
+                        <td className="py-2">{delta !== null ? formatPp(delta) : '—'}</td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+          <p className="text-xs text-zinc-500 mt-3">
+            ค่ารายสถานบริการมาจากข้อมูลสรุปประจำปีที่จัดเก็บไว้ของแต่ละปีงบประมาณ (เข้าร่วมด้วยรหัสสถานบริการ) — ปีใดไม่มีข้อมูลของสถานบริการนั้นแสดงเป็น — ไม่ใช่ค่า 0
+          </p>
         </CardContent>
       </Card>
     </div>
