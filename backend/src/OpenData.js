@@ -244,6 +244,7 @@ function syncOpenData() {
     let finalRows = [];
     let successfulPairs = 0, failedPairs = 0, freshRows = 0, retainedRows = 0;
     const failedPairIds = [];
+    const failedPairDetails = []; // Issue #35: bounded per-pair failure diagnostics (category + diagnostic only)
 
     const buildFreshRow = (tableName, year, source) => {
       const row = Array(width).fill('');
@@ -281,6 +282,9 @@ function syncOpenData() {
         } else {
           failedPairs++;
           failedPairIds.push(tableName + ':' + year); // compact sanitized identifier only
+          // Issue #35: retain the classifier's sanitized metadata per failed pair —
+          // category + bounded diagnostic only; never raw bodies or exception text
+          failedPairDetails.push({ pair: tableName + ':' + year, category: outcome.category, diagnostic: outcome.diagnostic });
           for (const row of oldRows) {
             if (String(row[col.table_name]) === tableName && String(row[col.fiscal_year]) === String(year)) {
               finalRows.push([...row]); // retained history stays byte-identical (no fabricated metadata)
@@ -322,7 +326,7 @@ function syncOpenData() {
       }
     }
 
-    // 7. One compact sanitized audit summary (semantic keys; no raw bodies)
+    // 7. One compact sanitized audit summary (semantic keys; per-pair classifier diagnostics; no raw bodies)
     const finalStatus = commitFailure || (commitState === 'uncertain' ? 'commit_uncertain' : status);
     const commitFlag = commitFailure === 'commit_failure' || commitState === 'uncertain'
       ? (commitFailure === 'commit_failure' ? 'failed' : 'uncertain') : 'verified';
@@ -330,7 +334,7 @@ function syncOpenData() {
       status: finalStatus,
       success: successfulPairs, failed: failedPairs,
       fresh: freshRows, retained: retainedRows,
-      failed_pairs: failedPairIds, commit: commitFlag
+      failed_pairs: failedPairIds, failed_details: failedPairDetails, commit: commitFlag
     });
     try { logAction('SYSTEM', 'Cron', 'sync_opendata', summary); } catch (e) { /* audit failure must not undo the committed cache or mask the intended result */ }
 

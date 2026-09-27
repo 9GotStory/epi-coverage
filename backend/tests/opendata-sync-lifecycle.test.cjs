@@ -14,6 +14,16 @@
  * …) — a tolerant extractor pulls status/counts/identifiers; no exact-string
  * punctuation is asserted, and raw upstream bodies must never appear.
  *
+ * Issue #35 RED contracts — sanitized per-pair OpenData upstream diagnostics.
+ * `syncOpenData()` must expose, inside the existing SINGLE `sync_opendata`
+ * audit summary, one sanitized per-pair failure record (pair identifier +
+ * classifier `category` + bounded `diagnostic`) for every failed dataset/FY
+ * pair — never raw upstream bodies, raw exception text, secrets, or entries
+ * for successful pairs. All existing #16 lifecycle semantics (counts,
+ * retention, commit, lock, exactly one audit) remain unchanged. Assertions
+ * stay semantic: any compact sanitized shape is accepted (e.g.
+ * `failed_details: [{pair, category, diagnostic}]`).
+ *
  * All fixtures are synthetic aggregate data (areacode/hospcode markers only).
  * No production URLs, secrets, tokens, Script Properties, health or person data.
  * One controlled fiscal year (2569) → exactly 5 dataset/FY pairs per sync.
@@ -143,6 +153,7 @@ function createHarness({
         const response = upstream[key];
         if (!response) throw new Error(`harness: no synthetic response configured for ${key}`);
         fetches.push(key); events.push('upstream:fetch');
+        if (response instanceof Error) throw response; // #35: deterministic fetch exception (no retry expected)
         return response;
       },
     },
@@ -181,6 +192,59 @@ function evidence(outcome, audit) {
 // Cache content read-back helpers (semantic, header-mapped — never positional).
 const cacheRows = h => h.cells.slice(1).map(row => Object.fromEntries(h.cells[0].map((column, i) => [column, row[i] ?? ''])));
 const findRow = (h, table) => cacheRows(h).find(r => r.table_name === table && String(r.fiscal_year) === FY);
+
+// --- Issue #35 helpers: tolerant extraction of sanitized per-pair failure details ---
+
+const FAILURE_CATEGORIES = ['http_error', 'non_json', 'malformed_json', 'invalid_contract', 'json_error'];
+
+/**
+ * Extract per-pair failure-detail records from `sync_opendata` audit summaries.
+ * Shape-agnostic by design: accepts arrays of objects (`{pair, category, diagnostic}`
+ * or `{table_name, fiscal_year, category, …}`), objects keyed by pair id, or compact
+ * strings carrying a pair id plus a known category token. Details are only read from
+ * the audit — the single canonical surface this contract is about.
+ */
+function pairFailureDetails(audit) {
+  const found = [];
+  for (const entry of audit.filter(a => a.action === 'sync_opendata')) {
+    let parsed;
+    try { parsed = JSON.parse(String(entry.details)); } catch { continue; /* not JSON — nothing extractable */ }
+    if (parsed == null || typeof parsed !== 'object' || Array.isArray(parsed)) continue;
+    const record = (pair, item) => {
+      const category = item.category || item.type || item.reason;
+      if (!pair || !category) return;
+      found.push({ pair: String(pair), category: String(category), diagnostic: String(item.diagnostic ?? item.detail ?? '') });
+    };
+    const pairOf = item => {
+      if (item.pair != null) return String(item.pair);
+      if (item.id != null) return String(item.id);
+      const table = item.table_name || item.table || item.dataset;
+      return table ? `${table}:${item.fiscal_year || item.year || FY}` : null;
+    };
+    for (const value of Object.values(parsed)) {
+      if (Array.isArray(value)) {
+        for (const item of value) {
+          if (item && typeof item === 'object') record(pairOf(item), item);
+          else if (typeof item === 'string') {
+            const pair = item.match(/[a-z][a-z0-9_]*:\d{4}/);
+            const category = FAILURE_CATEGORIES.find(c => item.includes(c));
+            if (pair && category) found.push({ pair: pair[0], category, diagnostic: item });
+          }
+        }
+      } else if (value && typeof value === 'object') {
+        for (const [key, item] of Object.entries(value)) {
+          if (/[a-z][a-z0-9_]*:\d{4}/.test(key) && item && typeof item === 'object') record(key, item);
+        }
+      }
+    }
+  }
+  return found;
+}
+
+const detailFor = (details, table) =>
+  details.find(d => d.pair.replace(/[/\s]/g, ':') === `${table}:${FY}` || d.pair.startsWith(table));
+const syncAuditCount = h => h.audit.filter(a => a.action === 'sync_opendata').length;
+const syncAuditText = h => h.audit.filter(a => a.action === 'sync_opendata').map(a => String(a.details)).join(' | ');
 
 // --- #6 partial success: header-aware retention + classifier-behavioral 503 ---
 
@@ -414,4 +478,172 @@ test('#19c acquired lock is released exactly once when the sync lifecycle fails'
   assert.ok(!h.audit.some(a => a.action === 'sync_opendata' && evidence({ result: {} }, [a]).isNormalSuccess),
     'no normal success audit');
   assert.ok(outcome.thrown || typeof outcome.result === 'object', 'failure captured without harness crash');
+});
+
+// --- #35 RED: sanitized per-pair OpenData upstream diagnostics in the sync audit ---
+
+test('#35a http-failure pair exposes sanitized category and bounded diagnostic in the single sync_opendata audit', () => {
+  const BODY_SENTINEL = 'synthetic-unavailable-body-730601';
+  const h = createHarness({
+    records: [{ sync_id: 'hist-1', table_name: 's_epi2', fiscal_year: FY, hospcode: '00002', areacode: '540601',
+      raw_json: '{"areacode":"540601"}', updated_at: '2026-01-01T00:00:00Z' }],
+    upstream: {
+      [`s_epi1|${FY}`]: json200([FRESH_ROW_S_EPI1]),
+      [`s_epi2|${FY}`]: upstreamResponse(503, BODY_SENTINEL),
+      [`s_epi3|${FY}`]: json200([]), [`s_epi5|${FY}`]: json200([]), [`s_epi_complete|${FY}`]: json200([]),
+    },
+  });
+  const outcome = runSync(h.context);
+  const details = pairFailureDetails(h.audit);
+  const detail = detailFor(details, 's_epi2');
+  assert.ok(detail, 'sync_opendata audit must retain a sanitized per-pair failure detail for s_epi2:2569 '
+    + '(e.g. failed_details: [{pair, category, diagnostic}]) — classifier output must not be dropped');
+  assert.equal(detail.category, 'http_error', 'HTTP failure category must be http_error');
+  assert.ok(/status=503/.test(String(detail.diagnostic)), 'diagnostic carries bounded status metadata');
+  assert.ok(/content[-_ ]?type/i.test(String(detail.diagnostic)), 'diagnostic carries bounded content-type metadata');
+  assert.ok(detail.pair.includes('s_epi2') && detail.pair.includes(FY), 'detail identifies the failed dataset/FY pair');
+  assert.equal(syncAuditCount(h), 1, 'still exactly ONE sync_opendata audit summary (no second diagnostic audit)');
+  const auditText = syncAuditText(h);
+  assert.ok(!auditText.includes(BODY_SENTINEL) && !auditText.includes('DOCTYPE'),
+    'upstream body must NOT be retained anywhere in the audit');
+  const ev = evidence(outcome, h.audit);
+  assert.equal(ev.grab('status'), 'partial_success', 'existing overall status semantics unchanged');
+  assert.equal(ev.grab('success'), 4, 'successful pair count unchanged');
+  assert.equal(ev.grab('failed'), 1, 'failed pair count unchanged');
+  assert.equal(ev.grab('fresh'), 1, 'fresh row count unchanged');
+  assert.equal(ev.grab('retained'), 1, 'retained row count unchanged');
+  assert.equal(ev.grab('commit'), 'verified', 'commit semantics unchanged');
+  const retained = findRow(h, 's_epi2');
+  assert.ok(retained && retained.hospcode === '00002', 'retention behavior unchanged');
+});
+
+test('#35b non-JSON (HTML) failure exposes a non_json detail without retaining the HTML body', () => {
+  const HTML_BODY = '<!DOCTYPE html><html><body>synthetic maintenance page marker-740601</body></html>';
+  const h = createHarness({
+    records: [{ sync_id: 'hist-2', table_name: 's_epi2', fiscal_year: FY, hospcode: '00002', areacode: '540601',
+      raw_json: '{"areacode":"540601"}', updated_at: '2026-01-01T00:00:00Z' }],
+    upstream: {
+      [`s_epi1|${FY}`]: json200([]),
+      [`s_epi2|${FY}`]: upstreamResponse(200, HTML_BODY), // 2xx but HTML → non_json
+      [`s_epi3|${FY}`]: json200([]), [`s_epi5|${FY}`]: json200([]), [`s_epi_complete|${FY}`]: json200([]),
+    },
+  });
+  runSync(h.context);
+  const details = pairFailureDetails(h.audit);
+  const detail = detailFor(details, 's_epi2');
+  assert.ok(detail, 'sync_opendata audit must retain a sanitized per-pair failure detail for the non-JSON pair s_epi2:2569');
+  assert.equal(detail.category, 'non_json', 'HTML/text response must be distinguishable as non_json');
+  assert.ok(detail.pair.includes('s_epi2') && detail.pair.includes(FY), 'pair identifiable');
+  assert.equal(syncAuditCount(h), 1, 'still exactly one sync_opendata audit summary');
+  const auditText = syncAuditText(h);
+  assert.ok(!auditText.includes('DOCTYPE') && !auditText.includes('marker-740601'),
+    'HTML/text response body must NOT be retained in the audit');
+});
+
+test('#35c malformed_json, invalid_contract, json_error, and http_error stay distinguishable per pair', () => {
+  const h = createHarness({
+    upstream: {
+      [`s_epi1|${FY}`]: json200([FRESH_ROW_S_EPI1]), // successful pair — no detail expected
+      [`s_epi2|${FY}`]: upstreamResponse(200, '{"data": ['),                              // malformed_json
+      [`s_epi3|${FY}`]: upstreamResponse(200, '{"foo":"bar"}'),                           // invalid_contract
+      [`s_epi5|${FY}`]: upstreamResponse(200, JSON.stringify({ error: 'synthetic upstream refusal' })), // json_error
+      [`s_epi_complete|${FY}`]: upstreamResponse(503, 'synthetic unavailable'),           // http_error
+    },
+  });
+  runSync(h.context);
+  const details = pairFailureDetails(h.audit);
+  assert.ok(details.length >= 4, `four failing pairs need four distinguishable per-pair details — found ${details.length}`);
+  const expected = { s_epi2: 'malformed_json', s_epi3: 'invalid_contract', s_epi5: 'json_error', s_epi_complete: 'http_error' };
+  for (const [table, category] of Object.entries(expected)) {
+    const detail = detailFor(details, table);
+    assert.ok(detail, `per-pair detail required for ${table}:${FY}`);
+    assert.equal(detail.category, category, `${table} must stay distinguishable as ${category}`);
+  }
+  assert.ok(!detailFor(details, 's_epi1'), 'the successful pair must not produce a failure detail');
+  assert.equal(syncAuditCount(h), 1, 'still exactly one sync_opendata audit summary');
+});
+
+test('#35d UrlFetchApp.fetch exception becomes deterministic request_failed metadata with no raw exception text', () => {
+  const EXCEPTION_SENTINEL = 'synthetic-fetch-explosion-750601';
+  const h = createHarness({
+    records: [{ sync_id: 'hist-3', table_name: 's_epi2', fiscal_year: FY, hospcode: '00002', areacode: '540601',
+      raw_json: '{"areacode":"540601"}', updated_at: '2026-01-01T00:00:00Z' }],
+    upstream: {
+      [`s_epi1|${FY}`]: json200([FRESH_ROW_S_EPI1]),
+      [`s_epi2|${FY}`]: new Error(`UrlFetchApp synthetic failure ${EXCEPTION_SENTINEL}`), // fetch() itself throws
+      [`s_epi3|${FY}`]: json200([]), [`s_epi5|${FY}`]: json200([]), [`s_epi_complete|${FY}`]: json200([]),
+    },
+  });
+  const outcome = runSync(h.context);
+  const details = pairFailureDetails(h.audit);
+  const detail = detailFor(details, 's_epi2');
+  assert.ok(detail, 'a fetch exception on pair s_epi2:2569 must still produce a per-pair failure detail');
+  assert.ok(FAILURE_CATEGORIES.includes(detail.category),
+    `deterministic existing failure category (http_error or equivalent) required — got '${detail && detail.category}'`);
+  assert.ok(/request_failed/.test(String(detail.diagnostic)),
+    'diagnostic identifies request_failed deterministically (no exception text)');
+  const ev = evidence(outcome, h.audit);
+  assert.ok(!ev.joined.includes(EXCEPTION_SENTINEL), 'raw exception text must NOT appear in result or audit');
+  assert.equal(ev.grab('success'), 4, 'other pairs unaffected');
+  assert.equal(ev.grab('failed'), 1, 'fetch exception counts as exactly one failed pair');
+  assert.equal(h.fetches.filter(key => key === `s_epi2|${FY}`).length, 1, 'no retry/backoff introduced');
+  assert.equal(syncAuditCount(h), 1, 'still exactly one sync_opendata audit summary');
+});
+
+test('#35e only failed pairs create failure-detail entries (successful pairs create none)', () => {
+  const h = createHarness({
+    upstream: {
+      [`s_epi1|${FY}`]: json200([FRESH_ROW_S_EPI1]),
+      [`s_epi2|${FY}`]: upstreamResponse(503, 'synthetic unavailable'),
+      [`s_epi3|${FY}`]: json200([]), [`s_epi5|${FY}`]: json200([]), [`s_epi_complete|${FY}`]: json200([]),
+    },
+  });
+  runSync(h.context);
+  const details = pairFailureDetails(h.audit);
+  assert.equal(details.length, 1, `exactly one failure detail — the failed pair — expected, found ${details.length}`);
+  const detail = detailFor(details, 's_epi2');
+  assert.ok(detail, 'the single detail belongs to the failed pair s_epi2:2569');
+  const successfulTables = ['s_epi1', 's_epi3', 's_epi5', 's_epi_complete'];
+  assert.ok(!successfulTables.some(t => details.some(d => d.pair.includes(t))),
+    'successful dataset/FY pairs must not create failure-detail entries');
+
+  // Fully successful sync: zero failure-detail entries at all.
+  const ok = createHarness({ upstream: Object.fromEntries(DATASETS.map(t => [`${t}|${FY}`, json200([])])) });
+  runSync(ok.context);
+  assert.equal(pairFailureDetails(ok.audit).length, 0, 'a fully successful sync produces no failure details');
+  assert.equal(syncAuditCount(ok), 1, 'still exactly one sync_opendata audit summary');
+});
+
+test('#35f all-pairs upstream_failure keeps lifecycle semantics and gains one sanitized detail per pair', () => {
+  // Production FY2569 incident shape: all five pairs fail, prior cache fully retained, commit verified.
+  const BODY_SENTINELS = DATASETS.map((_, i) => `synthetic-503-body-${i}-760601`);
+  const records = DATASETS.map((table, i) => ({
+    sync_id: `hist-${i}`, table_name: table, fiscal_year: FY, hospcode: `0000${i}`, areacode: '540601',
+    raw_json: `{"areacode":"540601","hospcode":"0000${i}"}`, updated_at: '2026-01-01T00:00:00Z',
+  }));
+  const h = createHarness({
+    records,
+    upstream: Object.fromEntries(DATASETS.map((t, i) => [`${t}|${FY}`, upstreamResponse(503, BODY_SENTINELS[i])])),
+  });
+  const outcome = runSync(h.context);
+  const ev = evidence(outcome, h.audit);
+  assert.equal(ev.grab('status'), 'upstream_failure', 'overall status unchanged (production incident shape)');
+  assert.equal(ev.grab('success'), 0, 'success count unchanged');
+  assert.equal(ev.grab('failed'), 5, 'failed count unchanged');
+  assert.equal(ev.grab('fresh'), 0, 'fresh count unchanged');
+  assert.equal(ev.grab('retained'), 5, 'retained count unchanged');
+  assert.equal(ev.grab('commit'), 'verified', 'commit semantics unchanged');
+  for (const table of DATASETS) assert.ok(findRow(h, table), `historical ${table} row retained (retention unchanged)`);
+  assert.equal(syncAuditCount(h), 1, 'exactly one normal sync_opendata audit summary');
+  const details = pairFailureDetails(h.audit);
+  assert.equal(details.length, 5, `one sanitized per-pair detail for every failed pair — found ${details.length}`);
+  for (const table of DATASETS) {
+    const detail = detailFor(details, table);
+    assert.ok(detail, `per-pair detail required for ${table}:${FY}`);
+    assert.equal(detail.category, 'http_error', `${table} categorized http_error`);
+    assert.ok(/status=503/.test(String(detail.diagnostic)), `${table} diagnostic carries bounded status metadata`);
+  }
+  const auditText = syncAuditText(h);
+  assert.ok(!BODY_SENTINELS.some(s => auditText.includes(s)) && !auditText.includes('DOCTYPE'),
+    'no raw upstream response bodies in the audit');
 });
