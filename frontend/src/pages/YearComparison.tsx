@@ -273,6 +273,64 @@ export const YearComparison = () => {
     return delta;
   };
 
+  // ── Vaccine preparation layer (Issue #26 / Decision E) — stored snapshot data only.
+  // Series join by valid metric_key within THIS age group and view; a legacy entry
+  // without a valid key is never joined and never rendered as its own cross-year series.
+  const validMetricKey = (value: unknown): value is string => typeof value === 'string' && value.length > 0;
+
+  interface VaccineYearEntry { coverage: number; vaccineGroup: string; name: string; }
+  interface VaccineSeries {
+    metricKey: string;
+    displayName: string;
+    years: Map<number, VaccineYearEntry>; // selected FYs ascending (insertion order)
+    delta: number | null;
+  }
+
+  const summaryForFiscalYear = (fiscalYear: number): DashboardSummaryRow | undefined =>
+    data.find(d => d.targetTable === ageGroup && Number(d.fiscalYear) === fiscalYear);
+
+  const buildVaccineSeries = (viewType: 1 | 2): VaccineSeries[] => {
+    const byKey = new Map<string, VaccineSeries>();
+    for (const fiscalYear of selectedYears) {
+      const summary = summaryForFiscalYear(fiscalYear);
+      if (!summary) continue; // no annual summary → no vaccine data, never zeros
+      const entries = viewType === 1 ? summary.summaryData.view1Breakdown : summary.summaryData.view2Breakdown;
+      for (const entry of entries ?? []) {
+        if (!validMetricKey(entry.metric_key)) continue; // legacy: unavailable for identity
+        let series = byKey.get(entry.metric_key);
+        if (!series) {
+          series = { metricKey: entry.metric_key, displayName: '', years: new Map(), delta: null };
+          byKey.set(entry.metric_key, series);
+        }
+        series.years.set(fiscalYear, { coverage: entry.coverage, vaccineGroup: entry.vaccine_group ?? '', name: entry.name });
+        if (entry.name) series.displayName = entry.name; // deterministic: latest selected FY's non-empty name
+      }
+    }
+    for (const series of byKey.values()) {
+      let previous: number | null = null;
+      for (const { coverage } of series.years.values()) {
+        series.delta = previous !== null ? coverage - previous : null;
+        previous = coverage;
+      }
+      if (!series.displayName) series.displayName = series.metricKey;
+    }
+    return [...byKey.values()]
+      .sort((a, b) => (a.displayName < b.displayName ? -1 : a.displayName > b.displayName ? 1 : a.metricKey < b.metricKey ? -1 : 1));
+  };
+
+  const vaccineViews = [
+    { viewType: 1 as const, label: 'View 1 (รายชนิด)', series: buildVaccineSeries(1) },
+    { viewType: 2 as const, label: 'View 2 (Fully Immunized)', series: buildVaccineSeries(2) },
+  ];
+
+  /** Selected FYs whose snapshot carries legacy (non-identity) vaccine entries — each gets a visible notice. */
+  const vaccineLegacyYears = selectedYears.filter(fiscalYear => {
+    const summary = summaryForFiscalYear(fiscalYear);
+    if (!summary) return false;
+    return [...(summary.summaryData.view1Breakdown ?? []), ...(summary.summaryData.view2Breakdown ?? [])]
+      .some(entry => !validMetricKey(entry.metric_key));
+  });
+
   // FY chips render whenever the age group's usable years are known — independent of the
   // summary fetch lifecycle, so selection stays interactive while summaries load.
   const yearChips = (
@@ -553,6 +611,92 @@ export const YearComparison = () => {
           </div>
           <p className="text-xs text-zinc-500 mt-3">
             ค่ารายสถานบริการมาจากข้อมูลสรุปประจำปีที่จัดเก็บไว้ของแต่ละปีงบประมาณ (เข้าร่วมด้วยรหัสสถานบริการ) — ปีใดไม่มีข้อมูลของสถานบริการนั้นแสดงเป็น — ไม่ใช่ค่า 0
+          </p>
+        </CardContent>
+      </Card>
+
+      <Card className="border-zinc-200 shadow-sm">
+        <CardHeader>
+          <CardTitle className="text-lg">การเปรียบเทียบวัคซีนข้ามปีงบประมาณ</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-zinc-500 mb-3">
+            {rows.map(row =>
+              row.updatedAt ? (
+                <span key={row.fiscalYear}>ปี {row.fiscalYear}: ข้อมูลสรุป ณ วันที่ {formatDateTimeStr(row.updatedAt)}</span>
+              ) : null,
+            )}
+          </div>
+          {vaccineLegacyYears.length > 0 && (
+            <div className="flex flex-col gap-y-1 mb-3">
+              {vaccineLegacyYears.map(fiscalYear => (
+                <p key={fiscalYear} className="text-xs text-amber-700" role="status">
+                  ปี {fiscalYear}: ไม่มีรหัสเชื่อมโยงวัคซีนสำหรับการเปรียบเทียบข้ามปี
+                </p>
+              ))}
+            </div>
+          )}
+          {vaccineViews.every(({ series }) => series.length === 0) ? (
+            <p className="text-sm text-zinc-600">ไม่มีข้อมูลวัคซีนที่มีรหัสเชื่อมโยงสำหรับปีที่เลือก</p>
+          ) : (
+            vaccineViews.map(({ viewType, label, series }) => (
+              <div key={viewType} className="mb-5 last:mb-0">
+                <p className="text-sm font-medium text-zinc-700 mb-2">{label}</p>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm text-zinc-700">
+                    <thead>
+                      <tr className="border-b border-zinc-200 text-left text-xs text-zinc-500">
+                        <th className="py-2 pr-4 font-medium">วัคซีน</th>
+                        {selectedYears.map(fiscalYear => (
+                          <th key={fiscalYear} className="py-2 pr-4 font-medium">ปีงบประมาณ {fiscalYear}</th>
+                        ))}
+                        <th className="py-2 pr-4 font-medium">เปลี่ยนแปลงจากปีที่มีข้อมูลก่อนหน้า (pp)</th>
+                        <th className="py-2 font-medium">ส่วนต่างจากเป้าหมาย (pp)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {series.length === 0 ? (
+                        <tr>
+                          <td colSpan={2 + selectedYears.length} className="py-3 text-zinc-500">ไม่มีข้อมูลวัคซีนที่มีรหัสเชื่อมโยงสำหรับมุมมองนี้</td>
+                        </tr>
+                      ) : (
+                        series.map(entry => {
+                          const latestFy = [...entry.years.keys()].pop();
+                          const latest = latestFy !== undefined ? entry.years.get(latestFy) : undefined;
+                          const target = latest && latestFy !== undefined
+                            ? getTarget('all', viewType, latest.vaccineGroup, latestFy)
+                            : undefined;
+                          return (
+                            <tr key={`${viewType}-${entry.metricKey}`} className="border-b border-zinc-100">
+                              <td className="py-2 pr-4 font-medium text-zinc-900">{entry.displayName}</td>
+                              {selectedYears.map(fiscalYear => {
+                                const yearEntry = entry.years.get(fiscalYear);
+                                return (
+                                  <td key={fiscalYear} className="py-2 pr-4">
+                                    {yearEntry ? `${yearEntry.coverage.toFixed(2)}%` : '—'}
+                                  </td>
+                                );
+                              })}
+                              <td className="py-2 pr-4">{entry.delta !== null ? formatPp(entry.delta) : '—'}</td>
+                              <td className="py-2">
+                                {latest === undefined || latestFy === undefined
+                                  ? '—'
+                                  : target === undefined
+                                    ? 'ไม่ได้กำหนดเป้าหมาย'
+                                    : formatPp(latest.coverage - target)}
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ))
+          )}
+          <p className="text-xs text-zinc-500 mt-3">
+            ค่ารายวัคซีนเชื่อมโยงข้ามปีด้วยรหัสเชื่อมโยงวัคซีน (metric key) ที่จัดเก็บในข้อมูลสรุปของแต่ละปี — ปีใดไม่มีข้อมูลของวัคซีนนั้นแสดงเป็น — ไม่ใช่ค่า 0 และชื่อที่แสดงเป็นชื่อ ณ เวลาคำนวณสรุปของปีนั้น (การเปลี่ยนชื่อไม่ตัดอนุกรม)
           </p>
         </CardContent>
       </Card>

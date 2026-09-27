@@ -1,5 +1,5 @@
 import type { EpiRecord, VaccineStatus } from '../types';
-import type { View1Evaluation } from './vaccine/ruleEngine';
+import type { View1Evaluation, VaccineRule } from './vaccine/ruleEngine';
 // We can define the return type for better type safety
 export interface GroupSummary {
   total: number;
@@ -7,12 +7,12 @@ export interface GroupSummary {
   view1PassedDoses: number;
   view1TotalDoses: number;
   view1Coverage: number;
-  view1Breakdown: { name: string; passed: number; total: number; coverage: number }[];
+  view1Breakdown: { name: string; passed: number; total: number; coverage: number; metric_key?: string; vaccine_group?: string }[];
   facilityBreakdownV1: { hoscode: string; hosname: string; total: number; passed: number; coverage: number }[];
-  
+
   view2Passed: number;
   view2Coverage: number;
-  view2Breakdown: { name: string; passed: number; total: number; coverage: number }[];
+  view2Breakdown: { name: string; passed: number; total: number; coverage: number; metric_key?: string; vaccine_group?: string }[];
   facilityBreakdownV2: { hoscode: string; hosname: string; total: number; passed: number; coverage: number }[];
 
   /** Issue #23: records included in the View 2 coverage denominator for this snapshot (required on every newly generated summary). */
@@ -31,12 +31,20 @@ export type LegacyCompatibleGroupSummary = Omit<GroupSummary, 'view2ApplicableTo
 
 /**
  * คำนวณ Summary แยกมุมมองที่ 1 และ 2 สำหรับกลุ่มอายุ
+ *
+ * Issue #26 (Decision E — locked seam): the OPTIONAL fifth argument carries the
+ * snapshot-time VaccineRule[] used for THIS computation. When provided, breakdown
+ * entries are enriched with metric_key (the established key, else the rule's own
+ * rule_id) and snapshot-time vaccine_group, looked up by display_name WITHIN the
+ * same rule set the evaluators used (intra-snapshot association only — display_name
+ * is never a cross-year identity). Existing four-argument calls are unchanged.
  */
 export function calcGroupSummary(
   data: EpiRecord[],
   evalView1Fn: (r: EpiRecord) => View1Evaluation,
   evalView2Fn: (r: EpiRecord) => VaccineStatus,
-  _fiscalYear?: number // ไม่ได้ใช้ — HDC นับ active ทุก record ไม่กรองปี
+  _fiscalYear?: number, // ไม่ได้ใช้ — HDC นับ active ทุก record ไม่กรองปี
+  rules?: VaccineRule[],
 ): GroupSummary {
   // HDC นับทุก Active record ในชีต โดยไม่กรองปีงบประมาณ
   const filtered = data;
@@ -136,23 +144,44 @@ export function calcGroupSummary(
   const view1Coverage = view1TotalDoses > 0 ? (view1PassedDoses / view1TotalDoses) * 100 : 0;
   const view2Coverage = view2ApplicableTotal > 0 ? (view2Passed / view2ApplicableTotal) * 100 : 0;
   
+  // Issue #26 (Decision E): intra-snapshot rule lookup for forward identity metadata.
+  // Names emitted by the evaluators are associated with the SAME rule set used for this
+  // computation; display_name is only the lookup key here, never a cross-year identity.
+  const validKey = (value: string | undefined): string | undefined =>
+    typeof value === 'string' && value.length > 0 ? value : undefined;
+  // Decision E safety rule — uncertain identity → unavailable: an entry is enriched only
+  // when the snapshot rule set holds EXACTLY ONE eligible active rule for this
+  // (view_type, display_name). A display_name shared by several active rules must never
+  // let an arbitrary first match persist false cross-FY identity metadata.
+  const rulesByNameAndView = (viewType: number, name: string): VaccineRule | undefined => {
+    if (!rules) return undefined;
+    const matches = rules.filter(r => r.is_active && r.view_type === viewType && r.display_name === name);
+    return matches.length === 1 ? matches[0] : undefined;
+  };
+
   const view1Breakdown = Object.entries(view1Details).map(([name, passed]) => {
     const targetTotal = view1TargetDetails[name] || 0;
+    const rule = rules ? rulesByNameAndView(1, name) : undefined;
     return {
       name,
       passed,
       total: targetTotal,
-      coverage: targetTotal > 0 ? (passed / targetTotal) * 100 : 0
+      coverage: targetTotal > 0 ? (passed / targetTotal) * 100 : 0,
+      metric_key: rule ? (validKey(rule.metric_key) ?? rule.rule_id) : undefined,
+      vaccine_group: rule?.vaccine_group,
     };
   }).sort((a, b) => b.coverage - a.coverage);
 
   const view2Breakdown = Object.entries(view2Details).map(([name, passed]) => {
     const targetTotal = view2TargetDetails[name] || 0;
+    const rule = rules ? rulesByNameAndView(2, name) : undefined;
     return {
       name,
       passed,
       total: targetTotal,
-      coverage: targetTotal > 0 ? (passed / targetTotal) * 100 : 0
+      coverage: targetTotal > 0 ? (passed / targetTotal) * 100 : 0,
+      metric_key: rule ? (validKey(rule.metric_key) ?? rule.rule_id) : undefined,
+      vaccine_group: rule?.vaccine_group,
     };
   }).sort((a, b) => b.coverage - a.coverage);
   
