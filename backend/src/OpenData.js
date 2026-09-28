@@ -216,6 +216,26 @@ function fetchOpenDataProxy(payload) {
 const OPENDATA_SYNC_LOCK_TIMEOUT_MS = 30000;
 
 /**
+ * GAS-VERIFY-02: schema-aware read-back parity for one cell of the committed
+ * opendata_cache rectangle. String-intended cells (every sync-owned column —
+ * identifiers, fiscal_year, raw_json, updated_at) must be observed as the
+ * IDENTICAL string: a numeric or otherwise coerced representation is a real
+ * mismatch, so a lost leading zero can never verify. Number-intended cells
+ * occur only in retained legacy rows; for those alone the identical number or
+ * its exact decimal string form is accepted, because a text-formatted ('@')
+ * cell may return either representation of the same stored value. Dates
+ * compare by instant. Everything else is strict.
+ */
+function openDataCellParity(intended, observed) {
+  if (typeof intended === 'string') return observed === intended;
+  if (intended instanceof Date) return observed instanceof Date && observed.getTime() === intended.getTime();
+  if (typeof intended === 'number' && Number.isFinite(intended)) {
+    return observed === intended || observed === String(intended);
+  }
+  return observed === intended;
+}
+
+/**
  * Issue #16: Transaction-safe OpenData sync lifecycle.
  * Bounded ScriptLock ครอบ lifecycle ทั้งหมด (schema → inventory → fetch → build
  * → commit → verification → audit) ปล่อย lock ใน finally เสมอ; busy → ไม่ทำงานใด ๆ
@@ -280,8 +300,11 @@ function syncOpenData(invocationSource) {
       row[col.sync_id] = syncId;
       row[col.table_name] = tableName;
       row[col.fiscal_year] = year;
-      row[col.hospcode] = source.hospcode || '';
-      row[col.areacode] = source.areacode || '';
+      // GAS-VERIFY-02: identifier columns are text contracts (docs/schema.md) —
+      // never assume upstream hospcode/areacode arrive as strings; store their
+      // exact text form so leading zeros survive and read-back parity is exact.
+      row[col.hospcode] = source.hospcode == null || source.hospcode === '' ? '' : String(source.hospcode);
+      row[col.areacode] = source.areacode == null || source.areacode === '' ? '' : String(source.areacode);
       row[col.raw_json] = JSON.stringify(source);
       row[col.updated_at] = updatedAt;
       return row;
@@ -344,37 +367,66 @@ function syncOpenData(invocationSource) {
     const status = failedPairs === 0 ? 'success' : (successfulPairs === 0 ? 'upstream_failure' : 'partial_success');
 
     // 5. One padded rectangular replacement (no clear-before-write, no separate tail write)
-    // P2-1: commit-phase exceptions (write/flush/verification read) must not escape
+    // P2-1: commit-phase exceptions (format/write/flush/verification read) must not escape
     // before a sanitized failure summary — they become deterministic non-success
     // results with an audit emitted while the lock is still held.
+    // GAS-VERIFY-02: the managed rectangle is text-formatted BEFORE setValues so
+    // Automatic cell parsing cannot coerce the numeric-looking strings intended
+    // as text (fiscal_year, leading-zero hospcode/areacode identifiers, raw_json,
+    // updated_at). Every opendata_cache column is a text column (docs/schema.md),
+    // so one rectangle-wide '@' application is the exact scope — the same defense
+    // Auth.js and the HDC import path already apply to identifier columns.
     const newRowCount = finalRows.length;
     const replacementHeight = Math.max(oldManagedRowCount, newRowCount);
     let commitState = 'verified';   // mismatch path: 'uncertain'
     let commitFailure = null;       // thrown path: 'commit_failure' | 'commit_uncertain'
+    let prewriteFormatApplied = false; // GAS-VERIFY-02/04: text formatting COMPLETED before a later commit failure
     if (replacementHeight > 0) {
       const matrix = finalRows.map(row => row.slice(0, width));
       while (matrix.length < replacementHeight) matrix.push(Array(width).fill(''));
-      let writeCompleted = false;
+      let writeAttempted = false; // GAS-VERIFY-04: true only once setValues has been INVOKED
       try {
-        sheet.getRange(2, 1, replacementHeight, width).setValues(matrix);
-        writeCompleted = true;
+        const target = sheet.getRange(2, 1, replacementHeight, width);
+        target.setNumberFormat('@');
+        prewriteFormatApplied = true;
+        writeAttempted = true; // set immediately BEFORE the value write: any throw past this point is ambiguous
+        target.setValues(matrix);
         SpreadsheetApp.flush();
 
-        // 6. Bounded post-write verification of the committed rectangle
-        const readBack = sheet.getRange(2, 1, replacementHeight, width).getValues();
-        if (JSON.stringify(readBack) !== JSON.stringify(matrix)) commitState = 'uncertain';
+        // 6. Bounded post-write verification of the committed rectangle.
+        // GAS-VERIFY-02: schema-aware cell parity (openDataCellParity) — string
+        // cells must read back as the exact same string with NO type tolerance
+        // (a coerced or truncated identifier stays a mismatch); only retained
+        // legacy Number cells accept number/exact-decimal-text parity. This is
+        // deliberately not a blanket String() normalization of every read-back
+        // value — representation tolerance exists only where legacy content
+        // genuinely permits it.
+        const readBack = target.getValues();
+        const verified = readBack.length === matrix.length && readBack.every((row, i) =>
+          row.length === matrix[i].length && row.every((cell, j) => openDataCellParity(matrix[i][j], cell)));
+        if (!verified) commitState = 'uncertain';
       } catch (e) {
-        // Before the write returns → previous cache untouched → commit_failure.
-        // After the write returned (flush/read) → actual committed state unknown → commit_uncertain.
-        // No raw exception text into result/audit; no rollback; no retry.
-        commitFailure = writeCompleted ? 'commit_uncertain' : 'commit_failure';
+        // GAS-VERIFY-04 honest commit-state windows (single attempt, no rollback, no retry):
+        // - The format call threw BEFORE the value write was attempted → setValues never
+        //   ran → VALUES are definitely untouched → commit_failure. The format call's own
+        //   effect is NOT claimed unchanged — a throwing format call may have partially
+        //   applied (and completion is not established, so no prewrite_format_applied).
+        // - setValues was ATTEMPTED and threw → the batch may or may not have been applied
+        //   (a lost response can follow a successful server-side write) → commit_uncertain.
+        // - setValues returned but flush/read-back threw → committed state unknown → commit_uncertain.
+        // No raw exception text into result/audit.
+        commitFailure = writeAttempted ? 'commit_uncertain' : 'commit_failure';
       }
     }
 
     // 7. One compact sanitized audit summary (semantic keys; per-pair classifier diagnostics; no raw bodies)
     const finalStatus = commitFailure || (commitState === 'uncertain' ? 'commit_uncertain' : status);
-    const commitFlag = commitFailure === 'commit_failure' || commitState === 'uncertain'
-      ? (commitFailure === 'commit_failure' ? 'failed' : 'uncertain') : 'verified';
+    // GAS-VERIFY-04: the audit commit flag is derived from finalStatus so every window maps
+    // exactly — commit_failure → "failed"; commit_uncertain (thrown write/flush/read OR a
+    // genuine read-back mismatch) → "uncertain"; anything else → "verified". The forbidden
+    // combination (status commit_uncertain with commit "verified") is unreachable.
+    const commitFlag = finalStatus === 'commit_failure' ? 'failed'
+      : finalStatus === 'commit_uncertain' ? 'uncertain' : 'verified';
     // Issue #37: invocation-source observability — sanitized metadata derived
     // from the backend entry path only (see auditSource above); never from
     // request bodies, query params, or client-supplied values.
@@ -383,6 +435,12 @@ function syncOpenData(invocationSource) {
       success: successfulPairs, failed: failedPairs,
       fresh: freshRows, retained: retainedRows,
       failed_pairs: failedPairIds, failed_details: failedPairDetails, commit: commitFlag,
+      // GAS-VERIFY-02/04: disclosure that the pre-write text formatting COMPLETED
+      // before a commit that did not verify — the rectangle's cell formats were
+      // switched to '@' even when values were not (or may not have been) written.
+      // Absent when the format call itself threw: completion is not established
+      // (and partial format application is not ruled out either).
+      ...(prewriteFormatApplied && commitFlag !== 'verified' ? { prewrite_format_applied: true } : {}),
       source: auditSource
     });
     try { logAction('SYSTEM', 'Cron', 'sync_opendata', summary); } catch (e) { /* audit failure must not undo the committed cache or mask the intended result */ }
