@@ -1,0 +1,9 @@
+// Cloudflare Worker configuration for the epi-coverage OpenData relay (Issue #39 / ADR-0005).
+// NOTE: the HMAC secret is NEVER placed here. It is provisioned out-of-band via
+// `wrangler secret put OPENDATA_RELAY_HMAC_SECRET` (encrypted Worker secret) —
+// see ADR-0005 secret ownership. No `vars` belong in this file.
+{
+  "name": "epi-coverage-opendata-relay",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-06-01"
+}
