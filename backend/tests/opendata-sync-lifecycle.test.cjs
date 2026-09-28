@@ -60,13 +60,41 @@ function createHarness({
   lockAvailable = true,
   failOnDataWrite = false,    // managed data setValues throws BEFORE mutating
   corruptPostWriteReads = false, // first data-region reads after a write observe a mismatch
+  numericAsTextUnderTextFormat = false, // '@'-formatted cells return typed Numbers as their exact decimal text
+  failAfterWrite = false,     // first post-write verification read throws (read-back phase exception)
+  tamperCells = null,         // [{r, c, v}] one-based data-region coordinates rewritten on post-write reads
+  failOnNumberFormat = false, // managed-range setNumberFormat throws before any format is applied
+  failOnDataWriteAfterMutation = false, // managed setValues applies values THEN throws (applied-then-threw)
+  failOnFlush = false,        // SpreadsheetApp.flush throws after a completed write
 } = {}) {
   const events = [];
   const audit = [];
   const fetches = [];
-  const ops = { dataSetValues: [], dataClearContent: 0, headerWrites: 0, formatting: 0 };
+  const ops = { dataSetValues: [], dataClearContent: 0, headerWrites: 0, formatting: 0, numberFormatsApplied: [] };
   let uuidCounter = 0;
   let written = false; // becomes true after the first managed data write
+  let afterWriteFailureThrown = false; // failAfterWrite fires once, on the first post-write read
+  const cellFormats = [];     // per-cell number format state (undefined ⇒ Automatic)
+
+  /**
+   * GAS-VERIFY-02: minimal model of Google Sheets entry parsing (USER_ENTERED
+   * semantics) for values written THROUGH setValues — the behavior observed in
+   * production on 2026-09-28 (fiscal_year/hospcode/areacode stored as numeric
+   * cell values). A String that looks like a plain decimal number and is written
+   * into a cell whose format is NOT plain text ('@') is stored as a Number
+   * (leading zeros lost). Typed Numbers stay Numbers, except under
+   * numericAsTextUnderTextFormat where a Number written into a '@' cell is
+   * stored as its exact decimal text (the uncertain real-world representation
+   * the retained-legacy compatibility must tolerate). Date parsing is
+   * deliberately NOT modeled (unproven in production; '@' removes the exposure).
+   * Values seeded via `records` model already-stored state and are never re-parsed.
+   */
+  const NUMERIC_STRING = /^-?\d+(\.\d+)?$/;
+  const applyEntrySemantics = (value, format) => {
+    if (typeof value === 'string' && format !== '@' && NUMERIC_STRING.test(value)) return Number(value);
+    if (typeof value === 'number' && Number.isFinite(value) && format === '@' && numericAsTextUnderTextFormat) return String(value);
+    return value;
+  };
   // Issue #37: virtual time — Utilities.sleep records and advances a clock instead of
   // really sleeping, so pacing/backoff stays fast and deterministic to observe.
   let now = 0;
@@ -90,12 +118,26 @@ function createHarness({
       return {
         getValues() {
           if (isDataRegion) events.push('sheet:data-read');
+          if (isDataRegion && written && failAfterWrite && !afterWriteFailureThrown) {
+            // GAS-VERIFY-02: deterministic post-write (flush/verification-read) exception.
+            afterWriteFailureThrown = true;
+            throw new Error('harness: configured post-write verification failure');
+          }
           const out = Array.from({ length: height }, (_, i) =>
             Array.from({ length: width }, (_, j) => cells[row - 1 + i]?.[column - 1 + j] ?? ''));
           if (isDataRegion && corruptPostWriteReads && written) {
             // Deterministic post-write observation mismatch for commit verification tests.
             out.push(['corrupt', ...Array(width - 1).fill('')]);
             return out;
+          }
+          if (isDataRegion && written && tamperCells) {
+            // GAS-VERIFY-02: targeted single-cell observation corruption (e.g. one identifier
+            // read back in its coerced numeric form) — proves genuine mismatches are never
+            // suppressed by the verification fix.
+            for (const t of tamperCells) {
+              const i = t.r - 2, j = t.c - 1; // one-based data-region coordinates → matrix indices
+              if (i >= 0 && i < out.length && j >= 0 && j < width) out[i][j] = t.v;
+            }
           }
           return out;
         },
@@ -105,17 +147,47 @@ function createHarness({
             if (failOnDataWrite) throw new Error('harness: configured data write failure (before mutation)');
             ops.dataSetValues.push({ row, column, height, width });
             events.push('sheet:data-write');
+            if (failOnDataWriteAfterMutation) {
+              // GAS-VERIFY-04: values applied, THEN the call throws — models a write whose
+              // response was lost after the batch was already applied server-side. From the
+              // sync code's perspective this is indistinguishable from a pre-mutation throw.
+              values.forEach((entry, i) => {
+                cells[row - 1 + i] ||= [];
+                cellFormats[row - 1 + i] ||= [];
+                entry.forEach((value, j) => {
+                  cells[row - 1 + i][column - 1 + j] = applyEntrySemantics(value, cellFormats[row - 1 + i][column - 1 + j]);
+                });
+              });
+              written = true;
+              throw new Error('harness: configured data write failure (after mutation)');
+            }
           }
           values.forEach((entry, i) => {
             cells[row - 1 + i] ||= [];
-            entry.forEach((value, j) => { cells[row - 1 + i][column - 1 + j] = value; });
+            cellFormats[row - 1 + i] ||= [];
+            entry.forEach((value, j) => {
+              cells[row - 1 + i][column - 1 + j] = applyEntrySemantics(value, cellFormats[row - 1 + i][column - 1 + j]);
+            });
           });
           if (isDataRegion) written = true;
           return this;
         },
         setValue(value) { cells[row - 1][column - 1] = value; return this; },
         clearContent() { if (isDataRegion) { ops.dataClearContent++; events.push('sheet:data-clear'); } return this; },
-        setNumberFormat() { ops.formatting++; return this; },
+        setNumberFormat(format) {
+          if (failOnNumberFormat) throw new Error('harness: configured number-format failure');
+          ops.formatting++;
+          if (format === '@') {
+            // GAS-VERIFY-02: track plain-text formatting of the managed rectangle so
+            // entry parsing can be modeled and format applications asserted.
+            ops.numberFormatsApplied.push({ row, column, height, width, format });
+            for (let i = 0; i < height; i++) {
+              cellFormats[row - 1 + i] ||= [];
+              for (let j = 0; j < width; j++) cellFormats[row - 1 + i][column - 1 + j] = format;
+            }
+          }
+          return this;
+        },
         setFontWeight() { ops.formatting++; return this; }, setBackground() { ops.formatting++; return this; },
       };
     },
@@ -155,7 +227,12 @@ function createHarness({
       formatDate: value => String(value),
       sleep: ms => { sleeps.push({ ms, at: now }); now += ms; }, // #37: virtual sleep — no real waiting
     },
-    SpreadsheetApp: { flush() { events.push('sheet:flush'); } },
+    SpreadsheetApp: {
+      flush() {
+        if (failOnFlush) throw new Error('harness: configured flush failure'); // GAS-VERIFY-04
+        events.push('sheet:flush');
+      },
+    },
     UrlFetchApp: {
       fetch: (_url, options) => {
         const payload = JSON.parse(options.payload);
@@ -176,7 +253,7 @@ function createHarness({
     },
   });
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/OpenData.js'), 'utf8'), context);
-  return { context, sheet, cells, events, audit, fetches, ops, lock, sleeps, attempts };
+  return { context, sheet, cells, cellFormats, events, audit, fetches, ops, lock, sleeps, attempts };
 }
 
 /** Run syncOpenData capturing either a returned result or a thrown error.
@@ -978,4 +1055,203 @@ test('#37f explicit manual lifecycle invocation is audited as manual source', ()
   assert.equal(ev.grab('commit'), 'verified', 'commit verification remains successful');
   assert.equal(h.lock.acquired, 1, 'lock acquired exactly once');
   assert.equal(h.lock.releases, 1, 'lock released exactly once');
+});
+
+// --- GAS-VERIFY-02: cache write/read-back fidelity (schema-aware verification) ---
+//
+// Production incident (2026-09-28 18:58 ICT): the first fresh write through the
+// post-#16 verification path reported commit_uncertain although all 566 rows
+// committed. Live read-only sheet evidence showed fiscal_year/hospcode/areacode
+// stored as NUMERIC cell values: Automatic cell formatting parsed the
+// numeric-looking strings intended as text, so the strict JSON read-back
+// comparison could never pass on fresh rows, and leading-zero identifiers had
+// no write-time text protection at all.
+//
+// The harness now models USER_ENTERED entry parsing for values written through
+// setValues (see applyEntrySemantics): numeric-looking strings become Numbers
+// in Automatic cells and stay verbatim in '@' (plain text) cells. Seeded
+// `records` keep modeling arbitrary already-stored state and are never
+// re-parsed. Contracts under test, through the real syncOpenData lifecycle:
+//   02a numeric-looking fiscal_year string commits as text and the sync verifies
+//   02b leading-zero hospcode stays an exact text identifier
+//   02c numeric-looking areacode commits as text
+//   02d numeric upstream identifiers commit as text; raw_json keeps the source verbatim
+//   02e retained legacy numeric cells verify under both number and exact-text reads
+//   02f genuine read-back corruption still yields commit_uncertain (no weakening)
+//   02g/GAS-VERIFY-04 exception & verification windows: format-throw, write-throw
+//      (before and after simulated mutation), flush-throw, read-back-throw, genuine
+//      mismatch, and a fully verified commit — result status AND audit commit flag asserted
+//   02h raw_json exact-content preservation on the committed rectangle
+// All fixtures are synthetic aggregate markers; no production rows, tokens, or URLs.
+
+const FRESH_OK_ROW = { areacode: '540601', hospcode: '10769', bcg_01: '1' };
+const emptyUpstream = (table, response) => ({
+  [`${table}|${FY}`]: response,
+  ...Object.fromEntries(DATASETS.filter(t => t !== table).map(t => [`${t}|${FY}`, json200([])])),
+});
+
+test('GAS-VERIFY-02a numeric-looking fiscal_year string is committed as text and the sync verifies', () => {
+  const h = createHarness({ upstream: emptyUpstream('s_epi1', json200([FRESH_OK_ROW])) });
+  const outcome = runSync(h.context);
+  const ev = evidence(outcome, h.audit);
+  assert.ok(!outcome.thrown, 'sync must not throw');
+  assert.equal(ev.grab('status'), 'success',
+    'the production incident shape (fresh numeric-looking strings) must not be reported commit_uncertain');
+  assert.equal(ev.grab('commit'), 'verified', 'text-protected fresh rows pass commit verification');
+  const fresh = findRow(h, 's_epi1');
+  assert.ok(fresh, 'fresh row committed');
+  assert.strictEqual(fresh.fiscal_year, FY, 'fiscal_year is stored as the exact text string, not a number');
+});
+
+test('GAS-VERIFY-02b leading-zero hospcode identifier is preserved exactly as text', () => {
+  const h = createHarness({ upstream: emptyUpstream('s_epi1', json200([{ areacode: '540601', hospcode: '0540110203', dtp_03: '1' }])) });
+  const outcome = runSync(h.context);
+  const ev = evidence(outcome, h.audit);
+  assert.equal(ev.grab('status'), 'success', 'identifier-heavy fresh rows verify');
+  assert.equal(ev.grab('commit'), 'verified', 'commit verification succeeds for text identifiers');
+  const fresh = findRow(h, 's_epi1');
+  assert.ok(fresh, 'fresh row committed');
+  assert.strictEqual(fresh.hospcode, '0540110203', 'leading zeros survive byte-for-byte as a string cell');
+  assert.ok(!cacheRows(h).some(r => r.hospcode === 540110203), 'no numeric identifier mutant row exists');
+});
+
+test('GAS-VERIFY-02c numeric-looking areacode is committed as text', () => {
+  const h = createHarness({ upstream: emptyUpstream('s_epi1', json200([{ areacode: '540601', hospcode: '' }])) });
+  const outcome = runSync(h.context);
+  const ev = evidence(outcome, h.audit);
+  assert.equal(ev.grab('commit'), 'verified', 'commit verification succeeds');
+  const fresh = findRow(h, 's_epi1');
+  assert.ok(fresh, 'fresh row committed');
+  assert.strictEqual(fresh.areacode, '540601', 'areacode is stored as the exact text string, not a number');
+  assert.strictEqual(fresh.hospcode, '', 'empty hospcode stays an empty string');
+});
+
+test('GAS-VERIFY-02d numeric upstream identifiers are committed as text while raw_json keeps the source verbatim', () => {
+  const NUMERIC_SOURCE_ROW = { areacode: 540601, hospcode: 10769, bcg_01: '1' };
+  const h = createHarness({ upstream: emptyUpstream('s_epi1', json200([NUMERIC_SOURCE_ROW])) });
+  const outcome = runSync(h.context);
+  const ev = evidence(outcome, h.audit);
+  assert.equal(ev.grab('commit'), 'verified', 'string-normalized identifiers verify');
+  const fresh = findRow(h, 's_epi1');
+  assert.ok(fresh, 'fresh row committed');
+  assert.strictEqual(fresh.areacode, '540601', 'numeric areacode source is stored as its exact text form');
+  assert.strictEqual(fresh.hospcode, '10769', 'numeric hospcode source is stored as its exact text form');
+  assert.deepEqual(JSON.parse(String(fresh.raw_json)), NUMERIC_SOURCE_ROW,
+    'raw_json preserves the upstream source verbatim (numeric types intact inside JSON)');
+});
+
+test('GAS-VERIFY-02e retained legacy numeric cells verify under both number and exact-text read-back', () => {
+  const legacyRow = { // numeric stored cells — the production-observed legacy state
+    sync_id: 'hist-1', table_name: 's_epi2', fiscal_year: 2569, hospcode: 2, areacode: 540601,
+    raw_json: '{"areacode":540601}', updated_at: '2026-01-01T00:00:00Z',
+  };
+  const build = extra => createHarness({
+    records: [legacyRow],
+    upstream: {
+      [`s_epi1|${FY}`]: json200([FRESH_OK_ROW]),
+      [`s_epi2|${FY}`]: upstreamResponse(503, 'synthetic unavailable'), // failed pair → legacy retention
+      [`s_epi3|${FY}`]: json200([]), [`s_epi5|${FY}`]: json200([]), [`s_epi_complete|${FY}`]: json200([]),
+    },
+    ...extra,
+  });
+  for (const h of [build(), build({ numericAsTextUnderTextFormat: true })]) {
+    const outcome = runSync(h.context);
+    const ev = evidence(outcome, h.audit);
+    assert.equal(ev.grab('status'), 'partial_success', 'pair semantics unchanged for this scenario');
+    assert.equal(ev.grab('commit'), 'verified',
+      'retained legacy numeric cells must not false-positive the verification under either representation');
+    const retained = findRow(h, 's_epi2');
+    assert.ok(retained, 'legacy row retained');
+    assert.equal(String(retained.fiscal_year), FY, 'retained legacy content preserved (any representation)');
+    assert.equal(String(retained.hospcode), '2', 'retained legacy content preserved');
+  }
+});
+
+test('GAS-VERIFY-02f genuine read-back corruption still yields commit_uncertain (verification is not weakened)', () => {
+  // Case A — whole-observation corruption (existing mechanism) stays a mismatch
+  const a = createHarness({ corruptPostWriteReads: true, upstream: emptyUpstream('s_epi1', json200([FRESH_OK_ROW])) });
+  const evA = evidence(runSync(a.context), a.audit);
+  assert.ok(!evA.isNormalSuccess, 'a corrupted observation is never reported as success');
+  assert.ok(/uncertain/.test(evA.joined), 'corruption is classified as commit uncertainty');
+
+  // Case B — a single identifier cell observed in its coerced numeric form (the historical
+  // corruption signature) must remain a MISMATCH for a string-intended cell: type-tolerant
+  // comparison may only ever apply to retained legacy Number cells, never to fresh text.
+  const hospcodeColumn = CANONICAL_HEADER.indexOf('hospcode') + 1;
+  const b = createHarness({
+    tamperCells: [{ r: 2, c: hospcodeColumn, v: 540110203 }],
+    upstream: emptyUpstream('s_epi1', json200([{ areacode: '540601', hospcode: '0540110203' }])),
+  });
+  const evB = evidence(runSync(b.context), b.audit);
+  assert.equal(evB.grab('status'), 'commit_uncertain',
+    'a leading-zero identifier read back as a number is NOT semantic parity');
+  assert.equal(evB.grab('commit'), 'uncertain', 'commit flag stays uncertain');
+  assert.equal(syncAuditCount(b), 1, 'exactly one sanitized sync audit');
+});
+
+test('GAS-VERIFY-04 exception and verification windows classify result status and audit commit flag honestly', () => {
+  // Seven commit windows, each asserted at BOTH surfaces: the returned result status and
+  // the sanitized audit summary's commit flag. The applied-then-threw case (c) is the
+  // honesty core: a write that may have mutated values before throwing can never be
+  // classified/described as a definitely-untouched commit_failure.
+  //   (a) setNumberFormat throws before setValues is attempted → commit_failure/"failed",
+  //       marker absent (formatting completion not established), values provably unwritten
+  //       (setValues never invoked); no claim anywhere that formatting stayed unchanged.
+  //   (b) setValues throws BEFORE simulated mutation → attempted ⇒ ambiguous ⇒ commit_uncertain.
+  //   (c) setValues throws AFTER simulated mutation → commit_uncertain, never commit_failure.
+  //   (d) flush throws after a completed write → commit_uncertain.
+  //   (e) verification read-back throws → commit_uncertain.
+  //   (f) genuine read-back mismatch → commit_uncertain + "uncertain" (never "verified").
+  //   (g) fully verified commit → success + "verified", no disclosure marker.
+  const CASES = [
+    { name: 'format-throw', opts: { failOnNumberFormat: true }, status: 'commit_failure', commit: 'failed', marker: false },
+    { name: 'write-throw-before-mutation', opts: { failOnDataWrite: true }, status: 'commit_uncertain', commit: 'uncertain', marker: true },
+    { name: 'write-throw-after-mutation', opts: { failOnDataWriteAfterMutation: true }, status: 'commit_uncertain', commit: 'uncertain', marker: true },
+    { name: 'flush-throw', opts: { failOnFlush: true }, status: 'commit_uncertain', commit: 'uncertain', marker: true },
+    { name: 'read-back-throw', opts: { failAfterWrite: true }, status: 'commit_uncertain', commit: 'uncertain', marker: true },
+    { name: 'genuine-mismatch', opts: { corruptPostWriteReads: true }, status: 'commit_uncertain', commit: 'uncertain', marker: true },
+  ];
+  for (const c of CASES) {
+    const h = createHarness({ ...c.opts, upstream: emptyUpstream('s_epi1', json200([FRESH_OK_ROW])) });
+    const outcome = runSync(h.context);
+    const ev = evidence(outcome, h.audit);
+    assert.ok(!outcome.thrown, `[${c.name}] commit-phase exceptions must not escape the lifecycle`);
+    assert.ok(!ev.isNormalSuccess, `[${c.name}] a non-verified commit is never reported as success`);
+    assert.equal(ev.grab('status'), c.status, `[${c.name}] result status`);
+    assert.equal(ev.grab('commit'), c.commit, `[${c.name}] audit commit flag`);
+    assert.equal(syncAuditCount(h), 1, `[${c.name}] exactly one sanitized sync audit`);
+    const summary = JSON.parse(syncAuditText(h));
+    assert.equal(summary.prewrite_format_applied === true, c.marker,
+      `[${c.name}] prewrite_format_applied must be ${c.marker} (disclosed only when formatting COMPLETED before a later failure)`);
+    assert.ok(!(summary.status === 'commit_uncertain' && summary.commit === 'verified'),
+      `[${c.name}] never status commit_uncertain with commit "verified"`);
+    if (c.name === 'format-throw') {
+      assert.equal(h.ops.dataSetValues.length, 0, 'setValues was never invoked — values provably untouched');
+      assert.equal(h.cells.slice(1).filter(r => r.some(cell => cell !== '' && cell != null)).length, 0,
+        'no value rows exist');
+    }
+  }
+
+  // (g) a fully verified commit: success + "verified" and no disclosure marker at all.
+  const g = createHarness({ upstream: emptyUpstream('s_epi1', json200([FRESH_OK_ROW])) });
+  const outcomeG = runSync(g.context);
+  const evG = evidence(outcomeG, g.audit);
+  assert.ok(!outcomeG.thrown, 'clean sync completes');
+  assert.equal(evG.grab('status'), 'success', 'result status success');
+  assert.equal(evG.grab('commit'), 'verified', 'audit commit flag verified');
+  const summaryG = JSON.parse(syncAuditText(g));
+  assert.ok(!('prewrite_format_applied' in summaryG), 'a verified commit carries no format-failure disclosure');
+});
+
+test('GAS-VERIFY-02h raw_json exact-content preservation on the committed rectangle', () => {
+  const SOURCE = { areacode: '540601', hospcode: '10769', note: 'numeric-looking 2569 inside text', nested: { v: '08' } };
+  const h = createHarness({ upstream: emptyUpstream('s_epi1', json200([SOURCE])) });
+  const outcome = runSync(h.context);
+  const ev = evidence(outcome, h.audit);
+  assert.equal(ev.grab('commit'), 'verified', 'commit verification succeeds');
+  const fresh = findRow(h, 's_epi1');
+  assert.ok(fresh, 'row committed');
+  assert.strictEqual(fresh.raw_json, JSON.stringify(SOURCE), 'raw_json cell is byte-identical to the serialized source');
+  assert.deepEqual(JSON.parse(String(fresh.raw_json)), SOURCE, 'parsed content round-trips exactly');
+  assert.ok(String(fresh.raw_json).includes('"08"'), 'numeric-looking nested strings survive inside raw_json');
 });
