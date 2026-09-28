@@ -56,7 +56,7 @@ const rowByHeader = (header, record) => header.map(column => record[column] ?? '
 function createHarness({
   header = CANONICAL_HEADER,
   records = [],               // semantic record objects → positioned via `header`
-  upstream = {},              // `${table}|${FY}` → response; missing key = hard harness error
+  upstream = {},              // `${table}|${FY}` → response | Error | array of those (scripted per-attempt sequence)
   lockAvailable = true,
   failOnDataWrite = false,    // managed data setValues throws BEFORE mutating
   corruptPostWriteReads = false, // first data-region reads after a write observe a mismatch
@@ -67,6 +67,12 @@ function createHarness({
   const ops = { dataSetValues: [], dataClearContent: 0, headerWrites: 0, formatting: 0 };
   let uuidCounter = 0;
   let written = false; // becomes true after the first managed data write
+  // Issue #37: virtual time — Utilities.sleep records and advances a clock instead of
+  // really sleeping, so pacing/backoff stays fast and deterministic to observe.
+  let now = 0;
+  const sleeps = [];   // { ms, at } — every Utilities.sleep call in virtual ms
+  const attempts = []; // { key, at, status } — every upstream wire attempt in arrival order
+  const scripted = new Map(); // `${table}|${FY}` → remaining scripted responses (array configs only)
 
   const cells = [[...header], ...records.map(record => rowByHeader(header, record))];
   let maxRows = Math.max(2, cells.length + 4), maxColumns = Math.max(12, header.length + 4);
@@ -144,28 +150,46 @@ function createHarness({
     arrayToObj: (headers, row) => Object.fromEntries(headers.map((field, index) => [field, row[index]])),
     LockService: { getScriptLock: () => scriptLock },
     CacheService: { getScriptCache: () => ({ get: () => null, put() {} }) },
-    Utilities: { getUuid: () => `uuid-${++uuidCounter}`, formatDate: value => String(value) },
+    Utilities: {
+      getUuid: () => `uuid-${++uuidCounter}`,
+      formatDate: value => String(value),
+      sleep: ms => { sleeps.push({ ms, at: now }); now += ms; }, // #37: virtual sleep — no real waiting
+    },
     SpreadsheetApp: { flush() { events.push('sheet:flush'); } },
     UrlFetchApp: {
       fetch: (_url, options) => {
         const payload = JSON.parse(options.payload);
         const key = `${payload.tableName}|${payload.year}`;
-        const response = upstream[key];
+        let response = upstream[key];
+        if (Array.isArray(response)) { // #37: scripted per-attempt sequence, consumed in order
+          if (!scripted.has(key)) scripted.set(key, [...response]);
+          const queue = scripted.get(key);
+          if (queue.length === 0) throw new Error(`harness: scripted responses exhausted for ${key}`);
+          response = queue.shift();
+        }
         if (!response) throw new Error(`harness: no synthetic response configured for ${key}`);
         fetches.push(key); events.push('upstream:fetch');
+        attempts.push({ key, at: now, status: response instanceof Error ? null : response.getResponseCode() });
         if (response instanceof Error) throw response; // #35: deterministic fetch exception (no retry expected)
         return response;
       },
     },
   });
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/OpenData.js'), 'utf8'), context);
-  return { context, sheet, cells, events, audit, fetches, ops, lock };
+  return { context, sheet, cells, events, audit, fetches, ops, lock, sleeps, attempts };
 }
 
-/** Run syncOpenData capturing either a returned result or a thrown error. */
-function runSync(c) {
+/** Run syncOpenData capturing either a returned result or a thrown error.
+ *  #37f: optional invocationSource forwards the trusted internal argument
+ *  (e.g. 'manual'). When omitted, the exact no-argument (trigger-shaped)
+ *  lifecycle path is exercised — existing tests keep that behavior. */
+function runSync(c, invocationSource) {
   const outcome = {};
-  try { outcome.result = c.syncOpenData(); } catch (error) { outcome.thrown = error; }
+  try {
+    outcome.result = invocationSource === undefined
+      ? c.syncOpenData()
+      : c.syncOpenData(invocationSource);
+  } catch (error) { outcome.thrown = error; }
   return outcome;
 }
 
@@ -646,4 +670,312 @@ test('#35f all-pairs upstream_failure keeps lifecycle semantics and gains one sa
   const auditText = syncAuditText(h);
   assert.ok(!BODY_SENTINELS.some(s => auditText.includes(s)) && !auditText.includes('DOCTYPE'),
     'no raw upstream response bodies in the audit');
+});
+
+// --- #37 RED (tracer bullet): transient upstream failure resilience ---
+//
+// Issue #37 contract under test: a transient HTTP 429 for one dataset/FY pair is
+// retried once after a bounded ~5000ms backoff; the pair's second (successful)
+// response makes it a FINAL SUCCESS. All other pairs use simple successful
+// responses so this test isolates exactly one behavior. Observables are the
+// upstream wire stream (attempt count/order, virtual inter-attempt gap), the
+// single sync_opendata audit summary, the committed cache, and lock events —
+// never internal helpers. Retry eligibility itself (numeric status 429/5xx) is
+// exercised behaviorally here; no assertion touches private structure.
+// The prior #35d "no retry" pin covers fetch EXCEPTIONS (still single-attempt
+// per #37) and is therefore not contradicted by this contract.
+
+test('#37a transient HTTP 429 is retried with bounded backoff and becomes a final success for that pair', () => {
+  const THROTTLE_BODY_SENTINEL = 'synthetic-throttle-body-sentinel-37a';
+  const FRESH_ROW_S_EPI2 = { areacode: '540602', hospcode: '00003', dtp_03: '1' };
+  const h = createHarness({
+    upstream: {
+      [`s_epi1|${FY}`]: json200([]),
+      // the isolated behavior: attempt 1 → HTTP 429, attempt 2 → valid synthetic 200 JSON
+      [`s_epi2|${FY}`]: [upstreamResponse(429, THROTTLE_BODY_SENTINEL), json200([FRESH_ROW_S_EPI2])],
+      [`s_epi3|${FY}`]: json200([]), [`s_epi5|${FY}`]: json200([]), [`s_epi_complete|${FY}`]: json200([]),
+    },
+  });
+  const outcome = runSync(h.context);
+  const ev = evidence(outcome, h.audit);
+
+  // 1. the transient pair is fetched exactly twice (RED today: exactly one attempt — no retry exists)
+  const s2Attempts = h.attempts.filter(a => a.key === `s_epi2|${FY}`);
+  assert.equal(s2Attempts.length, 2,
+    `expected 2 wire attempts for transient HTTP 429 on s_epi2:${FY} (bounded retry), actual ${s2Attempts.length}`);
+
+  // 2–3. a bounded retry delay of ~5000ms (Issue #37) is observable between attempt 1 and attempt 2
+  const retryGapMs = s2Attempts[1].at - s2Attempts[0].at;
+  assert.ok(retryGapMs >= 4000 && retryGapMs <= 6000,
+    `first retry delay must be approximately 5000ms per Issue #37 — observed virtual gap ${retryGapMs}ms`);
+  assert.ok(h.sleeps.some(s => s.ms >= 4000 && s.ms <= 6000),
+    'backoff must be a bounded delay observable at the Utilities.sleep service boundary');
+
+  // 4. the successful second response makes the pair a final success (overall run succeeds)
+  assert.equal(ev.grab('success'), 5, 'all five pairs count as successful after the retry recovers');
+  assert.equal(ev.grab('failed'), 0, 'no pair may count as failed');
+  assert.equal(ev.grab('status'), 'success', 'overall status must be success');
+  assert.equal(ev.grab('commit'), 'verified', 'commit semantics unchanged');
+  const fresh = findRow(h, 's_epi2');
+  assert.ok(fresh && String(fresh.areacode).startsWith('5406'), 'the recovered pair contributes fresh committed rows');
+
+  // 5–6. the recovered pair must not appear as a final failed pair anywhere in the audit
+  const summary = JSON.parse(String(h.audit.find(a => a.action === 'sync_opendata').details));
+  assert.ok(![...(summary.failed_pairs || [])].some(p => String(p).includes('s_epi2')),
+    'recovered pair must not appear in failed_pairs');
+  const details = pairFailureDetails(h.audit);
+  assert.ok(!details.some(d => d.pair.includes('s_epi2')),
+    'recovered pair must not appear in failed_details');
+
+  // 7. the final lifecycle result does not count the pair as failed
+  assert.equal(outcome.result && outcome.result.failed_pairs, 0, 'result failed_pairs count excludes the recovered pair');
+
+  // 8. still exactly one normal sync_opendata audit summary
+  assert.equal(syncAuditCount(h), 1, 'exactly one sync_opendata audit summary');
+
+  // 9. no raw upstream body (including the 429 body) is retained anywhere in the audit
+  const auditText = syncAuditText(h);
+  assert.ok(!auditText.includes(THROTTLE_BODY_SENTINEL) && !auditText.includes('DOCTYPE'),
+    'raw upstream 429 body must not be retained in the audit');
+
+  // 10. cache/commit/lock semantics remain observable and unchanged for this scenario
+  assert.equal(h.lock.acquired, 1, 'lock acquired exactly once');
+  assert.equal(h.lock.releases, 1, 'lock released exactly once');
+  assert.equal(h.ops.dataClearContent, 0, 'no clearContent on the managed cache');
+  for (const table of ['s_epi1', 's_epi3', 's_epi5', 's_epi_complete']) {
+    assert.equal(h.fetches.filter(key => key === `${table}|${FY}`).length, 1,
+      `unrelated pair ${table} stays at exactly one attempt (isolation)`);
+  }
+});
+
+// --- #37 RED (tracer bullet 2): the HTTP 5xx STATUS CLASS is transient ---
+//
+// Issue #37 contract: numeric statuses 500–599 share the bounded retry already
+// proven for 429 in #37a. This test exercises the CLASS, not one status: two
+// affected pairs use opposite class boundaries (500 and 599), each scripted
+// attempt 1 → 5xx, attempt 2 → valid 200 JSON. All other pairs are simple
+// successes so only 5xx-retry behavior is isolated. Observables stay at the
+// public seam: wire attempts (count/order/status/virtual timing), the single
+// audit summary, committed cache, and lock events. Permanent 4xx, exceptions,
+// and contract failures are NOT retried per #37 and are covered elsewhere.
+
+test('#37b transient HTTP 5xx responses are retried with bounded backoff and recovered pairs become final successes', () => {
+  const FRESH_ROW_A = { areacode: '540601', hospcode: '00011', bcg_01: '1' };   // recovery payload for the 500 pair
+  const FRESH_ROW_B = { areacode: '540602', hospcode: '00012', dtp_03: '1' };   // recovery payload for the 599 pair
+  const BODY_SENTINELS = {
+    s_epi1: 'synthetic-5xx-body-sentinel-37b-500',
+    s_epi2: 'synthetic-5xx-body-sentinel-37b-599',
+  };
+  const h = createHarness({
+    upstream: {
+      // pair A: lower class boundary
+      [`s_epi1|${FY}`]: [upstreamResponse(500, BODY_SENTINELS.s_epi1), json200([FRESH_ROW_A])],
+      // pair B: upper class boundary
+      [`s_epi2|${FY}`]: [upstreamResponse(599, BODY_SENTINELS.s_epi2), json200([FRESH_ROW_B])],
+      [`s_epi3|${FY}`]: json200([]), [`s_epi5|${FY}`]: json200([]), [`s_epi_complete|${FY}`]: json200([]),
+    },
+  });
+  const outcome = runSync(h.context);
+  const ev = evidence(outcome, h.audit);
+
+  // 1–4. per affected 5xx pair: exactly two wire attempts, first carries the
+  //      configured 5xx status, a ~5000ms bounded retry delay separates them,
+  //      and the second attempt succeeds (numeric status 200).
+  const affected = [
+    { table: 's_epi1', transientStatus: 500 },
+    { table: 's_epi2', transientStatus: 599 },
+  ];
+  for (const { table, transientStatus } of affected) {
+    const attempts = h.attempts.filter(a => a.key === `${table}|${FY}`);
+    assert.equal(attempts.length, 2,
+      `expected 2 wire attempts for transient HTTP ${transientStatus} on ${table}:${FY} (bounded 5xx-class retry), actual ${attempts.length}`);
+    assert.equal(attempts[0].status, transientStatus,
+      `attempt 1 for ${table}:${FY} must carry the configured 5xx status ${transientStatus}`);
+    assert.equal(attempts[1].status, 200,
+      `attempt 2 for ${table}:${FY} must be the successful recovery request`);
+    const retryGapMs = attempts[1].at - attempts[0].at;
+    assert.ok(retryGapMs >= 4000 && retryGapMs <= 6000,
+      `first retry delay for ${table}:${FY} must be approximately 5000ms per Issue #37 — observed virtual gap ${retryGapMs}ms`);
+  }
+
+  // 5. both recovered pairs count as final successes (whole run succeeds)
+  assert.equal(ev.grab('success'), 5, 'all five pairs count as successful after 5xx retries recover');
+  assert.equal(ev.grab('failed'), 0, 'no pair may count as failed');
+  assert.equal(ev.grab('status'), 'success', 'overall status must be success');
+  assert.ok(findRow(h, 's_epi1') && findRow(h, 's_epi2'), 'recovered pairs contribute fresh committed rows');
+
+  // 6–7. neither recovered pair appears as a final failed pair anywhere in the audit
+  const summary = JSON.parse(String(h.audit.find(a => a.action === 'sync_opendata').details));
+  for (const { table } of affected) {
+    assert.ok(![...(summary.failed_pairs || [])].some(p => String(p).includes(table)),
+      `recovered pair ${table} must not appear in failed_pairs`);
+  }
+  const details = pairFailureDetails(h.audit);
+  assert.ok(!details.some(d => d.pair.includes('s_epi1') || d.pair.includes('s_epi2')),
+    'recovered 5xx pairs must not appear in failed_details');
+  assert.equal(outcome.result && outcome.result.failed_pairs, 0, 'result failed_pairs count excludes both recovered pairs');
+
+  // 8–12. lifecycle isolation and unchanged semantics
+  for (const table of ['s_epi3', 's_epi5', 's_epi_complete']) {
+    assert.equal(h.fetches.filter(key => key === `${table}|${FY}`).length, 1,
+      `unaffected pair ${table} stays a single-attempt success`);
+  }
+  assert.equal(syncAuditCount(h), 1, 'exactly one normal sync_opendata audit summary');
+  const auditText = syncAuditText(h);
+  assert.ok(!Object.values(BODY_SENTINELS).some(s => auditText.includes(s)) && !auditText.includes('DOCTYPE'),
+    'no raw upstream 5xx body retained anywhere in the audit');
+  assert.equal(ev.grab('commit'), 'verified', 'commit verification remains successful');
+  assert.equal(h.lock.acquired, 1, 'lock acquired exactly once');
+  assert.equal(h.lock.releases, 1, 'lock released exactly once');
+});
+
+// --- #37 RED (tracer bullet 3): deliberate inter-pair pacing ---
+//
+// Issue #37 contract: completed dataset/FY-pair lifecycles are paced before the
+// next pair begins — strictly sequential fetches, a fixed ~2000ms inter-pair
+// delay (approved floor ≥1500ms), exactly four pacing intervals for five pairs,
+// and NO trailing delay after the final pair. This scenario isolates pacing
+// from retry/backoff: every pair succeeds on its first attempt, so any sleep
+// observed can only be pacing. Primary signal = upstream attempt timestamps on
+// the virtual clock; the Utilities.sleep log corroborates without coupling to
+// any private helper. No fetch latency is modeled by this harness, so gaps are
+// exactly the pacing delays once implemented.
+
+test('#37c successful dataset pairs are paced between lifecycles with no trailing delay', () => {
+  const h = createHarness({
+    upstream: Object.fromEntries(DATASETS.map(t => [`${t}|${FY}`, json200([])])), // all first-attempt successes
+  });
+  const outcome = runSync(h.context);
+  const ev = evidence(outcome, h.audit);
+
+  // 1–3. exactly five upstream attempts, once each, in canonical sequential order
+  assert.equal(h.attempts.length, 5, `expected exactly 5 upstream attempts, actual ${h.attempts.length}`);
+  assert.deepEqual(h.attempts.map(a => a.key), DATASETS.map(t => `${t}|${FY}`),
+    'attempts must stay sequential in canonical dataset order, each pair exactly once');
+
+  // 4–7. exactly four inter-pair pacing intervals: each next pair begins only
+  //      after ≥1500ms (approved floor) targeting ~2000ms since the previous
+  //      pair's attempt — observed via virtual attempt timestamps.
+  for (let i = 1; i < h.attempts.length; i++) {
+    const gapMs = h.attempts[i].at - h.attempts[i - 1].at;
+    assert.ok(gapMs >= 1500,
+      `inter-pair pacing: ${h.attempts[i].key} must begin at least 1500ms after ${h.attempts[i - 1].key} (Issue #37 ~2000ms target) — observed ${gapMs}ms`);
+    assert.ok(gapMs <= 2500,
+      `inter-pair pacing must stay a bounded fixed delay (~2000ms), observed ${gapMs}ms before ${h.attempts[i].key}`);
+  }
+  const pacingSleeps = h.sleeps;
+  assert.equal(pacingSleeps.length, 4,
+    `exactly four pacing sleeps for five completed pairs (and no trailing delay after the final pair) — observed ${pacingSleeps.length}`);
+  for (const s of pacingSleeps) {
+    assert.ok(s.ms >= 1500 && s.ms <= 2500,
+      `each pacing sleep must be approximately 2000ms — observed ${s.ms}ms`);
+  }
+
+  // 8–9. no sleep after the final pair and no retry/backoff sleeps in this
+  //      all-success scenario (backoff scale is 5000/10000ms — none may appear)
+  assert.ok(!h.sleeps.some(s => s.ms >= 4000), 'no retry/backoff-scale sleeps may occur when every pair succeeds first-attempt');
+
+  // 10–12. lifecycle semantics unchanged
+  assert.equal(ev.grab('success'), 5, 'all five pairs remain final successes');
+  assert.equal(ev.grab('failed'), 0, 'no failed pairs');
+  assert.equal(ev.grab('status'), 'success', 'overall status must be success');
+  assert.equal(syncAuditCount(h), 1, 'exactly one normal sanitized sync_opendata audit summary');
+  assert.equal(ev.grab('commit'), 'verified', 'commit verification unchanged');
+  assert.equal(h.lock.acquired, 1, 'lock acquired exactly once');
+  assert.equal(h.lock.releases, 1, 'lock released exactly once');
+});
+
+// --- #37 RED (tracer bullet 4): invocation-source observability (trigger shape) ---
+//
+// Issue #37 contract: the existing single sanitized sync_opendata audit summary
+// gains one field — `source` — derived from the backend entry path. This test
+// covers ONLY the trusted no-argument call shape `syncOpenData()`, which is the
+// only shape a time-driven Apps Script trigger can produce; it must be audited
+// as `source: "trigger"`. The manual Router path and client-spoofing rejection
+// belong to a later tracer bullet at the Router seam. Accepted caveat (#37): a
+// developer manually running bare syncOpenData() in the editor is also labeled
+// "trigger". Observables: the audit summary JSON only — no private helpers.
+
+test('#37d no-argument sync invocation is audited as trigger source', () => {
+  const h = createHarness({
+    upstream: Object.fromEntries(DATASETS.map(t => [`${t}|${FY}`, json200([])])), // simple all-success scenario
+  });
+  // 1. the real lifecycle entry point invoked with NO source argument — the
+  //    canonical trigger-shaped call (runSync's call shape is syncOpenData()).
+  const outcome = runSync(h.context);
+  const ev = evidence(outcome, h.audit);
+
+  // 2–3. the sync itself succeeds normally with every pair successful
+  assert.equal(ev.grab('status'), 'success', 'sync succeeds normally');
+  assert.equal(ev.grab('success'), 5, 'all five pairs remain successful');
+  assert.equal(ev.grab('failed'), 0, 'no failed pairs');
+  assert.ok(!outcome.thrown, 'no thrown error');
+
+  // 4. exactly one normal sync_opendata audit summary is produced
+  assert.equal(syncAuditCount(h), 1, 'exactly one sync_opendata audit summary');
+  const summary = JSON.parse(String(h.audit.find(a => a.action === 'sync_opendata').details));
+
+  // 5. the audit carries exactly the approved invocation-source value
+  assert.equal(summary.source, 'trigger',
+    `expected sync audit source "trigger" for a no-argument (trigger-shaped) invocation, actual ${JSON.stringify(summary.source)}`);
+
+  // 6–8. no second audit row for source metadata, no raw request metadata or
+  //      sensitive material anywhere in the audit text
+  assert.equal(h.audit.filter(a => a.action === 'sync_opendata').length, 1,
+    'source metadata must not create a second audit row');
+  const auditText = syncAuditText(h);
+  assert.ok(!/\b(token|payload|authorization|auth_token)\b/i.test(auditText),
+    'audit must not retain request bodies, tokens, or credentials');
+  assert.ok(!Array.isArray(summary.failed_details) || summary.failed_details.length === 0,
+    'all-success scenario has no failure diagnostics to expand');
+
+  // 9–10. lifecycle semantics unchanged
+  assert.equal(ev.grab('commit'), 'verified', 'commit verification remains successful');
+  assert.equal(h.lock.acquired, 1, 'lock acquired exactly once');
+  assert.equal(h.lock.releases, 1, 'lock released exactly once');
+});
+
+// --- #37 (review correction): manual lifecycle invocation source ---
+//
+// #37f exists because the two-axis review mutation-proved a coverage gap: a typo
+// in the normalization comparison would mislabel real manual lifecycle runs as
+// "trigger" while every other permanent test stayed green (#37e spies at the
+// Router boundary; #37d pins only the trigger branch). This contract exercises
+// the REAL lifecycle with the trusted internal argument and pins the audit
+// value itself. Simplest successful scenario — all pairs first-attempt 200s,
+// pacing runs through virtual time; about invocation-source audit behavior only.
+
+test('#37f explicit manual lifecycle invocation is audited as manual source', () => {
+  const h = createHarness({
+    upstream: Object.fromEntries(DATASETS.map(t => [`${t}|${FY}`, json200([])])), // simple all-success scenario
+  });
+  // 1. the real lifecycle invoked with the trusted internal argument
+  const outcome = runSync(h.context, 'manual');
+  const ev = evidence(outcome, h.audit);
+
+  assert.ok(!outcome.thrown, 'real syncOpenData("manual") completes without throwing');
+  assert.equal(ev.grab('status'), 'success', 'the manual invocation completes successfully');
+  assert.equal(ev.grab('success'), 5, 'all five pairs remain successful');
+
+  // 2. exactly one normal sync_opendata audit summary; no second row for source
+  assert.equal(syncAuditCount(h), 1, 'exactly one sync_opendata audit summary');
+  assert.equal(h.audit.filter(a => a.action === 'sync_opendata').length, 1,
+    'source metadata must not create a second audit row');
+  const summary = JSON.parse(String(h.audit.find(a => a.action === 'sync_opendata').details));
+
+  // 3–4. the audit carries exactly the manual source — never trigger for this path
+  assert.equal(summary.source, 'manual',
+    `expected audit source "manual" for an explicit manual lifecycle invocation, actual ${JSON.stringify(summary.source)}`);
+  assert.notEqual(summary.source, 'trigger',
+    'a manual invocation must never be audited as trigger');
+
+  // 5–6. sanitized audit shape remains intact (no bodies, tokens, or request metadata)
+  const auditText = syncAuditText(h);
+  assert.ok(!auditText.includes('DOCTYPE') && !/\b(token|payload|authorization|auth_token)\b/i.test(auditText),
+    'audit stays single, sanitized, and free of request metadata');
+
+  // 7–8. lifecycle semantics unchanged
+  assert.equal(ev.grab('commit'), 'verified', 'commit verification remains successful');
+  assert.equal(h.lock.acquired, 1, 'lock acquired exactly once');
+  assert.equal(h.lock.releases, 1, 'lock released exactly once');
 });

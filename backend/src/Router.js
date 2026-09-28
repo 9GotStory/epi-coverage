@@ -71,7 +71,10 @@ function handleRequest(method, e) {
     switch (action) {
       case 'getAllUsers': return responseJson(getAllUsers());
       case 'setup': return responseJson(setupDatabase());
-      case 'forceSyncOpenData': return responseJson(syncOpenData());
+      // Issue #37: manual invocation source originates server-side in this
+      // backend literal — client-supplied source values (body/query) are never
+      // read or forwarded.
+      case 'forceSyncOpenData': return responseJson(syncOpenData('manual'));
       case 'setupOpenDataTrigger': return responseJson(setupOpenDataTrigger());
       case 'upsertEpiData': return responseJson(upsertEpiData(body.chunk, body.batchId, authResult, body.fiscalYear, body.targetTable, body.options));
       case 'cleanupEpiData': return responseJson(cleanupEpiData(body.batchId, body.touchedHoscodes, authResult.email, body.fiscalYear, body.targetTable));

@@ -17,6 +17,29 @@ const OPENDATA_CONSTANTS = {
  */
 const OPENDATA_CACHE_COLUMNS = ['sync_id', 'table_name', 'fiscal_year', 'hospcode', 'areacode', 'raw_json', 'updated_at'];
 
+/**
+ * Issue #37: bounded transient-retry policy for one dataset/FY pair.
+ * Eligibility comes from the NUMERIC upstream HTTP status only — never from the
+ * diagnostic text, content-type, or response body. Transient statuses are HTTP 429
+ * and the whole 5xx class (500–599). Permanent 4xx responses (including 403),
+ * non-2xx contract failures (non_json/malformed_json/invalid_contract/json_error),
+ * and fetch exceptions stay single-attempt final outcomes.
+ * Backoff sleeps happen AFTER a failed attempt and never after the final one.
+ */
+const OPENDATA_TRANSIENT_RETRY = {
+  IS_TRANSIENT: status => status === 429 || (status >= 500 && status <= 599),
+  MAX_ATTEMPTS: 3,                    // bounded: at most 3 attempts per dataset/FY pair
+  BACKOFF_MS: { 1: 5000, 2: 10000 },  // after failed attempt 1 → ~5s, after failed attempt 2 → ~10s
+};
+
+/**
+ * Issue #37: fixed inter-pair pacing — a deterministic wait BETWEEN completed
+ * dataset/FY-pair lifecycles (never after the final overall pair). Deliberately
+ * separate from OPENDATA_TRANSIENT_RETRY backoff, which happens INSIDE a pair's
+ * attempt sequence. Fixed, not randomized, per the Issue #37 decision.
+ */
+const OPENDATA_INTER_PAIR_PACING_MS = 2000;
+
 /** คอลัมน์ที่เส้นทางอ่านต้องใช้จริง (data-bearing) — ขาด/ซ้ำ ต้อง fail closed */
 const OPENDATA_CACHE_READ_COLUMNS = ['table_name', 'fiscal_year', 'hospcode', 'raw_json'];
 
@@ -200,7 +223,13 @@ const OPENDATA_SYNC_LOCK_TIMEOUT_MS = 30000;
  * แทนที่แคชด้วย setValues สี่เหลี่ยมเดียว (padding ลบหางเดิม ไม่ clear ก่อนเขียน),
  * ตรวจ commit แบบมีขอบเขต และ audit สรุปกระชับ sanitized หนึ่งรายการ
  */
-function syncOpenData() {
+function syncOpenData(invocationSource) {
+  // Issue #37: trusted internal invocation source, derived from the backend
+  // entry path only. The authorized admin route passes its own server-side
+  // literal "manual"; a bare lifecycle call (the only shape a time-driven
+  // trigger can produce) and any other value normalize to "trigger".
+  // Never client-controlled — request bodies/params are not read here.
+  const auditSource = invocationSource === 'manual' ? 'manual' : 'trigger';
   // 1. Bounded lock BEFORE any schema/inventory/upstream/cache work (Issue #16)
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(OPENDATA_SYNC_LOCK_TIMEOUT_MS)) {
@@ -258,20 +287,30 @@ function syncOpenData() {
       return row;
     };
 
+    const totalPairs = yearsToSync.length * OPENDATA_CONSTANTS.DATASETS.length;
+    let completedPairs = 0;
     for (const year of yearsToSync) {
       for (const tableName of OPENDATA_CONSTANTS.DATASETS) {
-        // 3. Shared classifier decides every pair outcome (Issue #14)
+        // 3. Shared classifier decides every pair outcome (Issue #14);
+        //    Issue #37: bounded retry for transient upstream responses, decided
+        //    from the numeric HTTP status only (see OPENDATA_TRANSIENT_RETRY).
         let outcome;
-        try {
-          const response = UrlFetchApp.fetch(OPENDATA_CONSTANTS.ENDPOINT, {
-            method: "POST",
-            contentType: "application/json",
-            payload: JSON.stringify({ tableName: tableName, year: year, province: OPENDATA_CONSTANTS.PROVINCE, type: "json", limit: OPENDATA_CONSTANTS.LIMIT }),
-            muteHttpExceptions: true
-          });
-          outcome = classifyOpenDataResponse(response);
-        } catch (e) {
-          outcome = { category: 'http_error', diagnostic: 'request_failed' };
+        for (let attempt = 1; ; attempt++) {
+          let response = null;
+          try {
+            response = UrlFetchApp.fetch(OPENDATA_CONSTANTS.ENDPOINT, {
+              method: "POST",
+              contentType: "application/json",
+              payload: JSON.stringify({ tableName: tableName, year: year, province: OPENDATA_CONSTANTS.PROVINCE, type: "json", limit: OPENDATA_CONSTANTS.LIMIT }),
+              muteHttpExceptions: true
+            });
+            outcome = classifyOpenDataResponse(response);
+          } catch (e) {
+            outcome = { category: 'http_error', diagnostic: 'request_failed' };
+            break; // fetch/classify exceptions remain single-attempt final failures (#37)
+          }
+          if (!OPENDATA_TRANSIENT_RETRY.IS_TRANSIENT(response.getResponseCode()) || attempt >= OPENDATA_TRANSIENT_RETRY.MAX_ATTEMPTS) break;
+          Utilities.sleep(OPENDATA_TRANSIENT_RETRY.BACKOFF_MS[attempt]); // bounded backoff, never after the final attempt
         }
 
         if (outcome.category === 'success') {
@@ -292,6 +331,12 @@ function syncOpenData() {
             }
           }
         }
+
+        // Issue #37: pace between completed dataset/FY-pair lifecycles — never
+        // after the final overall pair. Multi-year safe: the count covers the
+        // complete ordered work sequence, not a single fiscal year.
+        completedPairs++;
+        if (completedPairs < totalPairs) Utilities.sleep(OPENDATA_INTER_PAIR_PACING_MS);
       }
     }
 
@@ -330,11 +375,15 @@ function syncOpenData() {
     const finalStatus = commitFailure || (commitState === 'uncertain' ? 'commit_uncertain' : status);
     const commitFlag = commitFailure === 'commit_failure' || commitState === 'uncertain'
       ? (commitFailure === 'commit_failure' ? 'failed' : 'uncertain') : 'verified';
+    // Issue #37: invocation-source observability — sanitized metadata derived
+    // from the backend entry path only (see auditSource above); never from
+    // request bodies, query params, or client-supplied values.
     const summary = JSON.stringify({
       status: finalStatus,
       success: successfulPairs, failed: failedPairs,
       fresh: freshRows, retained: retainedRows,
-      failed_pairs: failedPairIds, failed_details: failedPairDetails, commit: commitFlag
+      failed_pairs: failedPairIds, failed_details: failedPairDetails, commit: commitFlag,
+      source: auditSource
     });
     try { logAction('SYSTEM', 'Cron', 'sync_opendata', summary); } catch (e) { /* audit failure must not undo the committed cache or mask the intended result */ }
 
