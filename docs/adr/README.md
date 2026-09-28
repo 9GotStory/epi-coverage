@@ -195,3 +195,4 @@ Creating an ADR documents an architectural decision. It does not authorize expan
 - [ADR-0001](0001-use-google-apps-script-and-google-sheets.md) — Use Google Apps Script and Google Sheets for the application backend. **Accepted**
 - [ADR-0002](0002-separate-individual-and-aggregate-epi-data.md) — Separate individual EPI data from aggregate HDC OpenData. **Accepted**
 - [ADR-0003](0003-centralize-config-driven-vaccine-rules.md) — Centralize configurable vaccine-rule ownership in the backend. **Accepted**
+- [ADR-0004](0004-rate-limit-safe-moph-opendata-sync.md) — Use paced, bounded retries for MOPH OpenData synchronization. **Accepted**
