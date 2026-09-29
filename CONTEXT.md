@@ -224,13 +224,11 @@ These are separate concepts.
 
 ---
 
-## 14. View 3
+## 14. View 3 (historical frontend view)
 
-**View 3** is the aggregate HDC OpenData reporting view.
+**View 3** was the aggregate HDC OpenData reporting view previously shown in EPI Tracking. Its frontend tab and OpenData dashboard implementation have been removed for all four age groups (1, 2, 3, and 5 years); View 3 is no longer an active frontend view.
 
-It uses aggregate numbers retrieved from MOPH/HDC OpenData.
-
-It does not represent individual children and must not be treated as individual-record data.
+The underlying MOPH/HDC OpenData aggregate source, GAS read API, backend cache, sync, and audit contracts remain separate from the two active individual-record views. Aggregate values do not represent individual children and must not be treated as individual-record data or substituted for View 1 / View 2 results.
 
 Typical aggregate concepts include:
 
@@ -243,7 +241,7 @@ Typical aggregate concepts include:
 
 ## 15. HDC OpenData
 
-**HDC OpenData** is the external aggregate data source used by the OpenData reporting portion of EPI Coverage.
+**HDC OpenData** is the external aggregate data source maintained in the backend cache, independently of the two active individual-record EPI Tracking views.
 
 Relevant report datasets include concepts such as:
 
