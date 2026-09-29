@@ -7,7 +7,7 @@
  * (reviewer-authorized). This file is the ONLY DOM-environment test file
  * (per-file `@vitest-environment` directive — no global vitest config change).
  *
- * Observable seam: the real `YearComparison` page rendered with React Testing
+ * Observable seam: the preserved `YearComparisonDetail` regression surface rendered with React Testing
  * Library and a real per-test QueryClient. All interaction happens through
  * rendered controls (FY chips, the age-group Radix Select). The current
  * selection is observed through the multi-year API request payload — never by
@@ -21,7 +21,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import type { ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
-import { YearComparison } from './YearComparison';
+import { YearComparisonDetail as YearComparison } from './YearComparison';
 import type { DashboardSummaryRow } from '../shared/types/dashboardSummary';
 
 const api = vi.hoisted(() => ({ fetchApi: vi.fn() }));

@@ -1,7 +1,7 @@
 /**
  * Issue #24 RED contracts — Executive Year Comparison UX.
  *
- * Observable surface: the real `YearComparison` page rendered with a seeded
+ * Observable surface: the preserved `YearComparisonDetail` regression surface rendered with a seeded
  * QueryClient (repository SSR convention: `renderToStaticMarkup` + `setQueryData`)
  * and behavior-capturing recharts/SubNav/network mocks. No source-text assertions.
  *
@@ -31,7 +31,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
-import { YearComparison } from './YearComparison';
+import { YearComparisonDetail as YearComparison } from './YearComparison';
 import { getCurrentFiscalYear } from '../shared/utils/dateUtils';
 import type { DashboardSummaryRow } from '../shared/types/dashboardSummary';
 

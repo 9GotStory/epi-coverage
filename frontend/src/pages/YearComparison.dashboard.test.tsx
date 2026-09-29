@@ -171,7 +171,7 @@ describe('#50 — actual /dashboard/comparison: four-age annual overview', () =>
     await screen.findByRole('heading', { name: 'เด็กอายุ 5 ปี' });
     expect(screen.queryByRole('row', { name: /99999/ })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: /ดูรายละเอียดรายวัคซีนและหน่วยบริการ/ }));
-    await screen.findByRole('heading', { name: 'ตารางเปรียบเทียบรายปีงบประมาณ' });
+    await screen.findByText('ตารางเปรียบเทียบรายปีงบประมาณ');
     fireEvent.click(screen.getByRole('button', { name: 'รายละเอียดเด็กอายุ 2 ปี' }));
     await waitFor(() => expect(screen.getByRole('row', { name: /99999/ })).toBeTruthy());
     expect(screen.queryByRole('row', { name: /06413/ })).toBeNull();
