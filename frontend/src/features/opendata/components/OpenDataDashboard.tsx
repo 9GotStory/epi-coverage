@@ -208,7 +208,11 @@ export function OpenDataDashboard({ targetTable = 's_epi1' }: OpenDataDashboardP
           </h2>
           <p className="text-zinc-500 text-sm mt-1">
             ความครอบคลุมการได้รับวัคซีนตามเกณฑ์ในเด็ก อายุครบ {isEpi1 ? '1' : (isEpi3 ? '3' : (isEpi5 ? '5' : '2'))} ปี {viewMode === 'complete' ? 'แบบรับวัคซีนครบชุด' : 'แบบแยกรายชนิด'} (ดึงข้อมูลจาก HDC OpenData) <br/>
-            <span className="text-blue-600 font-medium">* หมายเหตุ: ข้อมูลสถิติในหน้านี้ใช้เกณฑ์การประเมินแบบเดียวกับ "{viewMode === 'complete' ? 'มุมมองที่ 2' : 'มุมมองที่ 1'}"</span>
+            <span className="text-blue-600 font-medium">
+              {viewMode === 'complete'
+                ? '* หมายเหตุ: ผล Fully Immunized ใช้เกณฑ์ View 2 ส่วน Gauge รายวัคซีนใช้เกณฑ์ View 1 แยกกัน'
+                : '* หมายเหตุ: ผลรายวัคซีนใช้เกณฑ์การประเมินของ View 1'}
+            </span>
           </p>
         </div>
         

@@ -3,8 +3,8 @@
  * OpenData View 3: independent FI and age-matched vaccine gauge contracts.
  * Synthetic aggregate rows only; no network calls or individual records.
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { OpenDataDashboard } from './OpenDataDashboard';
 
 const { useOpenDataMock, fixtureOptions } = vi.hoisted(() => ({
@@ -68,6 +68,8 @@ const reports: Record<string, Array<Record<string, string | number>>> = {
   ],
   s_epi_complete: completeRows,
 };
+
+afterEach(() => cleanup());
 
 beforeEach(() => {
   vi.clearAllMocks();
