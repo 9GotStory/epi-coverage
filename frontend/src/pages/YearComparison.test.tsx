@@ -18,7 +18,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { YearComparison } from './YearComparison';
+import { YearComparisonDetail as YearComparison } from './YearComparison';
 import { getCurrentFiscalYear } from '../shared/utils/dateUtils';
 
 // Capture the chart data at the rendered comparison surface (recharts mock).

@@ -2,7 +2,7 @@
 /**
  * Issue #25 RED contracts — Facility cross-year comparison on the Year Comparison page.
  *
- * Observable seam: the real `YearComparison` page rendered with React Testing Library
+ * Observable seam: the preserved `YearComparisonDetail` regression surface rendered with React Testing Library
  * and a real per-test QueryClient (jsdom environment; the #24 interaction harness is
  * now canonical). All facility data is served through the existing annual-summary
  * API surface (`facilityBreakdownV1` / `facilityBreakdownV2` inside
@@ -36,7 +36,7 @@ import { cleanup, render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
-import { YearComparison } from './YearComparison';
+import { YearComparisonDetail as YearComparison } from './YearComparison';
 import { formatDateTimeStr } from '../shared/utils/dateUtils';
 import type { DashboardSummaryRow, FacilityBreakdownEntry } from '../shared/types/dashboardSummary';
 
