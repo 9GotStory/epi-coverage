@@ -2,7 +2,7 @@
 
 ระบบติดตามและวิเคราะห์ความครอบคลุมการได้รับวัคซีนเด็ก สำหรับสนับสนุนการดำเนินงานระดับพื้นที่และสำนักงานสาธารณสุขอำเภอ
 
-EPI Coverage รวมข้อมูลรายบุคคลที่นำเข้าจากแหล่งข้อมูล EPI กับข้อมูลสถิติรวมจาก MOPH/HDC OpenData โดยรักษาขอบเขตของข้อมูลทั้งสองประเภทแยกจากกันอย่างชัดเจน
+EPI Coverage แสดงผลข้อมูลรายบุคคลจากแหล่งข้อมูล EPI ที่นำเข้า ส่วนข้อมูลสถิติรวมจาก MOPH/HDC OpenData ยังคงจัดเก็บใน Backend cache แยกต่างหากและไม่มีหน้าแสดงผล OpenData บน Frontend
 
 ---
 
@@ -12,7 +12,7 @@ EPI Coverage รวมข้อมูลรายบุคคลที่นำ�
 
 * ติดตามการได้รับวัคซีนรายบุคคล;
 * แสดงผล Fully Immunized ตามข้อมูล HDC ที่นำเข้า;
-* วิเคราะห์ข้อมูลความครอบคลุมจาก HDC OpenData;
+* จัดเก็บข้อมูลสถิติรวมจาก MOPH/HDC OpenData ใน Backend cache เพื่อใช้กับงานข้อมูลที่แยกต่างหาก;
 * นำเข้าข้อมูล EPI ตามกลุ่มอายุ;
 * จัดการหน่วยบริการและผู้ใช้งาน;
 * จัดการเกณฑ์วัคซีนแบบ configurable;
@@ -24,7 +24,7 @@ EPI Coverage รวมข้อมูลรายบุคคลที่นำ�
 
 ## Reporting Views
 
-EPI Coverage แยกข้อมูลออกเป็นสามมุมมองหลัก
+หน้า EPI Tracking ของแต่ละกลุ่มอายุแสดงข้อมูลรายบุคคลสองมุมมอง
 
 ### View 1 — Individual Vaccine Follow-up
 
@@ -34,11 +34,7 @@ EPI Coverage แยกข้อมูลออกเป็นสามมุม�
 
 ใช้ข้อมูลรายบุคคลที่นำเข้า โดยผล Fully Immunized ที่แสดงในพฤติกรรมปัจจุบันยึดตามค่า `result` จาก HDC ที่นำเข้า
 
-### View 3 — HDC OpenData
-
-ใช้ข้อมูลสถิติรวมจาก MOPH/HDC OpenData สำหรับการรายงาน target, result และ coverage
-
-ข้อมูล View 3 เป็น aggregate data และไม่ใช่ข้อมูลรายบุคคล
+ข้อมูล MOPH/HDC OpenData เป็นข้อมูลรวม (aggregate) ที่ยังคงซิงค์และจัดเก็บใน Backend cache โดยไม่มี View 3 บนหน้า EPI Tracking หรือ Frontend OpenData dashboard
 
 รายละเอียด business behavior ที่เป็น canonical source ดูที่ `docs/features.md`
 

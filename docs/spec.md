@@ -39,7 +39,6 @@
 - นำหลักการ **Feature-Sliced Design (FSD)** มาใช้ในการจัดโครงสร้างโปรเจกต์ React:
   - `src/features/auth` (จัดการ Login, OAuth, สิทธิ์ผู้ใช้งาน)
   - `src/features/vaccine-1yr` (Dashboard ติดตามวัคซีน 1 ปี — มุมมองที่ 1 และ 2)
-  - `src/features/opendata` (Dashboard สถิติรวมจาก HDC OpenData — มุมมองที่ 3)
   - `src/features/upload` (จัดการการอัปโหลดไฟล์ Excel และ Batch Sync)
   - `src/features/admin` (จัดการผู้ใช้, อนุมัติสมาชิก)
 - โครงสร้างนี้จะช่วยให้สามารถต่อยอดระบบวัคซีน 2 ปี, 3 ปี และ 5 ปี ได้อย่างเป็นระเบียบในอนาคต
