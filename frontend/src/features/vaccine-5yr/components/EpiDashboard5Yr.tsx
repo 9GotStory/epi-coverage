@@ -1,7 +1,6 @@
 
 import { useState, useEffect } from 'react';
 import { SubNav } from '../../../widgets/layout/SubNav';
-import { OpenDataDashboard } from '../../opendata/components/OpenDataDashboard';
 import { useEpiData } from '../../../shared/hooks/useEpiData';
 import { useAvailableYears } from '../../../shared/hooks/useAvailableYears';
 import { View1Individual5Yr } from './View1Individual5Yr';
@@ -10,7 +9,7 @@ import { getCurrentFiscalYear } from '../../../shared/utils/dateUtils';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../../shared/components/ui/select';
 
 export function EpiDashboard5Yr() {
-  const [activeTab, setActiveTab] = useState<'view1' | 'view2' | 'view3'>('view1');
+  const [activeTab, setActiveTab] = useState<'view1' | 'view2'>('view1');
   
   // Global Filters for Cohort
   const currentYear = getCurrentFiscalYear();
@@ -55,20 +54,9 @@ export function EpiDashboard5Yr() {
             >
               มุมมองที่ 2 (Fully Immunized)
             </button>
-            <button
-              onClick={() => setActiveTab('view3')}
-              className={`relative z-10 px-6 py-2 text-[14px] font-medium tracking-[-0.224px] rounded-lg transition-all duration-300 ${
-                activeTab === 'view3'
-                  ? 'text-[#1d1d1f] bg-white'
-                  : 'text-[#7a7a7a] hover:text-[#1d1d1f]'
-              }`}
-            >
-              ภาพรวม (OpenData)
-            </button>
           </div>
           
-          {activeTab !== 'view3' && (
-            <div className="flex flex-col sm:flex-row items-center gap-3">
+          <div className="flex flex-col sm:flex-row items-center gap-3">
               <div className="flex items-center gap-2">
                 <span className="text-[14px] text-[#7a7a7a] font-medium tracking-[-0.224px] whitespace-nowrap">ปีงบประมาณ:</span>
                 <Select 
@@ -105,14 +93,12 @@ export function EpiDashboard5Yr() {
                 </Select>
               </div>
             </div>
-          )}
         </div>
 
         {/* Content Area */}
         <div className="bg-white rounded-[24px] p-4 sm:p-8 border border-[#e0e0e0] min-h-[600px]">
           {activeTab === 'view1' && <View1Individual5Yr fiscalYear={fiscalYear} quarter={quarter} data={data} isLoading={isLoading} error={error} asOfDate={asOfDate} />}
           {activeTab === 'view2' && <HdcRecordsView key={`${fiscalYear}-${quarter}`} age={5} fiscalYear={fiscalYear} quarter={quarter} data={data} isLoading={isLoading} error={error} asOfDate={asOfDate} />}
-          {activeTab === 'view3' && <OpenDataDashboard targetTable="s_epi5" />}
         </div>
 
       </main>
