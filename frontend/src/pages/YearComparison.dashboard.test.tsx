@@ -157,7 +157,7 @@ describe('#50 — actual /dashboard/comparison: four-age annual overview', () =>
     expect(annualRequests().every(years => years.length > 0)).toBe(true);
   });
 
-  it('D05 detail drill-down is secondary, preserving facility strings and the global FY selection', async () => {
+  it('D05 deep-dive remains secondary, exact facility ID is scoped to chosen age with global FYs', async () => {
     const withFacility = rows.map(row => ({
       ...row, summaryData: {
         ...row.summaryData,
@@ -169,12 +169,13 @@ describe('#50 — actual /dashboard/comparison: four-age annual overview', () =>
     }));
     mount({ summaries: withFacility });
     await screen.findByRole('heading', { name: 'เด็กอายุ 5 ปี' });
-    expect(screen.queryByRole('row', { name: /99999/ })).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: /ดูรายละเอียดรายวัคซีนและหน่วยบริการ/ }));
-    await screen.findByText('ตารางเปรียบเทียบรายปีงบประมาณ');
-    fireEvent.click(screen.getByRole('button', { name: 'รายละเอียดเด็กอายุ 2 ปี' }));
-    await waitFor(() => expect(screen.getByRole('row', { name: /99999/ })).toBeTruthy());
-    expect(screen.queryByRole('row', { name: /06413/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /เลือกหน่วยบริการ 99999/ })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'เจาะลึกผลการดำเนินงานรายปีงบประมาณ' }));
+    const panel = screen.getByRole('region', { name: 'ส่วนเจาะลึกผลการดำเนินงาน' });
+    fireEvent.click(within(panel).getByRole('button', { name: 'View 2 — รายคน' }));
+    fireEvent.click(within(panel).getByRole('button', { name: 'เด็กอายุ 2 ปี' }));
+    expect(within(panel).getByRole('button', { name: 'เลือกหน่วยบริการ 99999 หน่วยบริการสังเคราะห์' })).toBeTruthy();
+    expect(within(panel).queryByRole('button', { name: /เลือกหน่วยบริการ 06413/ })).toBeNull();
     expect(annualRequests()).toContainEqual([2568, 2569]);
   });
 

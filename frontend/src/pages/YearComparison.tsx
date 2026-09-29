@@ -9,7 +9,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '../shared/components/u
 import { SubNav } from '../widgets/layout/SubNav';
 import { formatDateTimeStr, getCurrentFiscalYear } from '../shared/utils/dateUtils';
 import type { DashboardSummaryRow, FacilityBreakdownEntry, EpiTargetTable } from '../shared/types/dashboardSummary';
-import { buildAnnualComparisonModel, getComparisonFiscalYears, getDefaultComparisonYears, COMPARISON_AGE_GROUPS } from './comparison/model';
+import { buildAnnualComparisonModel, getComparisonFiscalYears, getDefaultComparisonYears } from './comparison/model';
+import { DeepDivePanel } from './comparison/DeepDivePanel';
 import { AnnualAgeGroupCharts } from './comparison/AnnualAgeGroupCharts';
 
 const MAX_SELECTED_YEARS = 5;
@@ -814,7 +815,6 @@ export const YearComparison = () => {
   const { data, isLoading: summariesLoading, error: summariesError } = useDashboardSummariesMultiYear(queryYears);
 
   const [showDetails, setShowDetails] = useState(false);
-  const [detailAgeGroup, setDetailAgeGroup] = useState<EpiTargetTable>('Epi_1_Year');
   const capReached = selectedYears.length >= MAX_SELECTED_YEARS;
   const model = buildAnnualComparisonModel(data, queryYears, (view, fiscalYear) =>
     getTarget('all', view, undefined, fiscalYear),
@@ -918,33 +918,16 @@ export const YearComparison = () => {
                 onClick={() => setShowDetails(open => !open)}
                 className="flex w-full items-center justify-between gap-3 text-left text-sm font-semibold text-zinc-900 focus-visible:outline-2 focus-visible:outline-primary"
               >
-                <span>ดูรายละเอียดรายวัคซีนและหน่วยบริการ</span>
+                <span>เจาะลึกผลการดำเนินงานรายปีงบประมาณ</span>
                 <span aria-hidden="true">{showDetails ? '−' : '+'}</span>
               </button>
               {showDetails && (
-                <div className="mt-5 space-y-5 border-t border-zinc-200 pt-5">
-                  <div role="group" aria-label="เลือกกลุ่มอายุสำหรับรายละเอียด" className="flex flex-wrap gap-2">
-                    {COMPARISON_AGE_GROUPS.map(group => (
-                      <button
-                        type="button"
-                        key={group.targetTable}
-                        aria-pressed={detailAgeGroup === group.targetTable}
-                        onClick={() => setDetailAgeGroup(group.targetTable)}
-                        className={`rounded-full px-3 py-2 text-xs font-medium focus-visible:outline-2 focus-visible:outline-primary ${
-                          detailAgeGroup === group.targetTable
-                            ? 'bg-primary text-white'
-                            : 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200'
-                        }`}
-                      >
-                        รายละเอียด{group.label}
-                      </button>
-                    ))}
-                  </div>
-                  <YearComparisonDetail
-                    key={detailAgeGroup}
-                    selectedAgeGroup={detailAgeGroup}
-                    selectedFiscalYears={selectedYears}
-                    hideChrome
+                <div className="mt-5 border-t border-zinc-200 pt-5">
+                  <DeepDivePanel
+                    summaries={data}
+                    selectedYears={queryYears}
+                    resolveTarget={(view, fiscalYear, vaccineGroup) =>
+                      getTarget('all', view, vaccineGroup, fiscalYear)}
                   />
                 </div>
               )}

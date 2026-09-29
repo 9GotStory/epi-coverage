@@ -212,7 +212,7 @@ describe('Ticket #55: redesigned second card on the real comparison route',()=>{
     clickWithin(panel,'เลือกวัคซีน DTP ชื่อใหม่ รหัส DTP');
     expect(within(panel).getByText('เป้าหมายปี 2569: 93.00%')).toBeTruthy();
     expect(within(panel).getByText('ส่วนต่างจากเป้าหมายปี 2569: -1.00 จุดร้อยละ')).toBeTruthy();
-    expect(within(panel).getByText(/ข้อมูลสรุป ณ วันที่/)).toBeTruthy();
+    expect(within(panel).getAllByText(/ข้อมูลสรุป ณ วันที่/).length).toBeGreaterThanOrEqual(2);
   });
 
   it('U07: year detail table stays collapsed by default and reveals exact stored counts/years on demand',async()=>{
@@ -243,8 +243,9 @@ describe('Ticket #55: redesigned second card on the real comparison route',()=>{
     mount();const panel=await expand();
     fireEvent.click(screen.getByRole('button',{name:'ปี 2567'}));
     await waitFor(()=>expect(requestYears()).toContainEqual([2567,2568,2569]));
-    clickWithin(panel,'เลือกหน่วยบริการ 06413 บ้านหนุนชื่อใหม่');
-    expect(within(panel).getByText('ปี 2567: ไม่มีข้อมูลสรุป')).toBeTruthy();
+    const refreshed = await screen.findByRole('region',{name:'ส่วนเจาะลึกผลการดำเนินงาน'});
+    clickWithin(refreshed,'เลือกหน่วยบริการ 06413 บ้านหนุนชื่อใหม่');
+    expect(within(refreshed).getByText('ปี 2567: ไม่มีข้อมูลสรุป')).toBeTruthy();
     expect(within(panel).queryByText('ปี 2567: 0.00%')).toBeNull();
   });
 
@@ -253,7 +254,7 @@ describe('Ticket #55: redesigned second card on the real comparison route',()=>{
     clickWithin(panel,'เลือกหน่วยบริการ 06413 บ้านหนุนชื่อใหม่');
     expect(within(panel).getByRole('img',{name:/ผลรายปี/})).toBeTruthy();
     expect(within(panel).getByText('ความครอบคลุมรายปี')).toBeTruthy();
-    expect(within(panel).getByText(/ข้อมูลสรุป ณ วันที่/)).toBeTruthy();
+    expect(within(panel).getAllByText(/ข้อมูลสรุป ณ วันที่/).length).toBeGreaterThanOrEqual(2);
     expect(charts.rendered.some(c=>c.some(d=>d.fiscalYear==='2569'&&d.coverage===90))).toBe(true);
   });
 });
