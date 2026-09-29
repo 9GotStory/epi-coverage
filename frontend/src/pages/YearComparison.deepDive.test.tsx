@@ -223,8 +223,10 @@ describe('Ticket #55: redesigned second card on the real comparison route',()=>{
     expect(within(panel).queryByRole('table')).toBeNull();
     fireEvent.click(tableButton);
     expect(tableButton.getAttribute('aria-expanded')).toBe('true');
-    expect(within(panel).getByRole('row',{name:/2568/})).toBeTruthy();
-    expect(within(panel).getByRole('row',{name:/2569/})).toBeTruthy();
+    // A FY2569 delta cell also says "2568", so search the year-identity column
+    // instead of matching the entire accessible row name.
+    const yearRows = [...within(panel).getByRole('table').querySelectorAll('tbody tr')];
+    expect(yearRows.map(row => row.querySelector('td')?.textContent)).toEqual(['2568','2569']);
     expect(within(panel).getByRole('table').textContent).toContain('9 / 10');
   });
 
