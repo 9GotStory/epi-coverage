@@ -86,6 +86,17 @@ export function OpenDataDashboard({ targetTable = 's_epi1' }: OpenDataDashboardP
     province
   });
 
+  // Fully Immunized stays sourced from s_epi_complete. Its companion vaccine
+  // gauges read the age-matched report independently, using the shared View 1
+  // presentation and target rules; they never contribute to the FI result.
+  const {
+    data: companionVaccines,
+    isLoading: isCompanionLoading,
+    isError: isCompanionError,
+    error: companionError,
+    refetch: refetchCompanionVaccines,
+  } = useOpenData({ tableName: targetTable, year, province }, viewMode === 'complete');
+
   const chartData = useMemo(() => {
     if (!data || !Array.isArray(data)) return [];
     const filteredData = selectedHosp === 'all' 
@@ -99,30 +110,20 @@ export function OpenDataDashboard({ targetTable = 's_epi1' }: OpenDataDashboardP
     return formatEpiDataForChart(filteredData, vaccine);
   }, [data, selectedHosp, vaccine, viewMode, targetTable]);
 
-  // Aggregate stats for gauge and radar (ALL vaccines)
+  // One vaccine-gauge dataset for both tabs. The FI tab still calculates
+  // its hero, trend and export exclusively from s_epi_complete.
   const allVaccinesData = useMemo(() => {
-    if (!data || !Array.isArray(data)) return [];
-    const filteredData = selectedHosp === 'all' 
-      ? data.filter(d => d.areacode && String(d.areacode).startsWith('5406'))
-      : data.filter(d => d.hospcode === selectedHosp);
-    
-    if (viewMode === 'complete') {
-      const filterId = completeIdMap[targetTable];
-      const monthlyData = formatCompleteDataForChart(filteredData, filterId);
-      const totalTarget = monthlyData.reduce((sum: number, item: any) => sum + item.target, 0);
-      const totalResult = monthlyData.reduce((sum: number, item: any) => sum + item.result, 0);
-      const coverage = totalTarget > 0 ? (totalResult / totalTarget) * 100 : 0;
-      
-      return [{
-        vaccine: 'complete',
-        label: 'รับวัคซีนครบชุด (Fully Immunized)',
-        target: totalTarget,
-        result: totalResult,
-        coverage: parseFloat(coverage.toFixed(2)),
-        goal: getTarget(quarter, 2, undefined, Number(year)) // Use View 2 target
-      }];
-    }
-    
+    const vaccineRows = viewMode === 'complete' ? companionVaccines : data;
+    if (!vaccineRows || !Array.isArray(vaccineRows)) return [];
+
+    const filteredData = selectedHosp === 'all'
+      ? vaccineRows.filter(d => d.areacode && String(d.areacode).startsWith('5406'))
+      : vaccineRows.filter(d => d.hospcode === selectedHosp);
+
+    // Do not show fabricated zero-coverage gauges when the companion report
+    // has no rows for the selected facility.
+    if (viewMode === 'complete' && filteredData.length === 0) return [];
+
     return formatEpiAllVaccines(filteredData, targetTable).map(item => {
       const vaccineKeyForTarget = item.vaccine === 'mmr' || item.vaccine === 'mmr1' || item.vaccine === 'mmr2' ? 'mmr' : item.vaccine;
       return {
@@ -130,7 +131,7 @@ export function OpenDataDashboard({ targetTable = 's_epi1' }: OpenDataDashboardP
         goal: getTarget(quarter, 1, vaccineKeyForTarget, Number(year))
       };
     });
-  }, [data, selectedHosp, targetTable, quarter, getTarget, year, viewMode]);
+  }, [data, companionVaccines, selectedHosp, targetTable, quarter, getTarget, year, viewMode]);
 
   // Calculate total summary for the selected year
   const summary = useMemo(() => {
@@ -207,7 +208,11 @@ export function OpenDataDashboard({ targetTable = 's_epi1' }: OpenDataDashboardP
           </h2>
           <p className="text-zinc-500 text-sm mt-1">
             ความครอบคลุมการได้รับวัคซีนตามเกณฑ์ในเด็ก อายุครบ {isEpi1 ? '1' : (isEpi3 ? '3' : (isEpi5 ? '5' : '2'))} ปี {viewMode === 'complete' ? 'แบบรับวัคซีนครบชุด' : 'แบบแยกรายชนิด'} (ดึงข้อมูลจาก HDC OpenData) <br/>
-            <span className="text-blue-600 font-medium">* หมายเหตุ: ข้อมูลสถิติในหน้านี้ใช้เกณฑ์การประเมินแบบเดียวกับ "{viewMode === 'complete' ? 'มุมมองที่ 2' : 'มุมมองที่ 1'}"</span>
+            <span className="text-blue-600 font-medium">
+              {viewMode === 'complete'
+                ? '* หมายเหตุ: ผล Fully Immunized ใช้เกณฑ์ View 2 ส่วน Gauge รายวัคซีนใช้เกณฑ์ View 1 แยกกัน'
+                : '* หมายเหตุ: ผลรายวัคซีนใช้เกณฑ์การประเมินของ View 1'}
+            </span>
           </p>
         </div>
         
@@ -273,6 +278,9 @@ export function OpenDataDashboard({ targetTable = 's_epi1' }: OpenDataDashboardP
                     setIsSyncing(true);
                     await forceSyncOpenData();
                     await refetch();
+                    if (viewMode === 'complete') {
+                      await refetchCompanionVaccines();
+                    }
                   } catch (e) {
                     console.error("Sync failed:", e);
                     alert("ซิงค์ข้อมูลล้มเหลว กรุณาลองใหม่");
@@ -382,7 +390,28 @@ export function OpenDataDashboard({ targetTable = 's_epi1' }: OpenDataDashboardP
             </div>
           </div>
           )}
-          
+
+          {viewMode === 'complete' && (
+            <section aria-label="ความครอบคลุมรายวัคซีนประกอบ Fully Immunized" className="border-t border-zinc-200 pt-6">
+              <h3 className="text-xl font-bold text-zinc-900 tracking-tight">ความครอบคลุมรายชนิดวัคซีน (ข้อมูลประกอบ)</h3>
+              <p className="text-sm text-zinc-500 mt-1 mb-5">
+                รายวัคซีนจาก {targetTable} ใช้เกณฑ์รายวัคซีนของ View 1 สำหรับกลุ่มอายุและสถานบริการที่เลือก
+                แยกจากผล Fully Immunized ซึ่งคำนวณจาก s_epi_complete เท่านั้น
+              </p>
+              {isCompanionLoading ? (
+                <p role="status" className="text-sm text-zinc-500 py-6 text-center">กำลังโหลดข้อมูลรายวัคซีน...</p>
+              ) : isCompanionError ? (
+                <p role="alert" className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg p-4">
+                  ไม่สามารถโหลดข้อมูลรายวัคซีนได้: {companionError instanceof Error ? companionError.message : 'ไม่ทราบสาเหตุ'}
+                </p>
+              ) : allVaccinesData.length > 0 ? (
+                <VaccineGaugeGrid data={allVaccinesData} goalTarget={radarTarget} />
+              ) : (
+                <p className="text-sm text-zinc-500 py-6 text-center">ไม่พบข้อมูลรายวัคซีนสำหรับสถานบริการและกลุ่มอายุที่เลือก</p>
+              )}
+            </section>
+          )}
+
           <div className="pt-8 border-t border-zinc-200 mt-8">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
               <div>

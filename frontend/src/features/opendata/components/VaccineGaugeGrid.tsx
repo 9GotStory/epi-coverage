@@ -11,20 +11,23 @@ export interface VaccineCoverageData {
 
 interface VaccineGaugeGridProps {
   data: VaccineCoverageData[];
-  goalTarget?: number; // % เป้าหมาย (default: 90) — ใช้เทียบสีเขียว/แดง
+  goalTarget?: number; // Optional: never invent a default for an unconfigured target.
 }
 
-export function VaccineGaugeGrid({ data, goalTarget = 90 }: VaccineGaugeGridProps) {
+export function VaccineGaugeGrid({ data, goalTarget }: VaccineGaugeGridProps) {
   return (
     <div className="flex flex-wrap justify-center gap-4">
       {data.map((item) => {
-        // ✅ ใช้เป้าหมายเฉพาะวัคซีน (item.goal) หรือเป้าหมายรวมถ้าไม่ได้กำหนด
-        const targetToUse = item.goal || goalTarget;
-        const isTargetMet = item.coverage >= targetToUse;
-        const color = isTargetMet ? '#10B981' : '#EF4444'; // Success Green vs Danger Red
+        // The vaccine's own View 1 goal takes precedence. Missing goal or
+        // denominator is neutral, never implicitly a failed target.
+        const targetToUse = item.goal ?? goalTarget;
+        const hasTarget = targetToUse !== undefined && Number.isFinite(targetToUse);
+        const hasCoverage = Number.isFinite(item.target) && item.target > 0 && Number.isFinite(item.coverage);
+        const isTargetMet = hasTarget && hasCoverage && item.coverage >= targetToUse;
+        const color = !hasTarget || !hasCoverage ? '#A1A1AA' : isTargetMet ? '#10B981' : '#EF4444';
         
         const chartData = [
-          { name: item.label, value: item.coverage, fill: color }
+          { name: item.label, value: hasCoverage ? Math.max(0, Math.min(item.coverage, 100)) : 0, fill: color }
         ];
 
         return (
@@ -51,8 +54,8 @@ export function VaccineGaugeGrid({ data, goalTarget = 90 }: VaccineGaugeGridProp
                 </RadialBarChart>
               </ResponsiveContainer>
               <div className="absolute inset-0 flex items-center justify-center flex-col">
-                <span className={`text-lg font-bold ${isTargetMet ? 'text-green-600' : 'text-red-600'}`}>
-                  {item.coverage.toFixed(0)}%
+                <span className={`text-lg font-bold ${!hasTarget || !hasCoverage ? 'text-zinc-500' : isTargetMet ? 'text-green-600' : 'text-red-600'}`}>
+                  {hasCoverage ? `${item.coverage.toFixed(0)}%` : '—'}
                 </span>
               </div>
             </div>
@@ -62,7 +65,9 @@ export function VaccineGaugeGrid({ data, goalTarget = 90 }: VaccineGaugeGridProp
               <p className="text-sm font-medium text-zinc-800">
                 {item.result.toLocaleString()} <span className="text-zinc-400">/</span> {item.target.toLocaleString()}
               </p>
-              <p className="text-xs text-zinc-400 mt-0.5">เป้า {targetToUse}%</p>
+              <p className="text-xs text-zinc-400 mt-0.5">
+                {hasTarget ? `เป้า ${targetToUse}%` : 'ยังไม่ได้กำหนดเป้าหมาย'}
+              </p>
             </div>
           </div>
         );
