@@ -177,6 +177,32 @@ export const VaccineRuleManager = ({ onDirtyChange }: VaccineRuleManagerProps) =
     setEditingRule(null);
   };
 
+  const handleMigrateMetricKeys = async () => {
+    if (hasUnsavedChanges) {
+      toast.error('กรุณาบันทึกหรือยกเลิกการแก้ไขเกณฑ์ที่ค้างอยู่ก่อนเตรียมรหัสเชื่อมโยง');
+      return;
+    }
+    if (!window.confirm('ตรวจและเตรียมรหัสเชื่อมโยงวัคซีน (metric_key) สำหรับกฎเดิม โดยไม่เปลี่ยนเกณฑ์หรือผลสรุป Dashboard ต้องการดำเนินการหรือไม่?')) return;
+
+    try {
+      setIsProcessing(true);
+      const res = await fetchApi('migrateVaccineMetricKeys', {});
+      if (res.data?.success) {
+        const total = Number(res.data.total || 0);
+        const initialized = Number(res.data.initialized || 0);
+        const preserved = Number(res.data.preserved || 0);
+        toast.success(`รหัสเชื่อมโยงพร้อมใช้งาน ${total} รายการ (เพิ่ม ${initialized}, คงเดิม ${preserved})`);
+        queryClient.invalidateQueries({ queryKey: ['vaccineRules'] });
+      } else {
+        toast.error(res.data?.error || 'เตรียมรหัสเชื่อมโยงไม่สำเร็จ');
+      }
+    } catch (err: any) {
+      toast.error('เตรียมรหัสเชื่อมโยงไม่สำเร็จ: ' + (err.message || 'Unknown error'));
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   const handleAutoSetTargetAge = async () => {
     const currentRules = draftRules || rules;
     if (!currentRules || currentRules.length === 0) return;
@@ -395,6 +421,15 @@ export const VaccineRuleManager = ({ onDirtyChange }: VaccineRuleManagerProps) =
                     <div className="flex flex-col">
                       <span>อัปเดตคู่เข็มตรวจวันที่ (Auto)</span>
                       <span className="text-xs text-slate-500">เติมคู่ห้ามวันซ้ำ / ลำดับวันที่ให้ทุกเกณฑ์</span>
+                    </div>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuLabel>ความต่อเนื่องของข้อมูลข้ามปี</DropdownMenuLabel>
+                  <DropdownMenuItem onClick={handleMigrateMetricKeys} disabled={isProcessing || hasUnsavedChanges}>
+                    <CheckCircle2 className="w-4 h-4 mr-2 text-emerald-600 shrink-0" />
+                    <div className="flex flex-col">
+                      <span>ตรวจ/เตรียมรหัสเชื่อมโยงวัคซีน</span>
+                      <span className="text-xs text-slate-500">เพิ่มเฉพาะ metric_key ที่ขาด — ไม่เปลี่ยนเกณฑ์หรือผล Dashboard</span>
                     </div>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
