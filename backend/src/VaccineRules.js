@@ -65,6 +65,141 @@ function resolveMetricKeyForSave_(rule, storedKey) {
   return { key: rule.rule_id };
 }
 
+
+/**
+ * Issue #59 — one-time/idempotent migration for persisted vaccine metric identity.
+ *
+ * This is intentionally narrower than setupDatabase(): it touches only the
+ * vaccine_rules.metric_key column. All validation completes before the first
+ * sheet write. Existing non-empty metric_key values are authoritative and are
+ * preserved byte-for-byte; legacy blanks initialize from that row's rule_id.
+ *
+ * @param {string} adminEmail server-derived authenticated admin email for audit
+ * @returns {{success:boolean, createdColumn?:boolean, initialized?:number, preserved?:number, total?:number, column?:number, error?:string}}
+ */
+function migrateVaccineMetricKeys(adminEmail) {
+  const ss = getSpreadsheet();
+  const sheet = ss.getSheetByName(VACCINE_RULES_SHEET);
+  if (!sheet) return { success: false, error: 'vaccine_rules sheet not found.' };
+  if (sheet.getLastRow() < 1) return { success: false, error: 'vaccine_rules header row not found.' };
+
+  const data = sheet.getDataRange().getValues();
+  if (!data.length || !Array.isArray(data[0])) {
+    return { success: false, error: 'vaccine_rules header row not found.' };
+  }
+
+  const headers = data[0].map(value => String(value || '').trim());
+  const required = ['rule_id', 'fiscal_year', 'age_group', 'view_type'];
+  const countHeader = name => headers.filter(header => header === name).length;
+
+  for (const name of required) {
+    const count = countHeader(name);
+    if (count !== 1) {
+      return { success: false, error: `vaccine_rules schema invalid: expected exactly one ${name} header, found ${count}` };
+    }
+  }
+
+  const metricHeaderCount = countHeader('metric_key');
+  if (metricHeaderCount > 1) {
+    return { success: false, error: `vaccine_rules schema invalid: duplicate metric_key headers (${metricHeaderCount})` };
+  }
+
+  const idCol = headers.indexOf('rule_id');
+  const yearCol = headers.indexOf('fiscal_year');
+  const ageCol = headers.indexOf('age_group');
+  const viewCol = headers.indexOf('view_type');
+  const metricCol = metricHeaderCount === 1 ? headers.indexOf('metric_key') : -1;
+
+  const seenRuleIds = new Set();
+  const seenScopedKeys = new Set();
+  const resolvedRows = [];
+  let initialized = 0;
+  let preserved = 0;
+
+  for (let index = 1; index < data.length; index++) {
+    const row = data[index];
+    const hasData = row.some(value => value !== '' && value !== null && value !== undefined);
+    if (!hasData) {
+      resolvedRows.push('');
+      continue;
+    }
+
+    const rawRuleId = row[idCol];
+    if (typeof rawRuleId !== 'string' || rawRuleId.trim().length === 0) {
+      return { success: false, error: `vaccine_rules row ${index + 1}: rule_id must be a non-empty string` };
+    }
+    const ruleId = rawRuleId;
+    if (seenRuleIds.has(ruleId)) {
+      return { success: false, error: `vaccine_rules row ${index + 1}: duplicate rule_id ${ruleId}` };
+    }
+    seenRuleIds.add(ruleId);
+
+    const fiscalYear = String(row[yearCol] ?? '').trim();
+    const ageGroup = String(row[ageCol] ?? '').trim();
+    const viewType = String(row[viewCol] ?? '').trim();
+    if (!fiscalYear || !ageGroup || !viewType) {
+      return { success: false, error: `vaccine_rules row ${index + 1}: fiscal_year, age_group and view_type are required` };
+    }
+
+    let resolvedKey = ruleId;
+    if (metricCol !== -1) {
+      const stored = row[metricCol];
+      const blank = stored === '' || stored === null || stored === undefined;
+      if (!blank && typeof stored !== 'string') {
+        return { success: false, error: `vaccine_rules row ${index + 1}: metric_key must be a string when present` };
+      }
+      const established = establishedMetricKey_(stored);
+      if (established) {
+        resolvedKey = established;
+        preserved++;
+      } else {
+        initialized++;
+      }
+    } else {
+      initialized++;
+    }
+
+    const scoped = [fiscalYear, ageGroup, viewType, resolvedKey].join('|');
+    if (seenScopedKeys.has(scoped)) {
+      return { success: false, error: `vaccine_rules row ${index + 1}: duplicate metric_key within fiscal_year + age_group + view_type` };
+    }
+    seenScopedKeys.add(scoped);
+    resolvedRows.push(resolvedKey);
+  }
+
+  const createdColumn = metricCol === -1;
+  const targetCol = createdColumn ? headers.length : metricCol;
+  const total = seenRuleIds.size;
+
+  // A fully initialized existing column is an idempotent no-op at the sheet level.
+  if (!createdColumn && initialized === 0) {
+    logAction('SYSTEM', adminEmail || '', 'migrate_vaccine_metric_keys',
+      `Verified ${total} vaccine rule metric keys; no changes required`);
+    return { success: true, createdColumn: false, initialized: 0, preserved, total, column: targetCol + 1 };
+  }
+
+  const requiredColumns = targetCol + 1;
+  if (sheet.getMaxColumns() < requiredColumns) {
+    sheet.insertColumnsAfter(sheet.getMaxColumns(), requiredColumns - sheet.getMaxColumns());
+  }
+
+  // One value write for header + all currently used rule rows. Existing columns
+  // are never rewritten, and updated_at/updated_by remain untouched.
+  const values = [['metric_key'], ...resolvedRows.map(value => [value])];
+  sheet.getRange(1, targetCol + 1, values.length, 1).setValues(values);
+
+  if (createdColumn) {
+    const headerRange = sheet.getRange(1, targetCol + 1, 1, 1);
+    headerRange.setFontWeight('bold');
+    headerRange.setBackground('#f3f3f3');
+  }
+
+  logAction('SYSTEM', adminEmail || '', 'migrate_vaccine_metric_keys',
+    `Migrated vaccine metric keys: total=${total}, initialized=${initialized}, preserved=${preserved}, createdColumn=${createdColumn}`);
+
+  return { success: true, createdColumn, initialized, preserved, total, column: targetCol + 1 };
+}
+
 /**
  * ──────────────────────────────────────────────────────────
  * TARGET_AGE_MONTHS_BY_FIELD — แหล่งเดียว (Single Source of Truth)
