@@ -79,6 +79,8 @@ function renderDashboard(
     [`target_view2_q4_${previousYear}`]: 91,
     [`target_view2_q4_${earlierYear}`]: 81,
   });
+  // A resolved API read with no summary returns [] (not a query still loading).
+  client.setQueryData(['dashboardSummaries', currentYear, 'all'], []);
   for (const [key, rows] of Object.entries(summaries)) {
     const [year, quarter] = key.split(':');
     client.setQueryData(['dashboardSummaries', Number(year), quarter], rows);
