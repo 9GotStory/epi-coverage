@@ -99,16 +99,21 @@ describe('mapping source is vaccine_rules and is evidence-gated',()=>{
     expect(findHdcAgeMetric(item(r),[r],2569,'3yr')).toBeNull();
   });
 
-  it('supports source-backed 3yr JE and 5yr DTP5, but never guesses DTP3 combined and IPV2',()=>{
+  it('supports source-backed 3yr JE, 5yr DTP5 and verified HDC reporting names for all 1yr vaccine rows',()=>{
     const r3=rule('3yr','je3'),r5=rule('5yr','dtp5');
     expect(findHdcAgeMetric(item(r3),[r3],2569,'3yr')).toBe('je3');
     expect(findHdcAgeMetric(item(r5),[r5],2569,'5yr')).toBe('dtp5');
-    const unknown:VaccineRule={...rule('1yr','dtp1'),rule_id:'dtp3',display_name:'DTP เข็ม 3',
-      hdc_code:'033',required_fields:['dtp3_date']};
-    expect(findHdcAgeMetric(item(unknown),[unknown],2569,'1yr')).toBeNull();
-    const ipv2:VaccineRule={...rule('1yr','ipv1'),rule_id:'ipv2',display_name:'IPV เข็ม 2',
-      hdc_code:'I12',required_fields:['ipv2_date']};
-    expect(findHdcAgeMetric(item(ipv2),[ipv2],2569,'1yr')).toBeNull();
+    // FY2569 HDC vs imported child birth-cohort parity: exact in all 12 months.
+    const dtp3=rule('1yr','dtp_hb3');
+    const ipv2=rule('1yr','ipv');
+    const opv3=rule('1yr','opv3');
+    expect(findHdcAgeMetric(item(dtp3),[dtp3],2569,'1yr')).toBe('dtp_hb3');
+    expect(findHdcAgeMetric(item(ipv2),[ipv2],2569,'1yr')).toBe('ipv');
+    expect(findHdcAgeMetric(item(opv3),[opv3],2569,'1yr')).toBe('opv3');
+    // Wrong vaccine code or wrong physical input column must remain rejected.
+    expect(findHdcAgeMetric(item(dtp3),[{...dtp3,hdc_code:'032'}],2569,'1yr')).toBeNull();
+    expect(findHdcAgeMetric(item(ipv2),[{...ipv2,required_fields:['ipv1_date']}],2569,'1yr')).toBeNull();
+    expect(findHdcAgeMetric(item(opv3),[{...opv3,required_fields:['opv1_date']}],2569,'1yr')).toBeNull();
   });
 
   it('allows future fiscal years only when they own an explicitly matching active rule',()=>{
