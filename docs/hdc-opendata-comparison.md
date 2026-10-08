@@ -52,51 +52,12 @@ Read `getOpenData` with `{ payload: { tableName: ageReport.table, year: String(s
 
 
 
-## View 2: follow-up by HDC dose (annual, four age groups)
+## View 2: Fully Immunized — no redundant HDC subpanel
 
-The original View 2 HDC Fully Immunized comparison repeated exactly the same
-`result/target` score that EPI already presents in the main completion card.
-This is redundant and does not answer which dose should be followed up.
-The source `s_epi_complete` has only **Fully Immunized totals** — no
-per-vaccine numerator fields; never imply that its `result` can be broken
-into doses.
+- **View 1** owns the on-demand vaccine-dose HDC OpenData comparison (`s_epi1/2/3/5`).
+- **View 2** retains the existing Fully Immunized score, rule-based vaccine details and facility performance. It does **not** duplicate HDC per-dose summaries or re-display the same HDC completion total beneath the main scorecard.
+- The HDC Fully Immunized report (`s_epi_complete`) provides a **single all-or-nothing numerator/denominator** and cannot be decomposed into per-dose deficits. In FY2569 its group-age 3/5 denominator differed from the corresponding HDC dose report: do not mix denominators across indicator families.
+- EPI's existing View 2 `evaluateDynamicV2` includes an imported HDC `record.result` override. Matching percentages with HDC are not independent evidence that the clinical validation algorithms are identical.
+- This removal is **frontend-only**. It does not modify `vaccine_rules`, `Dashboard_Summaries`, `s_epi_complete` source history, GAS, HDC imports, or the existing View 1 mapping and source checks. The source report remains accessible at [HDC Fully Immunized age 1](https://hdc.moph.go.th/pre/public/standard-report-detail/28dd2c7955ce926456240b2ff0100bde?subcatalogId=4df360514655f79f13901ef1181ca1c7).
 
-Instead, the **collapsed-by-default** View 2 control is
-**ดูความครอบคลุมรายเข็มจาก HDC**. It reuses the existing
-`useHdcAgeAnnualReference` for the selected fiscal year and matching
-same-age per-dose report (`s_epi1/2/3/5`), with all source-identity, district,
-snapshot, and 12-month count-integrity protections from View 1.
-
-- Rows are anchored to EPI's selected-year `view1Breakdown` and a uniquely
-  matched active `vaccine_rules` entry. The EPI list and vaccine names remain
-  the source of UI identity; no duplicated frontend vaccine metadata.
-- Show only confirmed mappings. Exclude rules marked `is_required_for_v2=false`
-  or `display_only=true`, so out-of-plan doses such as PCV do not dominate
-  follow-up priorities. Unknown mappings are counted in a small explanatory
-  note, **never displayed as zero coverage**.
-- Sort by **ascending HDC dose coverage**, display five lowest-coverage items,
-  and provide an explicit control to reveal all. Each row shows the HDC dose
-  numerator, target, percentage, and count not met in this *dose indicator*.
-- No new HDC Complete scorecard, no duplicate HDC-versus-EPI total pair, no
-  new menu/tab, no writes to HDC/EPI/snapshots/rules. View 1 is unchanged.
-- **Critical interpretation:** HDC dose-level deficits are **not distinct
-  children who failed Fully Immunized**. The same child may be absent in
-  multiple dose indicators. The HDC age-3 and age-5 per-dose denominators
-  for FY2569 (230/262) differ from HDC Fully Immunized (231/264); never
-  use one source's denominator with another metric, nor automatically compare
-  same age-dose coverage to accumulated EPI View 2 vaccine breakdowns.
-- HDC report provenance and processing timestamp remain visible. Matching
-  HDC Fully Immunized and EPI View 2 results in FY2569 partly reflect EPI's
-  existing `record.result` HDC status override; such agreement is not an
-  independent clinical validation.
-
-The official HDC Fully Immunized report for age 1 remains available at
-`https://hdc.moph.go.th/pre/public/standard-report-detail/28dd2c7955ce926456240b2ff0100bde?subcatalogId=4df360514655f79f13901ef1181ca1c7`;
-its **single all-or-nothing score is already covered by the main dashboard card**.
-
-### Review contract
-
-- Test lazy loading for all four ages, exact `getOpenData` per-dose table choice,
-  ascending sort, initial top-five limit, reveal-all control, exclusion of
-  out-of-plan/unknown mappings, and clean unavailable/error states.
-- Confirm frontend test/lint/build and Backend/Relay CI before merge.
+The default UX deliberately has one HDC comparison location rather than two parallel dose metrics that serve the same purpose.
