@@ -63,7 +63,7 @@ const AgeGroupSection = memo(function AgeGroupSection({
       <section className="bg-white rounded-2xl p-6 border border-zinc-200 mb-6">
         <h2 className="text-xl font-bold text-zinc-900">ภาพรวมเด็กอายุครบ {age}</h2>
         <p className="mt-3 text-sm text-zinc-500">
-          ไม่มีข้อมูลสรุปสำหรับปีงบประมาณ {fiscalYear}{quarter === 'all' ? '' : ` ไตรมาส ${quarter}`}
+          ยังไม่มีข้อมูลสรุปปีงบประมาณ {fiscalYear}{quarter === 'all' ? '' : ` ไตรมาส ${quarter}`}
         </p>
       </section>
     );
@@ -78,9 +78,9 @@ const AgeGroupSection = memo(function AgeGroupSection({
         <div>
           <h2 className="text-xl font-bold text-zinc-900">ภาพรวมเด็กอายุครบ {age}</h2>
           <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4 mt-1">
-            <p className="text-sm text-zinc-500">เด็กเป้าหมายทั้งหมดในระบบ: <strong className="text-zinc-800">{summary.total.toLocaleString()}</strong> คน</p>
+            <p className="text-sm text-zinc-500">เด็กกลุ่มเป้าหมาย: <strong className="text-zinc-800">{summary.total.toLocaleString()}</strong> คน</p>
             {updatedAt && (
-              <p className="text-xs text-zinc-400 bg-zinc-100 px-2 py-0.5 rounded-full w-fit">ข้อมูล ณ วันที่: {formatDateTimeStr(updatedAt)}</p>
+              <p className="text-xs text-zinc-400 bg-zinc-100 px-2 py-0.5 rounded-full w-fit">อัปเดตล่าสุด: {formatDateTimeStr(updatedAt)}</p>
             )}
           </div>
         </div>
@@ -88,7 +88,7 @@ const AgeGroupSection = memo(function AgeGroupSection({
           onClick={() => navigate(path)}
           className="text-sm font-medium text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-4 py-2 rounded-full transition-colors flex items-center gap-1"
         >
-          เจาะลึกข้อมูล <ChevronRightIcon className="w-4 h-4" />
+          ดูข้อมูลรายบุคคล <ChevronRightIcon className="w-4 h-4" />
         </button>
       </div>
 
@@ -100,12 +100,12 @@ const AgeGroupSection = memo(function AgeGroupSection({
             <div>
               <div className="flex items-center gap-2">
                 <ActivityIcon className="w-4 h-4 text-blue-500" />
-                <h3 className="font-semibold text-zinc-800">มุมมองที่ 1 (รายชนิดวัคซีน)</h3>
+                <h3 className="font-semibold text-zinc-800">มุมมองที่ 1 (รายวัคซีน)</h3>
               </div>
-              <p className="text-xs text-zinc-500 mt-1">ได้รับวัคซีนครบถ้วนตามเกณฑ์รายวัคซีน</p>
+              <p className="text-xs text-zinc-500 mt-1">ความครอบคลุมของวัคซีนแต่ละเข็ม</p>
             </div>
-            <span className={`inline-flex items-center px-2 py-1 rounded text-[10px] font-bold tracking-wide uppercase ${summary.view1TotalDoses === 0 ? 'bg-zinc-100 text-zinc-600' : v1TargetMet ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-              {summary.view1TotalDoses === 0 ? 'ยังประเมินไม่ได้' : v1TargetMet ? 'PASS' : 'FAIL'}
+            <span className={`inline-flex items-center px-2 py-1 rounded text-[10px] font-bold tracking-wide uppercase ${summary.view1TotalDoses === 0 || targetView1 === undefined ? 'bg-zinc-100 text-zinc-600' : v1TargetMet ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+              {summary.view1TotalDoses === 0 ? 'ยังประเมินไม่ได้' : targetView1 === undefined ? 'ยังไม่กำหนดเป้า' : v1TargetMet ? 'ถึงเป้าหมาย' : 'ต่ำกว่าเป้าหมาย'}
             </span>
           </div>
 
@@ -113,13 +113,13 @@ const AgeGroupSection = memo(function AgeGroupSection({
             <div>
               <p className="text-3xl font-bold text-zinc-900 tracking-tight">{summary.view1TotalDoses === 0 ? '—' : summary.view1Coverage.toFixed(2)}<span className="text-xl text-zinc-400 font-medium ml-0.5">%</span></p>
               <p className="text-sm text-zinc-500 mt-1">
-                ได้รับแล้ว <strong className="text-zinc-800">{summary.view1PassedDoses.toLocaleString()}</strong> จาก <strong className="text-zinc-800">{summary.view1TotalDoses.toLocaleString()}</strong> โดส
-                {!!summary.view1UnknownDoses && <span className="block">ข้อมูลไม่พอประเมิน {summary.view1UnknownDoses.toLocaleString()} รายการ (ไม่นับในตัวหาร)</span>}
+                ผ่านเกณฑ์ <strong className="text-zinc-800">{summary.view1PassedDoses.toLocaleString()}</strong> จาก <strong className="text-zinc-800">{summary.view1TotalDoses.toLocaleString()}</strong> รายการประเมินรายเข็ม
+                {!!summary.view1UnknownDoses && <span className="block">ข้อมูลไม่เพียงพอ {summary.view1UnknownDoses.toLocaleString()} รายการ (ไม่นำมาคำนวณร้อยละ)</span>}
               </p>
             </div>
             <div className="text-right">
               {targetView1 !== undefined && (
-                <p className="text-[10px] text-zinc-400 mt-1">เป้าหมาย: ≥ {targetView1}%</p>
+                <p className="text-[10px] text-zinc-400 mt-1">เป้าหมาย: {targetView1}% ขึ้นไป</p>
               )}
             </div>
           </div>
@@ -137,12 +137,12 @@ const AgeGroupSection = memo(function AgeGroupSection({
             <div>
               <div className="flex items-center gap-2">
                 <TargetIcon className="w-4 h-4 text-emerald-500" />
-                <h3 className="font-semibold text-zinc-800">มุมมองที่ 2 (Fully Immunized)</h3>
+                <h3 className="font-semibold text-zinc-800">มุมมองที่ 2 (ครบชุด)</h3>
               </div>
-              <p className="text-xs text-zinc-500 mt-1">ผ่านเกณฑ์ Fully Immunized</p>
+              <p className="text-xs text-zinc-500 mt-1">เด็กที่ผ่านเกณฑ์วัคซีนครบชุด</p>
             </div>
-            <span className={`inline-flex items-center px-2 py-1 rounded text-[10px] font-bold tracking-wide uppercase ${v2TargetMet ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-              {v2TargetMet ? 'PASS' : 'FAIL'}
+            <span className={`inline-flex items-center px-2 py-1 rounded text-[10px] font-bold tracking-wide uppercase ${summary.view2ApplicableTotal === 0 || targetView2 === undefined ? 'bg-zinc-100 text-zinc-600' : v2TargetMet ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+              {summary.view2ApplicableTotal === 0 ? 'ยังประเมินไม่ได้' : targetView2 === undefined ? 'ยังไม่กำหนดเป้า' : v2TargetMet ? 'ถึงเป้าหมาย' : 'ต่ำกว่าเป้าหมาย'}
             </span>
           </div>
 
@@ -152,12 +152,12 @@ const AgeGroupSection = memo(function AgeGroupSection({
               <p className="text-sm text-zinc-500 mt-1">
                 ผ่านเกณฑ์ <strong className="text-zinc-800">{summary.view2Passed.toLocaleString()}</strong> คน
                 <span className="mx-1.5 text-zinc-300">|</span>
-                ตกหล่น <strong className="text-zinc-800">{typeof summary.view2ApplicableTotal === 'number' ? (summary.view2ApplicableTotal - summary.view2Passed).toLocaleString() : '—'}</strong> คน
+                ยังไม่ผ่านเกณฑ์ <strong className="text-zinc-800">{typeof summary.view2ApplicableTotal === 'number' ? (summary.view2ApplicableTotal - summary.view2Passed).toLocaleString() : '—'}</strong> คน
               </p>
             </div>
             <div className="text-right">
               {targetView2 !== undefined && (
-                <p className="text-[10px] text-zinc-400 mt-1">เป้าหมาย: ≥ {targetView2}%</p>
+                <p className="text-[10px] text-zinc-400 mt-1">เป้าหมาย: {targetView2}% ขึ้นไป</p>
               )}
             </div>
           </div>
@@ -176,9 +176,9 @@ const AgeGroupSection = memo(function AgeGroupSection({
           className="text-xs font-medium text-zinc-500 hover:text-zinc-800 flex items-center gap-1 transition-colors px-4 py-2 rounded-full hover:bg-zinc-100"
         >
           {isExpanded ? (
-            <>ย่อรายละเอียด <ChevronUpIcon className="w-4 h-4" /></>
+            <>ซ่อนรายละเอียด <ChevronUpIcon className="w-4 h-4" /></>
           ) : (
-            <>ดูรายละเอียดรายวัคซีน <ChevronDownIcon className="w-4 h-4" /></>
+            <>ดูรายละเอียดการประเมิน <ChevronDownIcon className="w-4 h-4" /></>
           )}
         </button>
       </div>
@@ -230,12 +230,12 @@ export function Dashboard() {
 
   return (
     <div className="flex flex-col min-h-screen bg-zinc-50/50">
-      <SubNav title="ภาพรวมการดำเนินงาน (Executive Summary)" />
+      <SubNav title="ภาพรวมความครอบคลุมวัคซีน" />
 
       <main className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <p className="text-zinc-500 font-medium">
-            ภาพรวมผลการดำเนินงานสร้างเสริมภูมิคุ้มกันโรค
+            สรุปผลการประเมินวัคซีน
             {fiscalYear !== undefined ? ` ปีงบประมาณ ${fiscalYear}` : ''}
           </p>
 
@@ -283,16 +283,16 @@ export function Dashboard() {
         </div>
 
         {yearsLoading && (
-          <p role="status" className="text-sm text-zinc-500">กำลังโหลดรายการปีงบประมาณย้อนหลัง...</p>
+          <p role="status" className="text-sm text-zinc-500">กำลังโหลดปีงบประมาณย้อนหลัง...</p>
         )}
         {yearsError && (
           <p role="alert" className="text-sm text-red-700">
-            ไม่สามารถโหลดรายการปีงบประมาณย้อนหลังได้: {yearsError}
+            โหลดปีงบประมาณย้อนหลังไม่สำเร็จ: {yearsError}
           </p>
         )}
         {summariesError ? (
           <p role="alert" className="text-sm text-red-700">
-            ไม่สามารถโหลดข้อมูลสรุปปีงบประมาณ {fiscalYear} ได้: {summariesError}
+            โหลดข้อมูลสรุปปีงบประมาณ {fiscalYear} ไม่สำเร็จ: {summariesError}
           </p>
         ) : (
           <>

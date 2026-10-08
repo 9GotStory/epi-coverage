@@ -60,7 +60,7 @@ describe('HDC read-only comparison for all 4 age groups',()=>{
     fixture('5yr','dtp5',5);
     fireEvent.click(screen.getByRole('button',{name:'เปรียบเทียบกับ HDC OpenData'}));
     expect(await screen.findByText('75.00%')).toBeTruthy();
-    expect(screen.getByRole('alert').textContent).toContain('ประชากรเป้าหมายไม่ตรงกัน');
+    expect(screen.getByRole('alert').textContent).toContain('จำนวนเด็กเป้าหมายต่างกัน');
     expect(screen.getByText('เทียบไม่ได้')).toBeTruthy();
   });
   it('never substitutes a fabricated HDC percentage on an upstream error',async()=>{

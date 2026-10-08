@@ -40,15 +40,15 @@ describe('age-group dashboard views have distinct responsibilities', () => {
     'keeps View 2 rule results but offers HDC comparison only in View 1: %s', (ageGroup) => {
       render(<AgeGroupExpandedView summary={summary} fiscalYear={2569}
         ageGroup={ageGroup} quarter="all" />);
-      expect(screen.getByText('สัดส่วนตามกฎประเมินภายใน (View 2)')).toBeTruthy();
-      expect(screen.getByText('ผลการดำเนินงานรายหน่วยบริการ (รพ.สต.) - มุมมองที่ 2')).toBeTruthy();
+      expect(screen.getByText('ผลการประเมินวัคซีนครบชุด')).toBeTruthy();
+      expect(screen.getByText('ความครอบคลุมวัคซีนครบชุด แยกตามหน่วยบริการ')).toBeTruthy();
       expect(screen.queryByRole('button', { name: 'เปรียบเทียบกับ HDC OpenData' })).toBeNull();
       expect(screen.queryByRole('button', { name: /ความครอบคลุมรายเข็มจาก HDC/ })).toBeNull();
 
       // Radix Tabs selects on primary mouseDown (not click) in jsdom.
       fireEvent.mouseDown(screen.getByRole('tab', { name: 'มุมมองที่ 1 (รายวัคซีน)' }), { button: 0 });
       expect(screen.getByRole('button', { name: 'เปรียบเทียบกับ HDC OpenData' })).toBeTruthy();
-      expect(screen.getByText('สัดส่วนการได้รับวัคซีนรายชนิด (View 1)')).toBeTruthy();
+      expect(screen.getByText('ผลการประเมินวัคซีนรายเข็ม')).toBeTruthy();
     },
   );
 });

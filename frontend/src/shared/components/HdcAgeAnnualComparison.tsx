@@ -49,21 +49,21 @@ export function HdcAgeAnnualComparison({fiscalYear,ageGroup,summary,rules,update
     </button>
     {expanded && <div id={panelId} className="border-t border-zinc-100 px-3 pb-3 pt-2 text-xs">
       <p className="mb-2 text-zinc-500">
-        HDC เป็นข้อมูลสรุปจากต้นทาง ส่วน EPI เป็นผลประเมินตาม Vaccine Rules Engine
-        จะแสดงรายการตามวัคซีนที่มีใน EPI เท่านั้น
+        HDC เป็นตัวเลขจากรายงานกระทรวงสาธารณสุข ส่วน EPI เป็นผลประเมินจากข้อมูลที่นำเข้า
+        ทั้งสองแหล่งอาจให้ผลต่างกัน
       </p>
       {isLoading ? <p role="status" className="py-2 text-zinc-500">กำลังโหลดข้อมูล HDC...</p>
       :error ? <p role="alert" className="py-2 text-amber-800">ไม่สามารถเปรียบเทียบกับ HDC ได้: {error}</p>
-      :!reference ? <p role="status" className="py-2 text-zinc-500">ยังไม่มีข้อมูล HDC สำหรับปีงบประมาณ {fiscalYear}</p>
-      : rows.length===0 ? <p role="status" className="py-2 text-zinc-500">ยังไม่มีรายการวัคซีนในสรุป EPI ปีนี้</p>
+      :!reference ? <p role="status" className="py-2 text-zinc-500">ยังไม่มีข้อมูลรายงาน HDC ปีงบประมาณ {fiscalYear}</p>
+      : rows.length===0 ? <p role="status" className="py-2 text-zinc-500">ยังไม่มีผลประเมินรายวัคซีนของ EPI ในปีนี้</p>
       : <>
         {reference.target!==summary.total && <p role="alert" className="mb-2 rounded-md bg-amber-50 p-2 text-amber-800">
-          ประชากรเป้าหมายไม่ตรงกัน: HDC {reference.target.toLocaleString()} คน / EPI {summary.total.toLocaleString()} คน
-          — แสดงสองแหล่งแยกกัน โดยไม่สรุปส่วนต่าง
+          จำนวนเด็กเป้าหมายต่างกัน: HDC {reference.target.toLocaleString()} คน / EPI {summary.total.toLocaleString()} คน
+          — จึงยังไม่คำนวณส่วนต่าง
         </p>}
         <p className="mb-2 text-[11px] text-zinc-500">
-          เชื่อมโยงได้ {comparableCount} จาก {rows.length} รายการ
-          {comparableCount<rows.length && ' · รายการที่เหลือยังไม่ยืนยันตัวชี้วัด HDC ที่เทียบเคียงได้'}
+          เทียบรายการวัคซีนได้ {comparableCount} จาก {rows.length} รายการ
+          {comparableCount<rows.length && ' · รายการที่เหลือยังจับคู่กับ HDC ไม่ได้'}
         </p>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[395px] text-xs">
@@ -84,7 +84,7 @@ export function HdcAgeAnnualComparison({fiscalYear,ageGroup,summary,rules,update
               return <tr key={item.metric_key??item.name} className="border-b border-zinc-100 last:border-0">
                 <th scope="row" className="py-2 pr-2 text-left font-medium text-zinc-700">
                   {item.name}
-                  {!metric && <span className="block font-normal text-[10px] text-zinc-400">ยังไม่ยืนยันตัวชี้วัด HDC</span>}
+                  {!metric && <span className="block font-normal text-[10px] text-zinc-400">ยังจับคู่กับรายงาน HDC ไม่ได้</span>}
                 </th>
                 <td className="px-2 py-2 text-right tabular-nums">
                   {hdcRate===null?'—':<>{hdcRate.toFixed(2)}%<span className="block text-[10px] text-zinc-400">{sourceCount}/{reference.target}</span></>}
@@ -101,11 +101,11 @@ export function HdcAgeAnnualComparison({fiscalYear,ageGroup,summary,rules,update
           </table>
         </div>
         <p className="mt-2 text-[11px] leading-relaxed text-zinc-500">
-          ส่วนต่างแสดงเฉพาะรายการที่จับคู่รหัสได้และมีตัวหารเท่ากัน
-          แม้ตัวหารเท่ากัน รอบประมวลผลหรือกฎประเมินก็อาจแตกต่างกัน
+          ส่วนต่างแสดงเมื่อจำนวนที่ใช้คำนวณตรงกันเท่านั้น
+          ตัวเลขอาจต่างกันเพราะช่วงเวลาและเกณฑ์การนับไม่เหมือนกัน
         </p>
         <p className="mt-2 text-[11px] text-zinc-500">
-          HDC: {reference.table} · รายงาน {reference.reportId} · ประมวลผล {formatProcessingDate(reference.dateCom)}
+          รายงาน HDC ({reference.table}) · รหัส {reference.reportId} · ประมวลผล {formatProcessingDate(reference.dateCom)}
           {updatedAt && <> · EPI อัปเดต {formatDateTimeStr(updatedAt)}</>}
         </p>
       </>}
