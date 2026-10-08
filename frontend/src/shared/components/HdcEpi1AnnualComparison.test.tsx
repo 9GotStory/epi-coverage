@@ -62,7 +62,21 @@ describe('HDC reference is optional, provenance-specific UI', () => {
     expect(screen.getByText('98.34%')).toBeTruthy();
     expect(screen.getByText('180/181')).toBeTruthy();
     expect(screen.getByText('178/181')).toBeTruthy();
+    expect(screen.getByRole('columnheader', { name: 'HDC − EPI' })).toBeTruthy();
+    expect(screen.getByText('+1.10 จุด')).toBeTruthy();
     expect(fetchApi).toHaveBeenCalledWith('getOpenData', { payload: { tableName: 's_epi1', year: '2569' } });
+  });
+
+  it('shows a negative signed gap when rule-assessed EPI coverage exceeds HDC', async () => {
+    vi.mocked(fetchApi).mockResolvedValue({
+      status: 200, data: { statusCode: 200, data: [upstreamRow()], isFromCache: true },
+    });
+    mount({
+      ...summary,
+      view1Breakdown: [{ name: 'BCG', passed: 181, total: 181, coverage: 100, metric_key: 'fixture-bcg' }],
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'เปรียบเทียบกับ HDC OpenData' }));
+    expect(await screen.findByText('-0.55 จุด')).toBeTruthy();
   });
 
   it('preserves HDC and EPI counts but forbids a comparable gap if population totals differ', async () => {
