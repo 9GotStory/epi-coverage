@@ -47,6 +47,7 @@ const renderDashboardWith = (summaryData: DashboardSummaryData): string => {
     summaryData,
     updated_at: '2026-09-01T00:00:00.000Z',
   };
+  client.setQueryData(['dashboardSummaryYears'], { Epi_1_Year: [currentYear] });
   client.setQueryData(['dashboardSummaries', currentYear, 'all'], [row]);
   client.setQueryData(['targetConfig'], {});
   return renderToStaticMarkup(
