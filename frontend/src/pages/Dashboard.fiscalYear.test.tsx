@@ -95,7 +95,7 @@ describe('Dashboard fiscal-year selection', () => {
       '2568:all': [makeRow('Epi_1_Year', 2568, 8)],
     });
     const [yearSelect] = screen.getAllByRole('combobox');
-    expect(yearSelect).toHaveValue('2569');
+    expect((yearSelect as HTMLSelectElement).value).toBe('2569');
     expect(within(screen.getByText('ภาพรวมเด็กอายุครบ 1 ปี').closest('section')!).getAllByText('19').length).toBeTruthy();
     expect(screen.getByText(/ภาพรวมผลการดำเนินงานสร้างเสริมภูมิคุ้มกันโรค ปีงบประมาณ 2569/)).toBeTruthy();
     expect(within(yearSelect).queryByRole('option', { name: /3000/ })).toBeNull();
@@ -110,10 +110,10 @@ describe('Dashboard fiscal-year selection', () => {
     const [yearSelect, quarterSelect] = screen.getAllByRole('combobox');
     expect(screen.getByText('เป้าหมาย: ≥ 91%')).toBeTruthy();
     fireEvent.change(quarterSelect, { target: { value: '2' } });
-    expect(quarterSelect).toHaveValue('2');
+    expect((quarterSelect as HTMLSelectElement).value).toBe('2');
     fireEvent.change(yearSelect, { target: { value: '2568' } });
-    expect(yearSelect).toHaveValue('2568');
-    expect(quarterSelect).toHaveValue('all');
+    expect((yearSelect as HTMLSelectElement).value).toBe('2568');
+    expect((quarterSelect as HTMLSelectElement).value).toBe('all');
     const section = screen.getByText('ภาพรวมเด็กอายุครบ 1 ปี').closest('section')!;
     expect(within(section).getAllByText('8').length).toBeGreaterThan(0);
     expect(within(section).getByText('เป้าหมาย: ≥ 81%')).toBeTruthy();
