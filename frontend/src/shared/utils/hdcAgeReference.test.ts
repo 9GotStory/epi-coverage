@@ -75,6 +75,39 @@ describe('HDC age-specific annual references',()=>{
   });
 });
 
+/**
+ * Aggregate birth-month counts (FY2569) independently reconciled against
+ * person-level HDC exports. No identifying or clinical person-level data here.
+ * The test locks correct source field naming even where HDC differs from EPI.
+ */
+describe('HDC and imported EPI FY2569 birth-month reconciliation',()=>{
+  it('retains 12-month count parity for DTP3 ↔ dtp_hb3, IPV2 ↔ ipv, OPV3 ↔ opv3',()=>{
+    const sourceMonths=[
+      // Birth cohort month, target, DTP3, IPV1, IPV2, OPV3
+      [17,17,17,15,17],[14,14,12,14,14],[17,16,13,14,16],
+      [16,16,14,14,16],[9,9,7,9,9],[14,14,13,14,14],
+      [10,10,9,10,10],[20,20,19,20,20],[13,13,11,12,13],
+      [12,12,12,12,12],[20,19,19,19,19],[19,18,15,19,18],
+    ];
+    const fields:Record<string,unknown>={};
+    sourceMonths.forEach(([target,dtp3,ipv1,ipv2,opv3],index)=>{
+      const month=months[index];
+      fields['target'+month]=target;
+      fields['dtp_hb3_'+month]=dtp3;
+      fields['ipv1_'+month]=ipv1;
+      fields['ipv_'+month]=ipv2;
+      fields['opv3_'+month]=opv3;
+    });
+    const annual=summarizeHdcAgeAnnual([example('1yr',fields)],2569,'1yr');
+    expect(annual?.target).toBe(181);
+    expect(annual?.numerators.dtp_hb3).toBe(178);
+    expect(annual?.numerators.ipv1).toBe(161);
+    expect(annual?.numerators.ipv).toBe(172);
+    expect(annual?.numerators.opv3).toBe(178);
+    expect(sourceMonths).toHaveLength(12);
+  });
+});
+
 describe('mapping source is vaccine_rules and is evidence-gated',()=>{
   it('maps HBV dose 3/4 with the documented HOSxP field swap, not by suffix inference',()=>{
     const third=rule('1yr','hbv3');
