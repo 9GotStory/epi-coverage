@@ -71,6 +71,27 @@ const baseSummary = {
   facilityBreakdownV2: [],
 };
 
+
+describe('Dashboard Thai status labels', () => {
+  it('avoids misleading PASS/FAIL when no target has been configured', () => {
+    const html = renderDashboardWith({
+      ...baseSummary,
+      view1Coverage: 80,
+      view1PassedDoses: 8,
+      view1TotalDoses: 10,
+      view2Coverage: 50,
+      view2Passed: 5,
+      view2ApplicableTotal: 10,
+      view2PendingCount: 0,
+    });
+    expect(html).toContain('ยังไม่กำหนดเป้า');
+    expect(html).toContain('ยังไม่ผ่านเกณฑ์');
+    expect(html).not.toContain('>PASS<');
+    expect(html).not.toContain('>FAIL<');
+    expect(html).not.toContain('ตกหล่น');
+  });
+});
+
 describe('Issue #23 — Dashboard "ยังไม่ผ่านเกณฑ์" value correctness', () => {
   it('I1: current-contract summary shows the applicable-based missed count (7 - 5 = 2), not total - passed (5)', () => {
     const html = renderDashboardWith({
