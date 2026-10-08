@@ -1,5 +1,5 @@
 /**
- * Issue #23 RED contracts — Dashboard "ตกหล่น" correctness.
+ * Issue #23 RED contracts — Dashboard "ยังไม่ผ่านเกณฑ์" correctness.
  *
  * Current behavior (the defect): Dashboard.tsx renders the View 2 missed count as
  * `summary.total - summary.view2Passed` — the COHORT total minus passed — while
@@ -34,9 +34,9 @@ vi.mock('../shared/lib/api', () => ({
 
 const currentYear = getCurrentFiscalYear();
 
-/** Capture the rendered "ตกหล่น" values, one per age-group section (JSX order: 1ปี, 2ปี, 3ปี, 5ปี). */
+/** Capture the rendered "ยังไม่ผ่านเกณฑ์" values, one per age-group section (JSX order: 1ปี, 2ปี, 3ปี, 5ปี). */
 const missedValuesFrom = (html: string): string[] =>
-  [...html.matchAll(/ตกหล่น\s*<strong[^>]*>([^<]+)<\/strong>/g)].map(match => match[1].trim());
+  [...html.matchAll(/ยังไม่ผ่านเกณฑ์\s*<strong[^>]*>([^<]+)<\/strong>/g)].map(match => match[1].trim());
 
 const renderDashboardWith = (summaryData: DashboardSummaryData): string => {
   const client = new QueryClient();
@@ -71,7 +71,7 @@ const baseSummary = {
   facilityBreakdownV2: [],
 };
 
-describe('Issue #23 — Dashboard "ตกหล่น" value correctness', () => {
+describe('Issue #23 — Dashboard "ยังไม่ผ่านเกณฑ์" value correctness', () => {
   it('I1: current-contract summary shows the applicable-based missed count (7 - 5 = 2), not total - passed (5)', () => {
     const html = renderDashboardWith({
       ...baseSummary,
