@@ -14,12 +14,12 @@ Because the OpenData API has its own metric column names, a small **age-report c
 
 | Age | OpenData table | Exact report ID | View 1 metrics linked to EPI rules |
 | --- | --- | --- | --- |
-| 1 year | `s_epi1` | `c88658f4d09acb8c76e6c06ffb58ebaf` | BCG; HBV 1–4 (including verified HOSxP 4-/6-month physical field swap); DTP 1–2; Hib 1–3; IPV 1; MMR 1; PCV 1–3 when present in the EPI summary; Rota first/complete (with exact alternative-field contracts) |
+| 1 year | `s_epi1` | `c88658f4d09acb8c76e6c06ffb58ebaf` | BCG; HBV 1–4 (including the verified HOSxP physical field swap); DTP 1–3 (HDC third dose = `dtp_hb3`); Hib 1–3; IPV 1–2 (HDC second dose = `ipv`); OPV 3; MMR 1; PCV 1–3 when present in the EPI summary; Rota first/complete (with exact alternative-field contracts) |
 | 2 years | `s_epi2` | `71e49e4b61aafee17761601c506d5f85` | MMR 1–2; DTP 4; OPV 4; LAJE/JE first-course branch (`je2` source) |
 | 3 years | `s_epi3` | `267ce09f2a704eb7783997e25d1f18ba` | LAJE/JE second-course branch (`je3` source) |
 | 5 years | `s_epi5` | `c47283d3c2c1e6528ddcf88c254f21b3` | DTP 5; OPV 5 |
 
-**Intentionally not joined in this revision:** 1-year `DTP3` to combined HDC `dtp_hb3`; `IPV2` to ambiguous `ipv` naming; `OPV3` given unresolved age-6-month physical field mapping documented in `docs/hdc-column-upgrade.md`. These EPI rows are still visible in the comparison with an explicit unsupported indicator, **never 0%**. Any future crosswalk extension requires source-schema evidence and tests. Branch mappings such as JE/Rota establish a field/report pairing, **not** a guarantee that HDC and EPI apply identical clinical eligibility rules.
+**FY2569 empirical reconciliation completed for the three previously withheld metrics:** DTP3 → HDC `dtp_hb3` (178/181), IPV2 → HDC `ipv` (172/181), and OPV3 → HDC `opv3` (178/181). We independently compared HDC OpenData monthly aggregate counters with person-level HDC export dates in the selected 1-year birth cohort, month by month: all **12 of 12 months** matched for target, these three vaccines, and IPV1 (`ipv1_date` → `ipv1`). The matched annual counters are snapshot evidence, **not** a claim that HDC vaccine indicator algorithms and EPI date-validation rules are identical for every future year. These crosswalk entries still require matching active yearly `vaccine_rules` (code, group, fields, logic, metric_key). Unknown or changed mapping remains unavailable rather than 0%. Branch mappings such as JE/Rota establish a field/report pairing, not clinical rule equivalence.
 
 ### Verified underlying snapshot (FY2569)
 

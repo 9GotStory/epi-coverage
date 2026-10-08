@@ -15,10 +15,12 @@ function asRecord(value:unknown):Record<string,unknown>|null {
  * source of vaccine display names. The visible vaccine list and identity come
  * exclusively from snapshot metric_key + current active vaccine_rules.
  *
- * Only pairs whose source meaning can be checked against the age-specific
- * HDC schema and EPI field/branch contract appear here. Deliberately absent:
- * DTP3 ↔ combined DTP-HB3; OPV3 pending local export mapping;
- * IPV2 ↔ ambiguous `ipv`/ `ipv1` naming.
+ * Only verified pairs appear here. For FY2569, the three historically
+ * withheld mappings have been cross-checked against HDC s_epi1 and HDC
+ * person-level export data by cohort birth month (12/12 exact count parity):
+ * DTP3 ↔ dtp_hb3, IPV2 ↔ ipv, OPV3 ↔ opv3.
+ * Upstream HDC indicators can still use different clinical validity rules
+ * than EPI; show both sources without replacing the EPI evaluation.
  */
 type HdcAgeGroup = '1yr' | '2yr' | '3yr' | '5yr';
 interface HdcMetricRuleMapping {
@@ -57,10 +59,15 @@ export const HDC_AGE_REPORTS: Record<HdcAgeGroup, HdcAgeReport> = {
       pair('hbv4','044','HBV','hbv3_date'),
       pair('dtp1','031','DTP','dtp1_date'),
       pair('dtp2','032','DTP','dtp2_date'),
+      // HDC groups the third DTP-HB dose under dtp_hb3 (not dtp3).
+      pair('dtp_hb3','033','DTP','dtp3_date'),
       pair('hib1','D21','Hib','hib1_date'),
       pair('hib2','D22','Hib','hib2_date'),
       pair('hib3','D23','Hib','hib3_date'),
       pair('ipv1','I11','IPV','ipv1_date'),
+      // HDC labels the second IPV metric simply `ipv`; `ipv1` is first dose.
+      pair('ipv','I12','IPV','ipv2_date'),
+      pair('opv3','083','OPV','opv3_date'),
       pair('mmr','061','MMR','mmr1_date'),
       pair('pcv1','P11','PCV','pcv1_date'),
       pair('pcv2','P12','PCV','pcv2_date'),

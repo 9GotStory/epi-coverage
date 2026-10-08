@@ -75,6 +75,39 @@ describe('HDC age-specific annual references',()=>{
   });
 });
 
+/**
+ * Aggregate birth-month counts (FY2569) independently reconciled against
+ * person-level HDC exports. No identifying or clinical person-level data here.
+ * The test locks correct source field naming even where HDC differs from EPI.
+ */
+describe('HDC and imported EPI FY2569 birth-month reconciliation',()=>{
+  it('retains 12-month count parity for DTP3 ↔ dtp_hb3, IPV2 ↔ ipv, OPV3 ↔ opv3',()=>{
+    const sourceMonths=[
+      // Birth cohort month, target, DTP3, IPV1, IPV2, OPV3
+      [17,17,17,15,17],[14,14,12,14,14],[17,16,13,14,16],
+      [16,16,14,14,16],[9,9,7,9,9],[14,14,13,14,14],
+      [10,10,9,10,10],[20,20,19,20,20],[13,13,11,12,13],
+      [12,12,12,12,12],[20,19,19,19,19],[19,18,15,19,18],
+    ];
+    const fields:Record<string,unknown>={};
+    sourceMonths.forEach(([target,dtp3,ipv1,ipv2,opv3],index)=>{
+      const month=months[index];
+      fields['target'+month]=target;
+      fields['dtp_hb3_'+month]=dtp3;
+      fields['ipv1_'+month]=ipv1;
+      fields['ipv_'+month]=ipv2;
+      fields['opv3_'+month]=opv3;
+    });
+    const annual=summarizeHdcAgeAnnual([example('1yr',fields)],2569,'1yr');
+    expect(annual?.target).toBe(181);
+    expect(annual?.numerators.dtp_hb3).toBe(178);
+    expect(annual?.numerators.ipv1).toBe(161);
+    expect(annual?.numerators.ipv).toBe(172);
+    expect(annual?.numerators.opv3).toBe(178);
+    expect(sourceMonths).toHaveLength(12);
+  });
+});
+
 describe('mapping source is vaccine_rules and is evidence-gated',()=>{
   it('maps HBV dose 3/4 with the documented HOSxP field swap, not by suffix inference',()=>{
     const third=rule('1yr','hbv3');
@@ -99,16 +132,21 @@ describe('mapping source is vaccine_rules and is evidence-gated',()=>{
     expect(findHdcAgeMetric(item(r),[r],2569,'3yr')).toBeNull();
   });
 
-  it('supports source-backed 3yr JE and 5yr DTP5, but never guesses DTP3 combined and IPV2',()=>{
+  it('supports source-backed 3yr JE, 5yr DTP5 and verified HDC reporting names for all 1yr vaccine rows',()=>{
     const r3=rule('3yr','je3'),r5=rule('5yr','dtp5');
     expect(findHdcAgeMetric(item(r3),[r3],2569,'3yr')).toBe('je3');
     expect(findHdcAgeMetric(item(r5),[r5],2569,'5yr')).toBe('dtp5');
-    const unknown:VaccineRule={...rule('1yr','dtp1'),rule_id:'dtp3',display_name:'DTP เข็ม 3',
-      hdc_code:'033',required_fields:['dtp3_date']};
-    expect(findHdcAgeMetric(item(unknown),[unknown],2569,'1yr')).toBeNull();
-    const ipv2:VaccineRule={...rule('1yr','ipv1'),rule_id:'ipv2',display_name:'IPV เข็ม 2',
-      hdc_code:'I12',required_fields:['ipv2_date']};
-    expect(findHdcAgeMetric(item(ipv2),[ipv2],2569,'1yr')).toBeNull();
+    // FY2569 HDC vs imported child birth-cohort parity: exact in all 12 months.
+    const dtp3=rule('1yr','dtp_hb3');
+    const ipv2=rule('1yr','ipv');
+    const opv3=rule('1yr','opv3');
+    expect(findHdcAgeMetric(item(dtp3),[dtp3],2569,'1yr')).toBe('dtp_hb3');
+    expect(findHdcAgeMetric(item(ipv2),[ipv2],2569,'1yr')).toBe('ipv');
+    expect(findHdcAgeMetric(item(opv3),[opv3],2569,'1yr')).toBe('opv3');
+    // Wrong vaccine code or wrong physical input column must remain rejected.
+    expect(findHdcAgeMetric(item(dtp3),[{...dtp3,hdc_code:'032'}],2569,'1yr')).toBeNull();
+    expect(findHdcAgeMetric(item(ipv2),[{...ipv2,required_fields:['ipv1_date']}],2569,'1yr')).toBeNull();
+    expect(findHdcAgeMetric(item(opv3),[{...opv3,required_fields:['opv1_date']}],2569,'1yr')).toBeNull();
   });
 
   it('allows future fiscal years only when they own an explicitly matching active rule',()=>{
