@@ -51,48 +51,52 @@ Read `getOpenData` with `{ payload: { tableName: ageReport.table, year: String(s
 - **Never automatically update `vaccine_rules`, Google Sheets, or historical `Dashboard_Summaries`.**
 
 
-## View 2: Fully Immunized (annual, four age groups)
 
-The supplied HDC report (28dd2c7955ce926456240b2ff0100bde) is for age 1.
-The existing opendata_cache dataset **s_epi_complete** holds four **different**
-HDC report IDs in one table. The client MUST select exactly the age-specific ID:
+## View 2: follow-up by HDC dose (annual, four age groups)
 
-| Group | HDC report ID | FY2569 HDC result/target | FY2569 EPI View 2 |
-| --- | --- | ---: | ---: |
-| 1 year | 28dd2c7955ce926456240b2ff0100bde | 142/181 | 142/181 |
-| 2 years | 35f4a8d465e6e1edc05f3d8ab658c551 | 72/203 | 72/203 |
-| 3 years | d1fe173d08e959397adf34b1d77e88d7 | 28/231 | 28/231 |
-| 5 years | f033ab37c30201f73f142449d037028d | 26/264 | 26/264 |
+The original View 2 HDC Fully Immunized comparison repeated exactly the same
+`result/target` score that EPI already presents in the main completion card.
+This is redundant and does not answer which dose should be followed up.
+The source `s_epi_complete` has only **Fully Immunized totals** — no
+per-vaccine numerator fields; never imply that its `result` can be broken
+into doses.
 
-These are October 2026 FY2569 snapshots, NOT fixed values for future years.
-Importantly, the HDC complete age-3/age-5 targets (231/264) match EPI,
-whereas the HDC per-vaccine age-3/age-5 targets (230/262) do not.
-Never substitute per-vaccine denominators into Fully Immunized.
+Instead, the **collapsed-by-default** View 2 control is
+**ดูความครอบคลุมรายเข็มจาก HDC**. It reuses the existing
+`useHdcAgeAnnualReference` for the selected fiscal year and matching
+same-age per-dose report (`s_epi1/2/3/5`), with all source-identity, district,
+snapshot, and 12-month count-integrity protections from View 1.
 
-### View 2 aggregation and provenance
+- Rows are anchored to EPI's selected-year `view1Breakdown` and a uniquely
+  matched active `vaccine_rules` entry. The EPI list and vaccine names remain
+  the source of UI identity; no duplicated frontend vaccine metadata.
+- Show only confirmed mappings. Exclude rules marked `is_required_for_v2=false`
+  or `display_only=true`, so out-of-plan doses such as PCV do not dominate
+  follow-up priorities. Unknown mappings are counted in a small explanatory
+  note, **never displayed as zero coverage**.
+- Sort by **ascending HDC dose coverage**, display five lowest-coverage items,
+  and provide an explicit control to reveal all. Each row shows the HDC dose
+  numerator, target, percentage, and count not met in this *dose indicator*.
+- No new HDC Complete scorecard, no duplicate HDC-versus-EPI total pair, no
+  new menu/tab, no writes to HDC/EPI/snapshots/rules. View 1 is unchanged.
+- **Critical interpretation:** HDC dose-level deficits are **not distinct
+  children who failed Fully Immunized**. The same child may be absent in
+  multiple dose indicators. The HDC age-3 and age-5 per-dose denominators
+  for FY2569 (230/262) differ from HDC Fully Immunized (231/264); never
+  use one source's denominator with another metric, nor automatically compare
+  same age-dose coverage to accumulated EPI View 2 vaccine breakdowns.
+- HDC report provenance and processing timestamp remain visible. Matching
+  HDC Fully Immunized and EPI View 2 results in FY2569 partly reflect EPI's
+  existing `record.result` HDC status override; such agreement is not an
+  independent clinical validation.
 
-- The existing public GAS getOpenData action reads tableName=s_epi_complete and
-  the selected fiscal year on demand, only after expanding the View 2 control.
-- Independently filter every returned row by the exact age report ID, selected
-  fiscal year, and district area prefix 5406. Reject duplicate hospcode/areacode
-  pairs and mixed HDC processing timestamps within the chosen report.
-- Read top-level target and result totals. Verify each equals the sum of its
-  12 monthly targetMM and resultMM counters. Reject missing, invalid, negative,
-  non-integer, overflowing, or impossible numerator/denominator pairs.
-- Display HDC result/target beside EPI view2Passed/view2ApplicableTotal.
-  The signed HDC-minus-EPI gap is allowed ONLY if HDC target equals EPI total
-  AND EPI view2ApplicableTotal, and the EPI coverage is consistent with its own
-  numerator/denominator. Older snapshots missing applicable denominator
-  may show EPI's rate but MUST NOT show an unsupported gap.
-- Collapsed by default, inside annual View 2. No duplicate vaccine rows,
-  new chart, scorecard replacement, person-level disclosure, backend change,
-  spreadsheet writes, or modification to EPI's evaluation rules.
+The official HDC Fully Immunized report for age 1 remains available at
+`https://hdc.moph.go.th/pre/public/standard-report-detail/28dd2c7955ce926456240b2ff0100bde?subcatalogId=4df360514655f79f13901ef1181ca1c7`;
+its **single all-or-nothing score is already covered by the main dashboard card**.
 
-### Interpreting matching View 2 scores
+### Review contract
 
-The current evaluateDynamicV2 rule engine has a safety-net override
-for person-level HDC record.result. Agreement of the FY2569 HDC aggregate
-and EPI View 2 scores therefore does NOT independently prove that their
-clinical rule logic or processing cycle is identical. The additional UI
-is intended as a transparent reporting reconciliation, not a second
-independent clinical validation.
+- Test lazy loading for all four ages, exact `getOpenData` per-dose table choice,
+  ascending sort, initial top-five limit, reveal-all control, exclusion of
+  out-of-plan/unknown mappings, and clean unavailable/error states.
+- Confirm frontend test/lint/build and Backend/Relay CI before merge.

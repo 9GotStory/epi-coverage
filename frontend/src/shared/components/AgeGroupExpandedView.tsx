@@ -4,7 +4,7 @@ import type { LegacyCompatibleGroupSummary } from '../utils/dashboardLogic';
 import { useTargetSettings } from '../hooks/useTargetSettings';
 import { useVaccineRules } from '../hooks/useVaccineRules';
 import { HdcAgeAnnualComparison } from './HdcAgeAnnualComparison';
-import { HdcFullyImmunizedComparison } from './HdcFullyImmunizedComparison';
+import { HdcView2DoseInsights } from './HdcView2DoseInsights';
 
 function shortenFacilityName(name: string) {
   return name.replace(/โรงพยาบาลส่งเสริมสุขภาพตำบล/g, 'รพ.สต.')
@@ -226,10 +226,11 @@ export function AgeGroupExpandedView({ summary, targetView1, targetView2, fiscal
               <div className="text-xs text-zinc-400 py-2">ไม่มีข้อมูลวัคซีนในเงื่อนไข</div>
             )}
             {quarter === 'all' && (
-              <HdcFullyImmunizedComparison
+              <HdcView2DoseInsights
                 ageGroup={ageGroup}
                 fiscalYear={fiscalYear}
                 summary={summary}
+                rules={rules}
                 updatedAt={updatedAt}
               />
             )}
