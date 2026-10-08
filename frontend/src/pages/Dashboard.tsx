@@ -15,7 +15,7 @@ import {
 
 import { AgeGroupExpandedView } from '../shared/components/AgeGroupExpandedView';
 import type { LegacyCompatibleGroupSummary } from '../shared/utils/dashboardLogic';
-import { formatDateTimeStr } from '../shared/utils/dateUtils';
+import { formatDateTimeStr, getCurrentFiscalYear } from '../shared/utils/dateUtils';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../shared/components/ui/select';
 
 // ──────────────────────────────────────────────
@@ -194,20 +194,20 @@ const AgeGroupSection = memo(function AgeGroupSection({
 // Main Dashboard Page
 // ──────────────────────────────────────────────
 export function Dashboard() {
+  const currentYear = getCurrentFiscalYear();
+  const [fiscalYear, setFiscalYear] = useState<number>(currentYear);
   const { tables, isLoading: yearsLoading, error: yearsError } = useDashboardSummaryYears();
-  const availableYears = getComparisonFiscalYears(tables);
-  const [chosenYear, setChosenYear] = useState<number | null>(null);
-  // The selector only advertises years backed by an actual, usable annual snapshot.
-  // Manual selection is retained unless that year disappears from the available set.
-  const fiscalYear = chosenYear !== null && availableYears.includes(chosenYear)
-    ? chosenYear
-    : availableYears[availableYears.length - 1];
+  // Always offer the current FY, including when its first summary has not yet
+  // been saved. Add past/future years only when annual snapshots exist.
+  // Preserve a manually chosen FY if background discovery later changes.
+  const availableYears = [...new Set([currentYear, fiscalYear, ...getComparisonFiscalYears(tables)])]
+    .sort((a, b) => b - a);
 
   const { getTarget } = useTargetSettings();
   const [quarter, setQuarter] = useState<number | 'all'>('all');
 
-  // A selected fiscal year drives both the summary query and its target thresholds.
-  // The summary query is disabled until fiscal-year discovery returns a usable year.
+  // The clock-based current FY is selectable immediately, independently of
+  // the historical-year discovery query. No missing summary is fabricated as 0.
   const { data: summaries, isLoading: summariesLoading, error: summariesError } =
     useDashboardSummaries(fiscalYear, quarter);
 
@@ -245,9 +245,9 @@ export function Dashboard() {
             </label>
             <Select
               value={fiscalYear?.toString()}
-              disabled={yearsLoading || !!yearsError || availableYears.length === 0}
+              disabled={yearsLoading || !!yearsError}
               onValueChange={value => {
-                setChosenYear(Number(value));
+                setFiscalYear(Number(value));
                 setQuarter('all');
               }}
             >
@@ -255,7 +255,7 @@ export function Dashboard() {
                 <SelectValue placeholder="เลือกปี" />
               </SelectTrigger>
               <SelectContent>
-                {[...availableYears].reverse().map(year => (
+                {availableYears.map(year => (
                   <SelectItem key={year} value={String(year)}>{year}</SelectItem>
                 ))}
               </SelectContent>
@@ -266,7 +266,6 @@ export function Dashboard() {
             </label>
             <Select
               value={quarter.toString()}
-              disabled={yearsLoading || !!yearsError || fiscalYear === undefined}
               onValueChange={val => setQuarter(val === 'all' ? 'all' : Number(val))}
             >
               <SelectTrigger id="dashboard-quarter" aria-label="ไตรมาส" className="w-[200px] bg-white h-[34px] text-[14px]">
@@ -283,13 +282,15 @@ export function Dashboard() {
           </div>
         </div>
 
-        {yearsLoading ? (
-          <p role="status" className="text-sm text-zinc-500">กำลังโหลดปีงบประมาณที่มีข้อมูลสรุป...</p>
-        ) : yearsError ? (
-          <p role="alert" className="text-sm text-red-700">ไม่สามารถโหลดปีงบประมาณที่มีข้อมูลสรุปได้: {yearsError}</p>
-        ) : fiscalYear === undefined ? (
-          <p role="status" className="text-sm text-zinc-500">ยังไม่มีข้อมูลสรุปสำหรับปีงบประมาณใด กรุณานำเข้าข้อมูลและสร้างสรุปก่อน</p>
-        ) : summariesError ? (
+        {yearsLoading && (
+          <p role="status" className="text-sm text-zinc-500">กำลังโหลดรายการปีงบประมาณย้อนหลัง...</p>
+        )}
+        {yearsError && (
+          <p role="alert" className="text-sm text-red-700">
+            ไม่สามารถโหลดรายการปีงบประมาณย้อนหลังได้: {yearsError}
+          </p>
+        )}
+        {summariesError ? (
           <p role="alert" className="text-sm text-red-700">
             ไม่สามารถโหลดข้อมูลสรุปปีงบประมาณ {fiscalYear} ได้: {summariesError}
           </p>
