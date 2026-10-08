@@ -113,7 +113,7 @@ const AgeGroupSection = memo(function AgeGroupSection({
             <div>
               <p className="text-3xl font-bold text-zinc-900 tracking-tight">{summary.view1TotalDoses === 0 ? '—' : summary.view1Coverage.toFixed(2)}<span className="text-xl text-zinc-400 font-medium ml-0.5">%</span></p>
               <p className="text-sm text-zinc-500 mt-1">
-                ผ่านเกณฑ์ <strong className="text-zinc-800">{summary.view1PassedDoses.toLocaleString()}</strong> จาก <strong className="text-zinc-800">{summary.view1TotalDoses.toLocaleString()}</strong> รายการวัคซีน
+                ผ่านเกณฑ์ <strong className="text-zinc-800">{summary.view1PassedDoses.toLocaleString()}</strong> จาก <strong className="text-zinc-800">{summary.view1TotalDoses.toLocaleString()}</strong> รายการประเมินรายเข็ม
                 {!!summary.view1UnknownDoses && <span className="block">ข้อมูลไม่เพียงพอ {summary.view1UnknownDoses.toLocaleString()} รายการ (ไม่นำมาคำนวณร้อยละ)</span>}
               </p>
             </div>
@@ -235,7 +235,7 @@ export function Dashboard() {
       <main className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <p className="text-zinc-500 font-medium">
-            สรุปผลการได้รับวัคซีน
+            สรุปผลการประเมินวัคซีน
             {fiscalYear !== undefined ? ` ปีงบประมาณ ${fiscalYear}` : ''}
           </p>
 
