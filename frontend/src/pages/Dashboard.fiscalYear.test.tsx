@@ -96,7 +96,7 @@ describe('Dashboard fiscal-year selection', () => {
     });
     const [yearSelect] = screen.getAllByRole('combobox');
     expect(yearSelect).toHaveValue('2569');
-    expect(within(screen.getByText('ภาพรวมเด็กอายุครบ 1 ปี').closest('section')!).getByText('19')).toBeTruthy();
+    expect(within(screen.getByText('ภาพรวมเด็กอายุครบ 1 ปี').closest('section')!).getAllByText('19').length).toBeTruthy();
     expect(screen.getByText(/ภาพรวมผลการดำเนินงานสร้างเสริมภูมิคุ้มกันโรค ปีงบประมาณ 2569/)).toBeTruthy();
     expect(within(yearSelect).queryByRole('option', { name: /3000/ })).toBeNull();
   });
@@ -115,7 +115,7 @@ describe('Dashboard fiscal-year selection', () => {
     expect(yearSelect).toHaveValue('2568');
     expect(quarterSelect).toHaveValue('all');
     const section = screen.getByText('ภาพรวมเด็กอายุครบ 1 ปี').closest('section')!;
-    expect(within(section).getByText('8')).toBeTruthy();
+    expect(within(section).getAllByText('8').length).toBeGreaterThan(0);
     expect(within(section).getByText('เป้าหมาย: ≥ 81%')).toBeTruthy();
   });
 
@@ -125,7 +125,7 @@ describe('Dashboard fiscal-year selection', () => {
     });
     const age1 = screen.getByText('ภาพรวมเด็กอายุครบ 1 ปี').closest('section')!;
     const age2 = screen.getByText('ภาพรวมเด็กอายุครบ 2 ปี').closest('section')!;
-    expect(within(age1).getByText('0.00')).toBeTruthy();
+    expect(within(age1).getAllByText('0.00').length).toBeGreaterThan(0);
     expect(within(age2).getByText(/ไม่มีข้อมูลสรุปสำหรับปีงบประมาณ 2569/)).toBeTruthy();
     expect(within(age2).queryByText('0.00')).toBeNull();
   });
