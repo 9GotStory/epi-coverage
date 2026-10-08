@@ -37,7 +37,7 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 function count(row: Record<string, unknown>, field: string): number {
   const source = row[field];
   // Absent/invalid data is never treated as zero or an empty successful result.
-  if (!(typeof source === 'number' || (typeof source === 'string' && /^\\d+$/.test(source)))) {
+  if (!(typeof source === 'number' || (typeof source === 'string' && /^\d+$/.test(source)))) {
     throw new Error('ข้อมูลจำนวนใน HDC ไม่ครบหรือไม่ถูกต้อง');
   }
   const value = Number(source);
@@ -69,9 +69,9 @@ export function summarizeHdcEpi1(rows: unknown[], fiscalYear: number): HdcEpi1An
     const hospcode = row.hospcode;
     const areacode = row.areacode;
     const snapshot = row.date_com;
-    if (typeof hospcode !== 'string' || !/^\\d{5}$/.test(hospcode) ||
-      typeof areacode !== 'string' || !/^\\d{8}$/.test(areacode) ||
-      typeof snapshot !== 'string' || !/^\\d{14}$/.test(snapshot)) {
+    if (typeof hospcode !== 'string' || !/^\d{5}$/.test(hospcode) ||
+      typeof areacode !== 'string' || !/^\d{8}$/.test(areacode) ||
+      typeof snapshot !== 'string' || !/^\d{14}$/.test(snapshot)) {
       throw new Error('ข้อมูลอ้างอิง HDC ไม่มีรหัสหน่วยบริการ/พื้นที่หรือรอบประมวลผลที่ตรวจสอบได้');
     }
     const locationKey = `${hospcode}|${areacode}`;
