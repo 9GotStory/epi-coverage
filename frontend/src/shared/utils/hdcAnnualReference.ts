@@ -111,10 +111,12 @@ export function findHdcEpi1Metric(
   const matches = rules.filter(rule =>
     rule.is_active && rule.view_type === 1 && rule.age_group === '1yr' &&
     Number(rule.fiscal_year) === fiscalYear &&
-    (rule.metric_key || rule.rule_id) === item.metric_key &&
     rule.display_name === item.name);
+  // A reused active display name is ambiguous even when one rule has the
+  // snapshot key. Do not silently select one of several candidate rules.
   if (matches.length !== 1) return null;
   const rule = matches[0];
+  if ((rule.metric_key || rule.rule_id) !== item.metric_key) return null;
   const validated = VERIFIED_METRICS.find(mapping =>
     rule.hdc_code === mapping.hdcCode &&
     rule.vaccine_group === mapping.vaccineGroup &&
