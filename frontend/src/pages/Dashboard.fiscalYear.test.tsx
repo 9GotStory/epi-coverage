@@ -120,7 +120,7 @@ describe('Dashboard fiscal-year selection', () => {
     });
     const [yearSelect, quarterSelect] = screen.getAllByRole('combobox');
     expect((yearSelect as HTMLSelectElement).value).toBe(String(currentYear));
-    expect(screen.getByText('เป้าหมาย: ≥ 93%')).toBeTruthy();
+    expect(screen.getByText('เป้าหมาย: 93% ขึ้นไป')).toBeTruthy();
     fireEvent.change(quarterSelect, { target: { value: '2' } });
     expect((quarterSelect as HTMLSelectElement).value).toBe('2');
     fireEvent.change(yearSelect, { target: { value: String(previousYear) } });
@@ -128,7 +128,7 @@ describe('Dashboard fiscal-year selection', () => {
     expect((quarterSelect as HTMLSelectElement).value).toBe('all');
     const age1 = screen.getByText('ภาพรวมเด็กอายุครบ 1 ปี').closest('section')!;
     expect(within(age1).getAllByText('19').length).toBeGreaterThan(0);
-    expect(within(age1).getByText('เป้าหมาย: ≥ 91%')).toBeTruthy();
+    expect(within(age1).getByText('เป้าหมาย: 91% ขึ้นไป')).toBeTruthy();
     fireEvent.change(yearSelect, { target: { value: String(currentYear) } });
     expect((yearSelect as HTMLSelectElement).value).toBe(String(currentYear));
     expect(within(age1).getAllByText('23').length).toBeGreaterThan(0);
@@ -151,7 +151,7 @@ describe('Dashboard fiscal-year selection', () => {
     expect((yearSelect as HTMLSelectElement).value).toBe(String(currentYear));
     expect(within(yearSelect).getAllByRole('option')).toHaveLength(1);
     expect(screen.getAllByText(`ยังไม่มีข้อมูลสรุปปีงบประมาณ ${currentYear}`)).toHaveLength(4);
-    expect(screen.queryByText('ยังยังไม่มีข้อมูลสรุปปีงบประมาณใด')).toBeNull();
+    expect(screen.queryByText('ยังไม่มีข้อมูลสรุปปีงบประมาณใด')).toBeNull();
   });
 
   it('reads a current-year snapshot even if it is absent from the annual-year options', () => {
