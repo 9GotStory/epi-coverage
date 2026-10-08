@@ -2,10 +2,12 @@ import { useQuery } from '@tanstack/react-query';
 import { fetchApi } from '../lib/api';
 import type { DashboardSummaryRow } from '../types/dashboardSummary';
 
-export function useDashboardSummaries(fiscalYear: number, quarter: number | 'all' = 'all') {
+export function useDashboardSummaries(fiscalYear: number | undefined, quarter: number | 'all' = 'all') {
   const { data, isLoading, error } = useQuery({
     queryKey: ['dashboardSummaries', fiscalYear, quarter],
+    enabled: fiscalYear !== undefined,
     queryFn: async () => {
+      if (fiscalYear === undefined) throw new Error('Select a fiscal year before fetching summaries');
       const response = await fetchApi('getDashboardSummaries', { fiscalYear, quarter });
       if (response.data && response.data.success) {
         // Backend resolves canonical annual precedence (_all > legacy) — the rows
