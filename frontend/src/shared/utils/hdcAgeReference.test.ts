@@ -62,7 +62,7 @@ describe('HDC age-specific annual references',()=>{
   });
 
   it('fails closed on incomplete count, malformed source row, duplicate, mixed upstream cycle, impossible numerator',()=>{
-    const incomplete=example('3yr');delete incomplete.je3_09;
+    const incomplete:Record<string,unknown>=example('3yr');delete incomplete['je3_09'];
     expect(()=>summarizeHdcAgeAnnual([incomplete],2569,'3yr')).toThrow();
     expect(()=>summarizeHdcAgeAnnual([example('2yr',{mmr1_10:null})],2569,'2yr')).toThrow();
     expect(()=>summarizeHdcAgeAnnual([example('2yr',{dtp4_10:-1})],2569,'2yr')).toThrow();
