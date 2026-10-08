@@ -1,42 +1,51 @@
-# HDC OpenData reference in EPI Coverage Dashboard (read-only)
+# HDC OpenData reference in EPI Coverage Dashboard
 
-## Purpose and authoritative boundaries
+## Roles of the two sources
 
-- **HDC OpenData / `s_epi1`** is an upstream **aggregate report reference**. Source report ID: `c88658f4d09acb8c76e6c06ffb58ebaf`, `https://hdc.moph.go.th/pre/public/standard-report-detail/c88658f4d09acb8c76e6c06ffb58ebaf?subcatalogId=4df360514655f79f13901ef1181ca1c7`.
-- **EPI Coverage / `Dashboard_Summaries`** is a separately generated **rule-based assessment** of imported HDC person-level exports. EPI vaccine date validation, View 1/2, targets, upload and persistence are unchanged.
-- Equal source origin does not prove equal indicator semantics: each percentage must retain its own numerator/denominator and source date.
-- The comparison is an on-demand, subordinate, read-only detail under `/dashboard` → 1-year group → View 1; it is **not** a return of the removed OpenData Tracking tab.
+**HDC OpenData** is a preaggregated annual standard-report reference. **EPI Coverage** imports HDC person-level exports and evaluates these data using active `vaccine_rules`. These are complementary sources; equal data origin does not guarantee identical numerator definitions, source dates, or eligible denominators.
 
-## Supported mapping and scope
+The optional comparison is **read-only**, nested under `/dashboard` → age 1 / 2 / 3 / 5 → annual `View 1`. The card remains collapsed by default and fetches from existing GAS `getOpenData` only when expanded. The main Dashboard EPI scores, View 1/2, source records, upload procedures, threshold targets, historical snapshots, facility leaderboards, and Tracking UI remain unchanged.
 
-First release: **age group 1 year, fiscal year selected, annual quarter=`all` only**. The selected-year OpenData reference is fetched when the user expands “เปรียบเทียบกับ HDC OpenData”, not during normal Dashboard rendering.
+### Single source of vaccine identity
 
-The following mappings must be proven by exact `hdc_code`, `required_fields`, vaccine group, active View 1 rule for the **selected fiscal year**, and the summary's `metric_key` identity matching **exactly one rule**. A display label alone must never establish cross-source identity.
+Vaccine rows and labels are rendered from the **selected EPI annual `Dashboard_Summaries.view1Breakdown`**, which is generated from `vaccine_rules` at processing time. For cross-source mapping, compare the **persisted `metric_key`** with exactly one active View 1 rule in `vaccine_rules` for that fiscal year and age, then check the **exact** HDC code, vaccine group, physical required fields, rule branch fields, and evaluation logic. No fuzzy display-name joins, no hand-entered UI vaccine list, no fabrication for an older summary lacking metric identity.
 
-| EPI breakdown | Vaccine Rules Engine | OpenData `s_epi1` |
-| --- | --- | --- |
-| BCG | code `010`, `bcg_date` | `bcg_10` … `bcg_09` |
-| DTP 2 months | code `031`, `dtp1_date` | `dtp1_10` … `dtp1_09` |
-| DTP 4 months | code `032`, `dtp2_date` | `dtp2_10` … `dtp2_09` |
+Because the OpenData API has its own metric column names, a small **age-report crosswalk** is required in `frontend/src/shared/utils/hdcAnnualReference.ts`. This crosswalk is only for the relationship between confirmed HDC aggregate columns and EPI rule fields; it is **not** a parallel Vaccine Rules Engine.
 
-**Not yet mapped:** EPI DTP 6 months / `dtp3_date` and the HDC `dtp_hb3_*` combined indicator. Other vaccines and groups await independent source-code and definition verification. Never infer from similarity of labels or equal rates.
+| Age | OpenData table | Exact report ID | View 1 metrics linked to EPI rules |
+| --- | --- | --- | --- |
+| 1 year | `s_epi1` | `c88658f4d09acb8c76e6c06ffb58ebaf` | BCG; HBV 1–4 (including verified HOSxP 4-/6-month physical field swap); DTP 1–2; Hib 1–3; IPV 1; MMR 1; PCV 1–3 when present in the EPI summary; Rota first/complete (with exact alternative-field contracts) |
+| 2 years | `s_epi2` | `71e49e4b61aafee17761601c506d5f85` | MMR 1–2; DTP 4; OPV 4; LAJE/JE first-course branch (`je2` source) |
+| 3 years | `s_epi3` | `267ce09f2a704eb7783997e25d1f18ba` | LAJE/JE second-course branch (`je3` source) |
+| 5 years | `s_epi5` | `c47283d3c2c1e6528ddcf88c254f21b3` | DTP 5; OPV 5 |
 
-## Aggregation and failure behavior
+**Intentionally not joined in this revision:** 1-year `DTP3` to combined HDC `dtp_hb3`; `IPV2` to ambiguous `ipv` naming; `OPV3` given unresolved age-6-month physical field mapping documented in `docs/hdc-column-upgrade.md`. These EPI rows are still visible in the comparison with an explicit unsupported indicator, **never 0%**. Any future crosswalk extension requires source-schema evidence and tests. Branch mappings such as JE/Rota establish a field/report pairing, **not** a guarantee that HDC and EPI apply identical clinical eligibility rules.
 
-Read public `getOpenData` with `{payload: {tableName: 's_epi1', year: '<selectedFY>'}}` via existing GAS API. The backend reads `opendata_cache` or may return upstream results on cache-miss. Client must always validate the **exact report id**, **selected `b_year`**, and **areacode prefix `5406`**, regardless of source. Sum all twelve month counts for the eligible district rows, using counts (not averaging monthly percentages):
+### Verified underlying snapshot (FY2569)
 
-- `target = Σ month × row targetMM`
-- `numerator_metric = Σ month × row metric_MM`
-- `coverage_metric = numerator_metric / target × 100`
+| Source report | OpenData records in district | HDC target | EPI summary total |
+| --- | ---: | ---: | ---: |
+| 1 year | 63 | 181 | 181 |
+| 2 years | 73 | 203 | 203 |
+| 3 years | 70 | 230 | 231 |
+| 5 years | 78 | 262 | 264 |
 
-Reject missing/non-integer/negative counts, duplicate `(hospcode, areacode)`, mixed `date_com` upstream processing snapshots, numerator above its month's target, and total zero. Missing/unsupported years show unavailable, **never fake 0%**; no fallback to a different year or derived EPI figure. A source failure must not hide or overwrite EPI values.
+These are source-snapshot examples from October 2026, **not timeless fixed assertions**. In particular, a difference in age 3/5 target populations is an expected comparison **blocker**: the UI may display each source separately, but not a percentage-point gap until the eligible denominators are reconciled. For 3-year EPI, an individual vaccine's applicable denominator may differ from its group total.
 
-When EPI's `summary.total` **or** an EPI per-vaccine `item.total` differs from the HDC reference `target`, present both sources with a warning **without a directly comparable percentage-point gap**. Source timestamps must be visible; identical denominators alone do not prove equal source refresh times.
+### Aggregation contract
 
-The old `/dashboard` summary card numbers and unit/facility leaderboards remain **rule-assessed EPI results**; the reference never changes pass/fail targets, imported individuals, historical snapshots, or GAS/Relay writes.
+Read `getOpenData` with `{ payload: { tableName: ageReport.table, year: String(selectedFiscalYear) } }`. The backend serves existing `opendata_cache` rows, possibly falling back to upstream. The frontend independently checks:
 
-## Review/UAT gate
+- Exact HDC standard report `id` and selected `b_year`; district prefix `5406` only.
+- Five-digit `hospcode`, eight-digit `areacode`, unique `(hospcode,areacode)` pair.
+- Uniform valid `date_com` (1-year report uses `YYYYMMDDHHMMSS`; 2/3/5-year reports use `YYYYMMDDHHMM`).
+- Every month, all mapped HDC source numerator keys and `targetMM` exist and contain nonnegative safe integers; numerator cannot exceed that month’s denominator. Reject duplicates, mixed snapshots, malformed counters, and zero total denominator.
+- Aggregation uses **sum of monthly counts across eligible rows**; never mean of per-area percentages. API errors and unavailable years are surfaced as unavailable, not fabricated zeros or substituted EPI values.
+- A signed **HDC − EPI** percentage-point gap appears only for matching fiscal-year/age, confirmed metric, and when **HDC target = EPI group total = EPI vaccine item total**. When denominators differ, show each source with a warning and **no gap**. Even with equal denominators, HDC and EPI source timestamp/indicator semantics can differ.
 
-1. Baseline FY2569 `s_epi1` district totals checked against aggregate cache: target **181**, BCG **180**, DTP1 **178**, DTP2 **179**; FY2569 EPI values (same denominator) BCG **178**, DTP1 **175**, DTP2 **175**.
-2. All frontend tests, lint and build green; synthetic tests cover a province-wide fallback response, rejected duplicate/mixed/malformed snapshots, no current-FY data, and strict unambiguous rule identity.
-3. No data mutations. Before merge/deploy, review the named report mapping and verify the UI with real non-person-level aggregate responses; do not claim other vaccine codes are already equivalent.
+### Test/release contract
+
+- Synthetic tests for all 4 reports, 12-month accumulation, cross-year/cross-area exclusions, duplicate/mixed cycles, malformed columns, strict rule identity and branch matching, and missing-data behavior.
+- Lazy UI tests confirm that all 4 ages fetch their own `s_epi*` table, never fetch before expansion, do not replace EPI scorecards, and suppress invalid gap comparisons.
+- CI tests/lint/build, backend/relay checks, code review, draft PR before any merge/deployment.
+- **Never automatically update `vaccine_rules`, Google Sheets, or historical `Dashboard_Summaries`.**
