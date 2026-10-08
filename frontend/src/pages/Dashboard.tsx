@@ -1,9 +1,10 @@
 import { memo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDashboardSummaries } from '../shared/hooks/useDashboardSummaries';
+import { useDashboardSummaryYears } from '../shared/hooks/useDashboardSummaryYears';
+import { getComparisonFiscalYears } from './comparison/model';
 import { useTargetSettings } from '../shared/hooks/useTargetSettings';
 import { SubNav } from '../widgets/layout/SubNav';
-import { getCurrentFiscalYear } from '../shared/utils/dateUtils';
 import {
   ChevronRightIcon,
   ActivityIcon,
@@ -34,7 +35,7 @@ const AgeGroupSection = memo(function AgeGroupSection({
 }: {
   age: string;
   ageGroup: string;
-  summary: LegacyCompatibleGroupSummary;
+  summary: LegacyCompatibleGroupSummary | null;
   updatedAt?: string | null;
   targetView1?: number;
   targetView2?: number;
@@ -54,6 +55,17 @@ const AgeGroupSection = memo(function AgeGroupSection({
           <div className="h-28 bg-zinc-100 rounded-xl" />
         </div>
       </div>
+    );
+  }
+
+  if (!summary) {
+    return (
+      <section className="bg-white rounded-2xl p-6 border border-zinc-200 mb-6">
+        <h2 className="text-xl font-bold text-zinc-900">ภาพรวมเด็กอายุครบ {age}</h2>
+        <p className="mt-3 text-sm text-zinc-500">
+          ไม่มีข้อมูลสรุปสำหรับปีงบประมาณ {fiscalYear}{quarter === 'all' ? '' : ` ไตรมาส ${quarter}`}
+        </p>
+      </section>
     );
   }
 
@@ -182,39 +194,33 @@ const AgeGroupSection = memo(function AgeGroupSection({
 // Main Dashboard Page
 // ──────────────────────────────────────────────
 export function Dashboard() {
-  const currentYear = getCurrentFiscalYear();
+  const { tables, isLoading: yearsLoading, error: yearsError } = useDashboardSummaryYears();
+  const availableYears = getComparisonFiscalYears(tables);
+  const [chosenYear, setChosenYear] = useState<number | null>(null);
+  // The selector only advertises years backed by an actual, usable annual snapshot.
+  // Manual selection is retained unless that year disappears from the available set.
+  const fiscalYear = chosenYear !== null && availableYears.includes(chosenYear)
+    ? chosenYear
+    : availableYears[availableYears.length - 1];
+
   const { getTarget } = useTargetSettings();
   const [quarter, setQuarter] = useState<number | 'all'>('all');
 
-  // โหลดข้อมูลผลสรุป (JSON Cache) จาก API แทนการโหลดข้อมูลดิบ
-  const { data: summaries, isLoading } = useDashboardSummaries(currentYear, quarter);
+  // A selected fiscal year drives both the summary query and its target thresholds.
+  // The summary query is disabled until fiscal-year discovery returns a usable year.
+  const { data: summaries, isLoading: summariesLoading, error: summariesError } =
+    useDashboardSummaries(fiscalYear, quarter);
 
-  // ดึงเป้าหมายแบบไดนามิกของปีปัจจุบัน
   const targetQuarter = quarter === 'all' ? 4 : quarter;
-  const targetView1 = getTarget(targetQuarter, 1, undefined, currentYear);
-  const targetView2 = getTarget(targetQuarter, 2, undefined, currentYear);
+  const targetView1 = getTarget(targetQuarter, 1, undefined, fiscalYear);
+  const targetView2 = getTarget(targetQuarter, 2, undefined, fiscalYear);
 
-  // ดึง summary ของแต่ละกลุ่มอายุจาก Array ที่ได้กลับมา
   const getSummary = (table: string) => {
-    // Backend resolves canonical annual precedence (_all > legacy) and returns one
-    // row per table — the frontend no longer picks a winner by updated_at (Issue #22).
+    // Backend owns canonical annual precedence (_all over legacy, Issue #22).
     const found = summaries.find(s => s.targetTable === table && s.summaryData);
-    if (found) {
-      // แถวสรุปจริงทุกรุ่น (legacy และปัจจุบัน) เขียนชุดฟิลด์พื้นฐานครบที่ Dashboard ใช้เสมอ —
-      // ส่วน view2ApplicableTotal/view2PendingCount เป็น optional จริงตามสัญญา #23 (แถวเก่าอาจไม่มี)
-      return { data: found.summaryData as LegacyCompatibleGroupSummary, updatedAt: found.updated_at };
-    }
-    // ส่งค่า Default กลับไปถ้ายังไม่มีข้อมูล Cache
-    return {
-      data: {
-        total: 0,
-        view1Coverage: 0, view1PassedDoses: 0, view1TotalDoses: 0, view1Breakdown: [],
-        view2Coverage: 0, view2Passed: 0, view2Breakdown: [],
-        facilityBreakdownV1: [],
-        facilityBreakdownV2: []
-      },
-      updatedAt: null
-    };
+    return found
+      ? { data: found.summaryData as LegacyCompatibleGroupSummary, updatedAt: found.updated_at }
+      : { data: null, updatedAt: null };
   };
 
   const summary1yr = getSummary('Epi_1_Year');
@@ -228,15 +234,42 @@ export function Dashboard() {
 
       <main className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-          <p className="text-zinc-500 font-medium">ภาพรวมผลการดำเนินงานสร้างเสริมภูมิคุ้มกันโรค ปีงบประมาณ {currentYear}</p>
-          
-          <div className="flex items-center gap-3">
-            <span className="text-[14px] text-zinc-500 font-medium whitespace-nowrap">ไตรมาส:</span>
-            <Select 
-              value={quarter.toString()} 
+          <p className="text-zinc-500 font-medium">
+            ภาพรวมผลการดำเนินงานสร้างเสริมภูมิคุ้มกันโรค
+            {fiscalYear !== undefined ? ` ปีงบประมาณ ${fiscalYear}` : ''}
+          </p>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <label htmlFor="dashboard-fiscal-year" className="text-[14px] text-zinc-500 font-medium whitespace-nowrap">
+              ปีงบประมาณ:
+            </label>
+            <Select
+              value={fiscalYear?.toString()}
+              disabled={yearsLoading || !!yearsError || availableYears.length === 0}
+              onValueChange={value => {
+                setChosenYear(Number(value));
+                setQuarter('all');
+              }}
+            >
+              <SelectTrigger id="dashboard-fiscal-year" aria-label="ปีงบประมาณ" className="w-[135px] bg-white h-[34px] text-[14px]">
+                <SelectValue placeholder="เลือกปี" />
+              </SelectTrigger>
+              <SelectContent>
+                {[...availableYears].reverse().map(year => (
+                  <SelectItem key={year} value={String(year)}>{year}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <label htmlFor="dashboard-quarter" className="text-[14px] text-zinc-500 font-medium whitespace-nowrap">
+              ไตรมาส:
+            </label>
+            <Select
+              value={quarter.toString()}
+              disabled={yearsLoading || !!yearsError || fiscalYear === undefined}
               onValueChange={val => setQuarter(val === 'all' ? 'all' : Number(val))}
             >
-              <SelectTrigger className="w-[200px] bg-white h-[34px] text-[14px]">
+              <SelectTrigger id="dashboard-quarter" aria-label="ไตรมาส" className="w-[200px] bg-white h-[34px] text-[14px]">
                 <SelectValue placeholder="เลือกไตรมาส" />
               </SelectTrigger>
               <SelectContent>
@@ -250,60 +283,71 @@ export function Dashboard() {
           </div>
         </div>
 
-        {/* ── Age Group Sections ── */}
-        <AgeGroupSection
-          age="1 ปี"
-          ageGroup="1yr"
-          summary={summary1yr.data}
-          updatedAt={summary1yr.updatedAt}
-          targetView1={targetView1}
-          targetView2={targetView2}
-          fiscalYear={currentYear}
-          quarter={quarter}
-          isLoading={isLoading}
-          path="/dashboard/epi-1yr"
-        />
-        
-        <AgeGroupSection
-          age="2 ปี"
-          ageGroup="2yr"
-          summary={summary2yr.data}
-          updatedAt={summary2yr.updatedAt}
-          targetView1={targetView1}
-          targetView2={targetView2}
-          fiscalYear={currentYear}
-          quarter={quarter}
-          isLoading={isLoading}
-          path="/dashboard/epi-2yr"
-        />
+        {yearsLoading ? (
+          <p role="status" className="text-sm text-zinc-500">กำลังโหลดปีงบประมาณที่มีข้อมูลสรุป...</p>
+        ) : yearsError ? (
+          <p role="alert" className="text-sm text-red-700">ไม่สามารถโหลดปีงบประมาณที่มีข้อมูลสรุปได้: {yearsError}</p>
+        ) : fiscalYear === undefined ? (
+          <p role="status" className="text-sm text-zinc-500">ยังไม่มีข้อมูลสรุปสำหรับปีงบประมาณใด กรุณานำเข้าข้อมูลและสร้างสรุปก่อน</p>
+        ) : summariesError ? (
+          <p role="alert" className="text-sm text-red-700">
+            ไม่สามารถโหลดข้อมูลสรุปปีงบประมาณ {fiscalYear} ได้: {summariesError}
+          </p>
+        ) : (
+          <>
+            <AgeGroupSection
+              age="1 ปี"
+              ageGroup="1yr"
+              summary={summary1yr.data}
+              updatedAt={summary1yr.updatedAt}
+              targetView1={targetView1}
+              targetView2={targetView2}
+              fiscalYear={fiscalYear}
+              quarter={quarter}
+              isLoading={summariesLoading}
+              path="/dashboard/epi-1yr"
+            />
 
-        <AgeGroupSection
-          age="3 ปี"
-          ageGroup="3yr"
-          summary={summary3yr.data}
-          updatedAt={summary3yr.updatedAt}
-          targetView1={targetView1}
-          targetView2={targetView2}
-          fiscalYear={currentYear}
-          quarter={quarter}
-          isLoading={isLoading}
-          path="/dashboard/epi-3yr"
-        />
+            <AgeGroupSection
+              age="2 ปี"
+              ageGroup="2yr"
+              summary={summary2yr.data}
+              updatedAt={summary2yr.updatedAt}
+              targetView1={targetView1}
+              targetView2={targetView2}
+              fiscalYear={fiscalYear}
+              quarter={quarter}
+              isLoading={summariesLoading}
+              path="/dashboard/epi-2yr"
+            />
 
-        <AgeGroupSection
-          age="5 ปี"
-          ageGroup="5yr"
-          summary={summary5yr.data}
-          updatedAt={summary5yr.updatedAt}
-          targetView1={targetView1}
-          targetView2={targetView2}
-          fiscalYear={currentYear}
-          quarter={quarter}
-          isLoading={isLoading}
-          path="/dashboard/epi-5yr"
-        />
+            <AgeGroupSection
+              age="3 ปี"
+              ageGroup="3yr"
+              summary={summary3yr.data}
+              updatedAt={summary3yr.updatedAt}
+              targetView1={targetView1}
+              targetView2={targetView2}
+              fiscalYear={fiscalYear}
+              quarter={quarter}
+              isLoading={summariesLoading}
+              path="/dashboard/epi-3yr"
+            />
 
-
+            <AgeGroupSection
+              age="5 ปี"
+              ageGroup="5yr"
+              summary={summary5yr.data}
+              updatedAt={summary5yr.updatedAt}
+              targetView1={targetView1}
+              targetView2={targetView2}
+              fiscalYear={fiscalYear}
+              quarter={quarter}
+              isLoading={summariesLoading}
+              path="/dashboard/epi-5yr"
+            />
+          </>
+        )}
       </main>
     </div>
   );
