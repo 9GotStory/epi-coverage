@@ -72,7 +72,7 @@ export function HdcEpi1AnnualComparison({ fiscalYear, summary, rules, updatedAt 
                       <th scope="col" className="py-2 pr-2 font-medium">วัคซีน</th>
                       <th scope="col" className="px-2 py-2 text-right font-medium">HDC</th>
                       <th scope="col" className="px-2 py-2 text-right font-medium">ผ่านกฎ EPI</th>
-                      <th scope="col" className="py-2 pl-2 text-right font-medium">ส่วนต่าง</th>
+                      <th scope="col" className="py-2 pl-2 text-right font-medium">HDC − EPI</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -92,7 +92,7 @@ export function HdcEpi1AnnualComparison({ fiscalYear, summary, rules, updatedAt 
                             <span className="block text-[10px] text-zinc-400">{item.passed}/{item.total}</span>
                           </td>
                           <td className="py-2 pl-2 text-right tabular-nums text-zinc-600">
-                            {sameDenominator ? `${Math.abs(hdcCoverage - item.coverage).toFixed(2)} จุด` : 'เทียบไม่ได้'}
+                            {sameDenominator ? `${hdcCoverage > item.coverage ? '+' : ''}${(hdcCoverage - item.coverage).toFixed(2)} จุด` : 'เทียบไม่ได้'}
                           </td>
                         </tr>
                       );
