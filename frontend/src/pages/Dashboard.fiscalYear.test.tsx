@@ -103,12 +103,12 @@ describe('Dashboard fiscal-year selection', () => {
     });
     const [yearSelect] = screen.getAllByRole('combobox');
     expect((yearSelect as HTMLSelectElement).value).toBe(String(currentYear));
-    expect(screen.getByText(new RegExp(`ภาพรวมผลการดำเนินงานสร้างเสริมภูมิคุ้มกันโรค ปีงบประมาณ ${currentYear}`))).toBeTruthy();
+    expect(screen.getByText(new RegExp(`สรุปผลการได้รับวัคซีน ปีงบประมาณ ${currentYear}`))).toBeTruthy();
     expect(within(yearSelect).getByRole('option', { name: String(currentYear) })).toBeTruthy();
     expect(within(yearSelect).getByRole('option', { name: String(previousYear) })).toBeTruthy();
     expect(within(yearSelect).queryByRole('option', { name: '3000' })).toBeNull();
     const age1 = screen.getByText('ภาพรวมเด็กอายุครบ 1 ปี').closest('section')!;
-    expect(within(age1).getByText(`ไม่มีข้อมูลสรุปสำหรับปีงบประมาณ ${currentYear}`)).toBeTruthy();
+    expect(within(age1).getByText(`ยังไม่มีข้อมูลสรุปปีงบประมาณ ${currentYear}`)).toBeTruthy();
     expect(within(age1).queryByText('0.00')).toBeNull();
   });
 
@@ -141,7 +141,7 @@ describe('Dashboard fiscal-year selection', () => {
     const age1 = screen.getByText('ภาพรวมเด็กอายุครบ 1 ปี').closest('section')!;
     const age2 = screen.getByText('ภาพรวมเด็กอายุครบ 2 ปี').closest('section')!;
     expect(within(age1).getAllByText('0.00').length).toBeGreaterThan(0);
-    expect(within(age2).getByText(`ไม่มีข้อมูลสรุปสำหรับปีงบประมาณ ${currentYear}`)).toBeTruthy();
+    expect(within(age2).getByText(`ยังไม่มีข้อมูลสรุปปีงบประมาณ ${currentYear}`)).toBeTruthy();
     expect(within(age2).queryByText('0.00')).toBeNull();
   });
 
@@ -150,8 +150,8 @@ describe('Dashboard fiscal-year selection', () => {
     const [yearSelect] = screen.getAllByRole('combobox');
     expect((yearSelect as HTMLSelectElement).value).toBe(String(currentYear));
     expect(within(yearSelect).getAllByRole('option')).toHaveLength(1);
-    expect(screen.getAllByText(`ไม่มีข้อมูลสรุปสำหรับปีงบประมาณ ${currentYear}`)).toHaveLength(4);
-    expect(screen.queryByText('ยังไม่มีข้อมูลสรุปสำหรับปีงบประมาณใด')).toBeNull();
+    expect(screen.getAllByText(`ยังไม่มีข้อมูลสรุปปีงบประมาณ ${currentYear}`)).toHaveLength(4);
+    expect(screen.queryByText('ยังยังไม่มีข้อมูลสรุปปีงบประมาณใด')).toBeNull();
   });
 
   it('reads a current-year snapshot even if it is absent from the annual-year options', () => {
