@@ -1,16 +1,14 @@
 // @vitest-environment jsdom
 /**
- * Issue #26 RED contracts — actual summary-writer integration.
+ * Issue #26 contracts — actual summary-writer integration.
  *
  * Exercises the REAL `handleSyncAll` path (rules fetch → evaluators →
  * calcGroupSummary → saveDashboardSummary) with only external boundaries
- * mocked (`fetchApi`, `sonner`). The production summary call path does not
- * pass snapshot-time rules into calcGroupSummary (the Issue #26 locked seam),
- * so saved `summaryData` breakdown entries today lack metric_key/vaccine_group
- * — that absence is the intended RED.
+ * mocked (`fetchApi`, `sonner`).
  *
- * The hook's default fiscal year is derived at runtime (2026-09 → '2569'); the
- * synthetic record's birth is chosen inside that year's age-1 'all' AND Q1
+ * The test explicitly selects FY2569 instead of depending on today's date.
+ * This keeps the fixture stable across the 1 October fiscal-year rollover.
+ * The synthetic record's birth is inside FY2569 age-1 'all' AND Q1
  * (Oct–Dec 2024) birth ranges so annual + quarter summaries both see it. No
  * calcGroupSummary logic is duplicated here — the real one runs.
  */
@@ -75,6 +73,7 @@ async function runSyncAll(rules: VaccineRule[]): Promise<SaveCall[]> {
   const wrapper = ({ children }: { children?: ReactNode }) =>
     createElement(QueryClientProvider, { client }, children);
   const { result } = renderHook(() => useUploadManager(), { wrapper });
+  await act(async () => { result.current.setFiscalYear('2569'); });
   await act(async () => { await result.current.handleSyncAll(); });
   return saved;
 }
@@ -88,7 +87,7 @@ const annualFor = (saved: SaveCall[]) => {
 beforeEach(() => { api.fetchApi.mockReset(); });
 afterEach(() => { cleanup(); });
 
-describe('#26 — writer integration (RED)', () => {
+describe('#26 — writer integration', () => {
   it('C1/C4: the real saved annual summary carries metric_key + vaccine_group for BOTH views', async () => {
     const saved = await runSyncAll([v1Rule('v1-bcg'), v2Rule('v2-bcg')]);
     const annual = annualFor(saved);
