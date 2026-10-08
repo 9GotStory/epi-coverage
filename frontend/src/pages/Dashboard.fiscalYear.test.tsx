@@ -1,7 +1,8 @@
 /** @vitest-environment jsdom */
 /**
- * Dashboard fiscal-year selector / missing-summary regression contracts.
- * Only synthetic, aggregate records; no production healthcare data.
+ * Dashboard FY selection, missing-summary, and real-zero regression contracts.
+ * Only synthetic, aggregate fixtures. The current fiscal year comes from the
+ * application's clock authority, not from the latest available annual snapshot.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ReactNode } from 'react';
@@ -9,6 +10,7 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { Dashboard } from './Dashboard';
+import { getCurrentFiscalYear } from '../shared/utils/dateUtils';
 import type { DashboardSummaryRow } from '../shared/types/dashboardSummary';
 
 vi.mock('../shared/lib/api', () => ({
@@ -17,8 +19,7 @@ vi.mock('../shared/lib/api', () => ({
   }),
 }));
 
-// Keep the real Dashboard wired while substituting native selects for Radix's
-// browser-specific popover interactions in this state/contract test.
+// Exercise real Dashboard state + QueryClient; native selects simplify Radix popover interactions.
 vi.mock('../shared/components/ui/select', () => ({
   Select: ({ value, onValueChange, children, disabled }: {
     value?: string; onValueChange?: (value: string) => void;
@@ -35,6 +36,10 @@ vi.mock('../shared/components/ui/select', () => ({
     <option value={value}>{children}</option>
   ),
 }));
+
+const currentYear = getCurrentFiscalYear();
+const previousYear = currentYear - 1;
+const earlierYear = currentYear - 2;
 
 const makeRow = (table: string, year: number, total: number, coverage = 60): DashboardSummaryRow => ({
   id: `${table}_${year}_all`,
@@ -56,10 +61,10 @@ const makeRow = (table: string, year: number, total: number, coverage = 60): Das
 });
 
 const yearTables = {
-  Epi_1_Year: [2568, 2569],
-  Epi_2_Year: [2569],
-  Epi_3_Year: [2569],
-  Epi_5_Year: [2569],
+  Epi_1_Year: [earlierYear, previousYear],
+  Epi_2_Year: [previousYear],
+  Epi_3_Year: [previousYear],
+  Epi_5_Year: [previousYear],
   unrelated_table: [3000],
 };
 
@@ -70,8 +75,9 @@ function renderDashboard(
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   client.setQueryData(['dashboardSummaryYears'], tables);
   client.setQueryData(['targetConfig'], {
-    target_view2_q4_2568: 81,
-    target_view2_q4_2569: 91,
+    [`target_view2_q4_${currentYear}`]: 93,
+    [`target_view2_q4_${previousYear}`]: 91,
+    [`target_view2_q4_${earlierYear}`]: 81,
   });
   for (const [key, rows] of Object.entries(summaries)) {
     const [year, quarter] = key.split(':');
@@ -89,50 +95,68 @@ function renderDashboard(
 afterEach(cleanup);
 
 describe('Dashboard fiscal-year selection', () => {
-  it('defaults to the latest year with an actual usable summary rather than the browser year or unrelated tables', () => {
+  it('defaults to the current fiscal year even when only historical summaries exist', () => {
     renderDashboard(yearTables, {
-      '2569:all': [makeRow('Epi_1_Year', 2569, 19), makeRow('Epi_2_Year', 2569, 28)],
-      '2568:all': [makeRow('Epi_1_Year', 2568, 8)],
+      [`${previousYear}:all`]: [makeRow('Epi_1_Year', previousYear, 19)],
     });
     const [yearSelect] = screen.getAllByRole('combobox');
-    expect((yearSelect as HTMLSelectElement).value).toBe('2569');
-    expect(within(screen.getByText('ภาพรวมเด็กอายุครบ 1 ปี').closest('section')!).getAllByText('19').length).toBeTruthy();
-    expect(screen.getByText(/ภาพรวมผลการดำเนินงานสร้างเสริมภูมิคุ้มกันโรค ปีงบประมาณ 2569/)).toBeTruthy();
-    expect(within(yearSelect).queryByRole('option', { name: /3000/ })).toBeNull();
+    expect((yearSelect as HTMLSelectElement).value).toBe(String(currentYear));
+    expect(screen.getByText(new RegExp(`ภาพรวมผลการดำเนินงานสร้างเสริมภูมิคุ้มกันโรค ปีงบประมาณ ${currentYear}`))).toBeTruthy();
+    expect(within(yearSelect).getByRole('option', { name: String(currentYear) })).toBeTruthy();
+    expect(within(yearSelect).getByRole('option', { name: String(previousYear) })).toBeTruthy();
+    expect(within(yearSelect).queryByRole('option', { name: '3000' })).toBeNull();
+    const age1 = screen.getByText('ภาพรวมเด็กอายุครบ 1 ปี').closest('section')!;
+    expect(within(age1).getByText(`ไม่มีข้อมูลสรุปสำหรับปีงบประมาณ ${currentYear}`)).toBeTruthy();
+    expect(within(age1).queryByText('0.00')).toBeNull();
   });
 
-  it('switches annual snapshots, year-specific targets and resets the quarter to all', () => {
+  it('allows past-year selection, year-specific targets, quarter reset and return to current year', () => {
     renderDashboard(yearTables, {
-      '2569:all': [makeRow('Epi_1_Year', 2569, 19)],
-      '2568:all': [makeRow('Epi_1_Year', 2568, 8)],
-      '2569:2': [makeRow('Epi_1_Year', 2569, 2)],
+      [`${currentYear}:all`]: [makeRow('Epi_1_Year', currentYear, 23)],
+      [`${currentYear}:2`]: [makeRow('Epi_1_Year', currentYear, 2)],
+      [`${previousYear}:all`]: [makeRow('Epi_1_Year', previousYear, 19)],
     });
     const [yearSelect, quarterSelect] = screen.getAllByRole('combobox');
-    expect(screen.getByText('เป้าหมาย: ≥ 91%')).toBeTruthy();
+    expect((yearSelect as HTMLSelectElement).value).toBe(String(currentYear));
+    expect(screen.getByText('เป้าหมาย: ≥ 93%')).toBeTruthy();
     fireEvent.change(quarterSelect, { target: { value: '2' } });
     expect((quarterSelect as HTMLSelectElement).value).toBe('2');
-    fireEvent.change(yearSelect, { target: { value: '2568' } });
-    expect((yearSelect as HTMLSelectElement).value).toBe('2568');
+    fireEvent.change(yearSelect, { target: { value: String(previousYear) } });
+    expect((yearSelect as HTMLSelectElement).value).toBe(String(previousYear));
     expect((quarterSelect as HTMLSelectElement).value).toBe('all');
-    const section = screen.getByText('ภาพรวมเด็กอายุครบ 1 ปี').closest('section')!;
-    expect(within(section).getAllByText('8').length).toBeGreaterThan(0);
-    expect(within(section).getByText('เป้าหมาย: ≥ 81%')).toBeTruthy();
+    const age1 = screen.getByText('ภาพรวมเด็กอายุครบ 1 ปี').closest('section')!;
+    expect(within(age1).getAllByText('19').length).toBeGreaterThan(0);
+    expect(within(age1).getByText('เป้าหมาย: ≥ 91%')).toBeTruthy();
+    fireEvent.change(yearSelect, { target: { value: String(currentYear) } });
+    expect((yearSelect as HTMLSelectElement).value).toBe(String(currentYear));
+    expect(within(age1).getAllByText('23').length).toBeGreaterThan(0);
   });
 
-  it('distinguishes a missing group/year snapshot from a genuine 0% stored value', () => {
+  it('distinguishes missing summary from an actual stored zero in the current year', () => {
     renderDashboard(yearTables, {
-      '2569:all': [makeRow('Epi_1_Year', 2569, 10, 0)],
+      [`${currentYear}:all`]: [makeRow('Epi_1_Year', currentYear, 10, 0)],
     });
     const age1 = screen.getByText('ภาพรวมเด็กอายุครบ 1 ปี').closest('section')!;
     const age2 = screen.getByText('ภาพรวมเด็กอายุครบ 2 ปี').closest('section')!;
     expect(within(age1).getAllByText('0.00').length).toBeGreaterThan(0);
-    expect(within(age2).getByText(/ไม่มีข้อมูลสรุปสำหรับปีงบประมาณ 2569/)).toBeTruthy();
+    expect(within(age2).getByText(`ไม่มีข้อมูลสรุปสำหรับปีงบประมาณ ${currentYear}`)).toBeTruthy();
     expect(within(age2).queryByText('0.00')).toBeNull();
   });
 
-  it('shows an empty-state message rather than fabricating zero summaries if no fiscal year is usable', () => {
+  it('offers the current FY and a no-data state when no annual years exist', () => {
     renderDashboard({});
-    expect(screen.getByText(/ยังไม่มีข้อมูลสรุปสำหรับปีงบประมาณใด/)).toBeTruthy();
-    expect(screen.queryByText('ภาพรวมเด็กอายุครบ 1 ปี')).toBeNull();
+    const [yearSelect] = screen.getAllByRole('combobox');
+    expect((yearSelect as HTMLSelectElement).value).toBe(String(currentYear));
+    expect(within(yearSelect).getAllByRole('option')).toHaveLength(1);
+    expect(screen.getAllByText(`ไม่มีข้อมูลสรุปสำหรับปีงบประมาณ ${currentYear}`)).toHaveLength(4);
+    expect(screen.queryByText('ยังไม่มีข้อมูลสรุปสำหรับปีงบประมาณใด')).toBeNull();
+  });
+
+  it('reads a current-year snapshot even if it is absent from the annual-year options', () => {
+    renderDashboard({}, {
+      [`${currentYear}:all`]: [makeRow('Epi_1_Year', currentYear, 17)],
+    });
+    const age1 = screen.getByText('ภาพรวมเด็กอายุครบ 1 ปี').closest('section')!;
+    expect(within(age1).getAllByText('17').length).toBeGreaterThan(0);
   });
 });
