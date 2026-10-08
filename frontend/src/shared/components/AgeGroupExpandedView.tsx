@@ -3,6 +3,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import type { LegacyCompatibleGroupSummary } from '../utils/dashboardLogic';
 import { useTargetSettings } from '../hooks/useTargetSettings';
 import { useVaccineRules } from '../hooks/useVaccineRules';
+import { HdcEpi1AnnualComparison } from './HdcEpi1AnnualComparison';
 
 function shortenFacilityName(name: string) {
   return name.replace(/โรงพยาบาลส่งเสริมสุขภาพตำบล/g, 'รพ.สต.')
@@ -24,6 +25,7 @@ interface AgeGroupExpandedViewProps {
   fiscalYear: number;
   quarter: number | 'all';
   ageGroup: string;
+  updatedAt?: string | null;
 }
 
 interface FacilityGroupProps {
@@ -94,7 +96,7 @@ const FacilityGroup = ({ title, facilities, target, isPassedGroup }: FacilityGro
   );
 };
 
-export function AgeGroupExpandedView({ summary, targetView1, targetView2, fiscalYear, quarter, ageGroup }: AgeGroupExpandedViewProps) {
+export function AgeGroupExpandedView({ summary, targetView1, targetView2, fiscalYear, quarter, ageGroup, updatedAt }: AgeGroupExpandedViewProps) {
   const { getTarget } = useTargetSettings();
   const { rules } = useVaccineRules(fiscalYear, ageGroup);
   // จับคู่ชื่อเกณฑ์ (display_name จาก summary) → vaccine_group จาก vaccine_rules — ไม่เดาจากชื่อ
@@ -160,6 +162,14 @@ export function AgeGroupExpandedView({ summary, targetView1, targetView2, fiscal
             ) : (
               <div className="text-xs text-zinc-400 py-2">ไม่มีข้อมูลวัคซีนในเงื่อนไข</div>
             )}
+            {ageGroup === '1yr' && quarter === 'all' && (
+              <HdcEpi1AnnualComparison
+                fiscalYear={fiscalYear}
+                summary={summary}
+                rules={rules}
+                updatedAt={updatedAt}
+              />
+            )}
           </div>
 
           {/* Facility Leaderboard V1 */}
@@ -171,7 +181,7 @@ export function AgeGroupExpandedView({ summary, targetView1, targetView2, fiscal
               </h4>
               <p className="text-[11px] text-zinc-500 mt-1.5 ml-3.5 leading-relaxed bg-zinc-50 p-2 rounded-md border border-zinc-200/60">
                 <strong className="text-zinc-700 font-semibold mr-1">คำชี้แจง:</strong> 
-                ตัวเลขในวงเล็บแสดงสัดส่วน <strong>(จำนวนโดสที่ฉีดได้ / จำนวนโดสเป้าหมายทั้งหมด)</strong> ซึ่งจะสอดคล้องกับตัวเลขรายงานมาตรฐานของ HDC
+                ตัวเลขในวงเล็บแสดงสัดส่วน <strong>(จำนวนโดสที่ผ่านกฎ EPI / จำนวนโดสเป้าหมายที่ประเมินได้)</strong> ซึ่งอาจต่างจากรายงานมาตรฐาน HDC
               </p>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -224,7 +234,7 @@ export function AgeGroupExpandedView({ summary, targetView1, targetView2, fiscal
               </h4>
               <p className="text-[11px] text-zinc-500 mt-1.5 ml-3.5 leading-relaxed bg-zinc-50 p-2 rounded-md border border-zinc-200/60">
                 <strong className="text-zinc-700 font-semibold mr-1">คำชี้แจง:</strong> 
-                ตัวเลขในวงเล็บแสดงสัดส่วน <strong>(จำนวนเด็กที่ผ่านเกณฑ์ / จำนวนเด็กเป้าหมายทั้งหมด)</strong> ซึ่งจะสอดคล้องกับตัวเลขรายงานมาตรฐานของ HDC
+                ตัวเลขในวงเล็บแสดงสัดส่วน <strong>(จำนวนเด็กที่ผ่านกฎ EPI / จำนวนเด็กที่ประเมินได้)</strong> ซึ่งอาจต่างจากรายงานมาตรฐาน HDC
               </p>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
