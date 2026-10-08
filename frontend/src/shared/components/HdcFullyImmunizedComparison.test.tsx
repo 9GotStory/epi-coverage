@@ -78,7 +78,7 @@ describe('View 2 HDC Fully Immunized optional reference',()=>{
     mount('1yr',legacy);
     fireEvent.click(screen.getByRole('button',{name:'เปรียบเทียบกับ HDC Fully Immunized'}));
     expect(await screen.findByText('75.00%')).toBeTruthy();
-    expect(screen.getByText('ไม่ทราบตัวหาร')).toBeTruthy();
+    expect(screen.getByText(/ไม่ทราบตัวหาร/)).toBeTruthy();
     expect(screen.getByRole('status').textContent).toContain('ยังไม่สามารถสรุปส่วนต่าง');
   });
 
@@ -94,7 +94,7 @@ describe('View 2 HDC Fully Immunized optional reference',()=>{
     vi.mocked(fetchApi).mockResolvedValue({status:200,data:{statusCode:200,data:[]}});
     mount('5yr');
     fireEvent.click(screen.getByRole('button',{name:'เปรียบเทียบกับ HDC Fully Immunized'}));
-    expect((await screen.findByRole('status')).textContent).toContain('ยังไม่มีรายงาน HDC');
+    expect(await screen.findByText('ยังไม่มีรายงาน HDC Fully Immunized สำหรับปีงบประมาณ 2569')).toBeTruthy();
     expect(screen.queryByText('75.00%')).toBeNull();
   });
 
