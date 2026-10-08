@@ -45,7 +45,8 @@ describe('age-group dashboard views have distinct responsibilities', () => {
       expect(screen.queryByRole('button', { name: 'เปรียบเทียบกับ HDC OpenData' })).toBeNull();
       expect(screen.queryByRole('button', { name: /ความครอบคลุมรายเข็มจาก HDC/ })).toBeNull();
 
-      fireEvent.click(screen.getByRole('tab', { name: 'มุมมองที่ 1 (รายวัคซีน)' }));
+      // Radix Tabs selects on primary mouseDown (not click) in jsdom.
+      fireEvent.mouseDown(screen.getByRole('tab', { name: 'มุมมองที่ 1 (รายวัคซีน)' }), { button: 0 });
       expect(screen.getByRole('button', { name: 'เปรียบเทียบกับ HDC OpenData' })).toBeTruthy();
       expect(screen.getByText('สัดส่วนการได้รับวัคซีนรายชนิด (View 1)')).toBeTruthy();
     },
