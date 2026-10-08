@@ -103,7 +103,7 @@ describe('Dashboard fiscal-year selection', () => {
     });
     const [yearSelect] = screen.getAllByRole('combobox');
     expect((yearSelect as HTMLSelectElement).value).toBe(String(currentYear));
-    expect(screen.getByText(new RegExp(`สรุปผลการได้รับวัคซีน ปีงบประมาณ ${currentYear}`))).toBeTruthy();
+    expect(screen.getByText(new RegExp(`สรุปผลการประเมินวัคซีน ปีงบประมาณ ${currentYear}`))).toBeTruthy();
     expect(within(yearSelect).getByRole('option', { name: String(currentYear) })).toBeTruthy();
     expect(within(yearSelect).getByRole('option', { name: String(previousYear) })).toBeTruthy();
     expect(within(yearSelect).queryByRole('option', { name: '3000' })).toBeNull();
