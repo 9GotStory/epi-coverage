@@ -184,7 +184,7 @@ const AgeGroupSection = memo(function AgeGroupSection({
       </div>
 
       {isExpanded && (
-        <AgeGroupExpandedView summary={summary} targetView1={targetView1} targetView2={targetView2} fiscalYear={fiscalYear} quarter={quarter} ageGroup={ageGroup} />
+        <AgeGroupExpandedView summary={summary} targetView1={targetView1} targetView2={targetView2} fiscalYear={fiscalYear} quarter={quarter} ageGroup={ageGroup} updatedAt={updatedAt} />
       )}
     </section>
   );
