@@ -124,7 +124,7 @@ function createHarness({
             throw new Error('harness: configured post-write verification failure');
           }
           const out = Array.from({ length: height }, (_, i) =>
-            Array.from({ length: width }, (_, j) => cells[row - 1 + i]?.[column - 1 + j] ?? ''));
+            Array.from({ length: width }, (_, j) => materialize(cells[row - 1 + i]?.[column - 1 + j] ?? '')));
           if (isDataRegion && corruptPostWriteReads && written) {
             // Deterministic post-write observation mismatch for commit verification tests.
             out.push(['corrupt', ...Array(width - 1).fill('')]);
@@ -253,6 +253,13 @@ function createHarness({
     },
   });
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/OpenData.js'), 'utf8'), context);
+  // Issue #70: real Apps Script getValues() materializes a FRESH Date object in the
+  // Apps Script realm on every read — reference identity between a written and a read
+  // value never exists, and a host-realm Date would fail cross-realm instanceof inside
+  // the VM. Model both facts: every Date cell read is re-materialized with the loaded
+  // context's own Date constructor (realm-safe via Object.prototype.toString).
+  const VmDate = vm.runInContext('Date', context);
+  const materialize = value => (Object.prototype.toString.call(value) === '[object Date]' ? new VmDate(value.getTime()) : value);
   return { context, sheet, cells, cellFormats, events, audit, fetches, ops, lock, sleeps, attempts };
 }
 
@@ -1263,6 +1270,9 @@ test('GAS-VERIFY-02i retained legacy Date-valued cell verifies by instant and st
   // rows may carry real Date cells (a legacy generation re-read through getValues);
   // those verify only against a Date of the SAME instant. Any text form of the date
   // is a genuine mismatch for a Date-intended cell, exactly like a coerced identifier.
+  // The harness re-materializes every Date read with the loaded context's own Date
+  // constructor (see materialize), so reference identity NEVER verifies here — these
+  // assertions can only pass through the Date branch's instant comparison itself.
   const LEGACY_DATE = new Date('2026-01-01T00:00:00.000Z');
   const legacyRow = {
     sync_id: 'hist-1', table_name: 's_epi2', fiscal_year: FY, hospcode: '00002', areacode: '540601',
@@ -1286,8 +1296,9 @@ test('GAS-VERIFY-02i retained legacy Date-valued cell verifies by instant and st
     'a retained legacy Date-valued cell read back as the same instant must not false-positive the verification');
   const retained = findRow(ok, 's_epi2');
   assert.ok(retained, 'legacy row retained');
-  assert.ok(retained.updated_at instanceof Date && retained.updated_at.getTime() === LEGACY_DATE.getTime(),
-    'retained legacy Date cell is preserved as the same instant');
+  assert.ok(Object.prototype.toString.call(retained.updated_at) === '[object Date]'
+    && retained.updated_at.getTime() === LEGACY_DATE.getTime(),
+    'retained legacy Date cell is preserved as the same instant (realm-safe check)');
 
   // The same cell observed as its ISO text is NOT parity — Date tolerance never extends to text reads.
   const updatedColumn = CANONICAL_HEADER.indexOf('updated_at') + 1;
