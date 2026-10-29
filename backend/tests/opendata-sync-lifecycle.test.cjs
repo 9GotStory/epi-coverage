@@ -124,7 +124,7 @@ function createHarness({
             throw new Error('harness: configured post-write verification failure');
           }
           const out = Array.from({ length: height }, (_, i) =>
-            Array.from({ length: width }, (_, j) => cells[row - 1 + i]?.[column - 1 + j] ?? ''));
+            Array.from({ length: width }, (_, j) => materialize(cells[row - 1 + i]?.[column - 1 + j] ?? '')));
           if (isDataRegion && corruptPostWriteReads && written) {
             // Deterministic post-write observation mismatch for commit verification tests.
             out.push(['corrupt', ...Array(width - 1).fill('')]);
@@ -253,6 +253,13 @@ function createHarness({
     },
   });
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/OpenData.js'), 'utf8'), context);
+  // Issue #70: real Apps Script getValues() materializes a FRESH Date object in the
+  // Apps Script realm on every read — reference identity between a written and a read
+  // value never exists, and a host-realm Date would fail cross-realm instanceof inside
+  // the VM. Model both facts: every Date cell read is re-materialized with the loaded
+  // context's own Date constructor (realm-safe via Object.prototype.toString).
+  const VmDate = vm.runInContext('Date', context);
+  const materialize = value => (Object.prototype.toString.call(value) === '[object Date]' ? new VmDate(value.getTime()) : value);
   return { context, sheet, cells, cellFormats, events, audit, fetches, ops, lock, sleeps, attempts };
 }
 
@@ -1082,6 +1089,8 @@ test('#37f explicit manual lifecycle invocation is audited as manual source', ()
 //      (before and after simulated mutation), flush-throw, read-back-throw, genuine
 //      mismatch, and a fully verified commit — result status AND audit commit flag asserted
 //   02h raw_json exact-content preservation on the committed rectangle
+//   02i retained legacy Date-valued cells verify by instant; a coerced text read stays a mismatch (Issue #70)
+//   02j numeric zero upstream identifier commits as exact text "0" (never blanked) (Issue #70)
 // All fixtures are synthetic aggregate markers; no production rows, tokens, or URLs.
 
 const FRESH_OK_ROW = { areacode: '540601', hospcode: '10769', bcg_01: '1' };
@@ -1254,4 +1263,62 @@ test('GAS-VERIFY-02h raw_json exact-content preservation on the committed rectan
   assert.strictEqual(fresh.raw_json, JSON.stringify(SOURCE), 'raw_json cell is byte-identical to the serialized source');
   assert.deepEqual(JSON.parse(String(fresh.raw_json)), SOURCE, 'parsed content round-trips exactly');
   assert.ok(String(fresh.raw_json).includes('"08"'), 'numeric-looking nested strings survive inside raw_json');
+});
+
+test('GAS-VERIFY-02i retained legacy Date-valued cell verifies by instant and stays a mismatch when read back as text', () => {
+  // Issue #70: the Date-instant branch of the schema-aware parity — retained legacy
+  // rows may carry real Date cells (a legacy generation re-read through getValues);
+  // those verify only against a Date of the SAME instant. Any text form of the date
+  // is a genuine mismatch for a Date-intended cell, exactly like a coerced identifier.
+  // The harness re-materializes every Date read with the loaded context's own Date
+  // constructor (see materialize), so reference identity NEVER verifies here — these
+  // assertions can only pass through the Date branch's instant comparison itself.
+  const LEGACY_DATE = new Date('2026-01-01T00:00:00.000Z');
+  const legacyRow = {
+    sync_id: 'hist-1', table_name: 's_epi2', fiscal_year: FY, hospcode: '00002', areacode: '540601',
+    raw_json: '{"areacode":"540601"}', updated_at: LEGACY_DATE,
+  };
+  const build = extra => createHarness({
+    records: [legacyRow],
+    upstream: {
+      [`s_epi1|${FY}`]: json200([FRESH_OK_ROW]),
+      [`s_epi2|${FY}`]: upstreamResponse(503, 'synthetic unavailable'), // failed pair → legacy retention
+      [`s_epi3|${FY}`]: json200([]), [`s_epi5|${FY}`]: json200([]), [`s_epi_complete|${FY}`]: json200([]),
+    },
+    ...extra,
+  });
+
+  // Same-instant Date round-trip verifies (fresh s_epi1 lands on sheet row 2, retained s_epi2 on row 3).
+  const ok = build();
+  const evOk = evidence(runSync(ok.context), ok.audit);
+  assert.equal(evOk.grab('status'), 'partial_success', 'pair semantics unchanged for this scenario');
+  assert.equal(evOk.grab('commit'), 'verified',
+    'a retained legacy Date-valued cell read back as the same instant must not false-positive the verification');
+  const retained = findRow(ok, 's_epi2');
+  assert.ok(retained, 'legacy row retained');
+  assert.ok(Object.prototype.toString.call(retained.updated_at) === '[object Date]'
+    && retained.updated_at.getTime() === LEGACY_DATE.getTime(),
+    'retained legacy Date cell is preserved as the same instant (realm-safe check)');
+
+  // The same cell observed as its ISO text is NOT parity — Date tolerance never extends to text reads.
+  const updatedColumn = CANONICAL_HEADER.indexOf('updated_at') + 1;
+  const coerced = build({ tamperCells: [{ r: 3, c: updatedColumn, v: LEGACY_DATE.toISOString() }] });
+  const evCoerced = evidence(runSync(coerced.context), coerced.audit);
+  assert.equal(evCoerced.grab('status'), 'commit_uncertain',
+    'a Date-valued legacy cell read back as its ISO text is a genuine mismatch');
+  assert.equal(evCoerced.grab('commit'), 'uncertain', 'commit flag stays uncertain');
+});
+
+test('GAS-VERIFY-02j numeric zero upstream identifier is committed as exact text "0", never blanked', () => {
+  // Issue #70: pins the post-#41 normalization edge — an upstream numeric 0 is stored
+  // as its exact text form '0' (the pre-#41 `|| ''` blanked it). The exact-text
+  // identifier contract (docs/schema.md) forbids silently dropping upstream values.
+  const h = createHarness({ upstream: emptyUpstream('s_epi1', json200([{ areacode: 540601, hospcode: 0, bcg_01: '1' }])) });
+  const outcome = runSync(h.context);
+  const ev = evidence(outcome, h.audit);
+  assert.equal(ev.grab('commit'), 'verified', 'commit verification succeeds');
+  const fresh = findRow(h, 's_epi1');
+  assert.ok(fresh, 'fresh row committed');
+  assert.strictEqual(fresh.hospcode, '0', 'numeric 0 identifier is preserved as the exact text "0"');
+  assert.strictEqual(fresh.areacode, '540601', 'numeric areacode stored as its exact text form');
 });
