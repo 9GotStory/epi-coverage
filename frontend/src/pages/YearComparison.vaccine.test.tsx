@@ -26,7 +26,7 @@ import { cleanup, render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
-import { YearComparison } from './YearComparison';
+import { YearComparisonDetail as YearComparison } from './YearComparison';
 import type { DashboardSummaryRow, VaccineBreakdownEntry } from '../shared/types/dashboardSummary';
 import { formatDateTimeStr } from '../shared/utils/dateUtils';
 

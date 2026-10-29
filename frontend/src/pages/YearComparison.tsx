@@ -8,7 +8,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Card, CardContent, CardHeader, CardTitle } from '../shared/components/ui/card';
 import { SubNav } from '../widgets/layout/SubNav';
 import { formatDateTimeStr, getCurrentFiscalYear } from '../shared/utils/dateUtils';
-import type { DashboardSummaryRow, FacilityBreakdownEntry } from '../shared/types/dashboardSummary';
+import type { DashboardSummaryRow, FacilityBreakdownEntry, EpiTargetTable } from '../shared/types/dashboardSummary';
+import { buildAnnualComparisonModel, getComparisonFiscalYears, getDefaultComparisonYears } from './comparison/model';
+import { DeepDivePanel } from './comparison/DeepDivePanel';
+import { AnnualAgeGroupCharts } from './comparison/AnnualAgeGroupCharts';
 
 const MAX_SELECTED_YEARS = 5;
 
@@ -35,7 +38,7 @@ const TrendLine = Reflect.has(Recharts, 'Line') ? rechartsComponents.Line : null
 const defaultSelectedYears = (years: number[]): number[] => [...years].sort((a, b) => a - b).slice(-2);
 
 /** Single signed percentage-point formatter for deltas and target gaps (never % growth). */
-const formatPp = (value: number): string => `${value > 0 ? '+' : ''}${value.toFixed(2)} pp`;
+const formatPp = (value: number): string => `${value > 0 ? '+' : ''}${value.toFixed(2)} จุดร้อยละ`;
 
 /** The trend's per-FY series, declared once: coverage plus a per-year target series. */
 const TREND_SERIES = [
@@ -122,9 +125,23 @@ function TrendTooltip({
   );
 }
 
-export const YearComparison = () => {
+interface ComparisonDetailProps {
+  /** Controlled by the multi-age dashboard when the drill-down is expanded. */
+  selectedAgeGroup?: EpiTargetTable;
+  selectedFiscalYears?: number[];
+  hideChrome?: boolean;
+}
+
+/**
+ * Preserved #22–#26 single-age analytical detail implementation.
+ * The new YearComparison route embeds this as secondary user-invoked detail;
+ * historical business-regression tests still exercise this actual component.
+ */
+export const YearComparisonDetail = ({
+  selectedAgeGroup, selectedFiscalYears, hideChrome = false,
+}: ComparisonDetailProps = {}) => {
   const currentYear = getCurrentFiscalYear();
-  const [ageGroup, setAgeGroup] = useState<string>('Epi_1_Year');
+  const [ageGroup, setAgeGroup] = useState<string>(selectedAgeGroup ?? 'Epi_1_Year');
 
   const { tables, isLoading: yearsLoading, error: yearsError } = useDashboardSummaryYears();
   const { getTarget, isLoading: targetLoading, isError: targetError } = useTargetSettings();
@@ -138,10 +155,11 @@ export const YearComparison = () => {
   // pair required by the frozen #22 SSR contract — a placeholder only: in the browser it
   // is never fetched against (see the queryYears gate) and is replaced by the usable-year
   // default as soon as the years query resolves.
-  const [selectedYears, setSelectedYears] = useState<number[]>(() => {
+  const [localSelectedYears, setSelectedYears] = useState<number[]>(() => {
     const initialYears = tables?.[ageGroup];
     return initialYears?.length ? defaultSelectedYears(initialYears) : [currentYear - 1, currentYear];
   });
+  const selectedYears = selectedFiscalYears ?? localSelectedYears;
   const [derivedKey, setDerivedKey] = useState<string | null>(dataKey);
 
   // Render-phase state adjustment (React lazy-derivation pattern): apply the age group's
@@ -157,7 +175,7 @@ export const YearComparison = () => {
   // Fetch gate: in the browser, never issue a multi-year request from the placeholder
   // selection — only after the selection is derived from the usable-year source. On the
   // server there is no fetching, and the placeholder keeps the cache key aligned.
-  const queryYears = selectionDerived || typeof window === 'undefined' ? selectedYears : [];
+  const queryYears = selectedFiscalYears ?? (selectionDerived || typeof window === 'undefined' ? selectedYears : []);
   const { data, isLoading: summariesLoading, error: summariesError } = useDashboardSummariesMultiYear(queryYears);
 
   const handleYearToggle = (year: number) => {
@@ -515,7 +533,7 @@ export const YearComparison = () => {
                   <th className="py-2 pr-4 font-medium">ความครอบคลุม</th>
                   <th className="py-2 pr-4 font-medium">เป้าหมาย</th>
                   <th className="py-2 pr-4 font-medium">ส่วนต่างจากเป้าหมาย</th>
-                  <th className="py-2 pr-4 font-medium">เปลี่ยนแปลงจากปีก่อนหน้า (pp)</th>
+                  <th className="py-2 pr-4 font-medium">เปลี่ยนแปลงจากปีก่อนหน้า (จุดร้อยละ)</th>
                   <th className="py-2 font-medium">เวลาคำนวณสรุป</th>
                 </tr>
               </thead>
@@ -562,7 +580,7 @@ export const YearComparison = () => {
                   {selectedYears.map(fiscalYear => (
                     <th key={fiscalYear} colSpan={3} className="py-2 pr-4 pl-4 font-medium text-center border-l border-zinc-100">ปีงบประมาณ {fiscalYear}</th>
                   ))}
-                  <th rowSpan={2} className="py-2 font-medium">เปลี่ยนแปลงจากปีที่มีข้อมูลก่อนหน้า (pp)</th>
+                  <th rowSpan={2} className="py-2 font-medium">เปลี่ยนแปลงจากปีที่มีข้อมูลก่อนหน้า (จุดร้อยละ)</th>
                 </tr>
                 <tr className="border-b border-zinc-200 text-left text-xs text-zinc-500">
                   {selectedYears.map(fiscalYear => (
@@ -650,8 +668,8 @@ export const YearComparison = () => {
                         {selectedYears.map(fiscalYear => (
                           <th key={fiscalYear} className="py-2 pr-4 font-medium">ปีงบประมาณ {fiscalYear}</th>
                         ))}
-                        <th className="py-2 pr-4 font-medium">เปลี่ยนแปลงจากปีที่มีข้อมูลก่อนหน้า (pp)</th>
-                        <th className="py-2 font-medium">ส่วนต่างจากเป้าหมาย (pp)</th>
+                        <th className="py-2 pr-4 font-medium">เปลี่ยนแปลงจากปีที่มีข้อมูลก่อนหน้า (จุดร้อยละ)</th>
+                        <th className="py-2 font-medium">ส่วนต่างจากเป้าหมาย (จุดร้อยละ)</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -703,6 +721,18 @@ export const YearComparison = () => {
     </div>
   );
 
+  // When embedded by the new annual dashboard, this existing analysis remains
+  // available on request without a second header or an independent FY selector.
+  if (hideChrome) {
+    if (selectedYears.length === 0) return (
+      <p className="rounded-lg bg-amber-50 p-4 text-sm text-amber-800">กรุณาเลือกปีงบประมาณอย่างน้อย 1 ปี เพื่อดูข้อมูล</p>
+    );
+    if (yearsError || targetError || summariesError) return (
+      <p role="alert" className="rounded-lg bg-red-50 p-4 text-sm text-red-700">ไม่สามารถดึงข้อมูลรายละเอียดได้</p>
+    );
+    return <div className="space-y-6">{analyticalArea}</div>;
+  }
+
   return (
     <div className="flex flex-col min-h-screen bg-zinc-50/50">
       <SubNav title="เปรียบเทียบข้ามปีงบประมาณ" />
@@ -752,6 +782,158 @@ export const YearComparison = () => {
             {analyticalArea}
           </div>
         )}
+      </main>
+    </div>
+  );
+};
+
+
+/**
+ * Public route: a multi-fiscal-year analogue of /dashboard.
+ * Chart-first presentation for ages 1 / 2 / 3 / 5, with ONE global
+ * FY selection. Detailed historical vaccine/facility tables remain on-demand.
+ */
+export const YearComparison = () => {
+  const { tables, isLoading: yearsLoading, error: yearsError } = useDashboardSummaryYears();
+  const { getTarget, isLoading: targetLoading, isError: targetError } = useTargetSettings();
+  const availableYears = getComparisonFiscalYears(tables);
+  const yearsReady = !yearsLoading && !yearsError;
+  const yearsKey = yearsReady ? availableYears.join(',') : null;
+
+  // A real, stored-summary year is the only source of FY options. No browser-clock
+  // placeholder is ever sent as an annual comparison query.
+  const [selectedYears, setSelectedYears] = useState<number[]>(() =>
+    yearsReady ? getDefaultComparisonYears(availableYears) : [],
+  );
+  const [derivedKey, setDerivedKey] = useState<string | null>(yearsKey);
+  if (yearsKey !== null && yearsKey !== derivedKey) {
+    setDerivedKey(yearsKey);
+    setSelectedYears(getDefaultComparisonYears(availableYears));
+  }
+  const selectionReady = yearsKey !== null && yearsKey === derivedKey;
+  const queryYears = selectionReady ? selectedYears : [];
+  const { data, isLoading: summariesLoading, error: summariesError } = useDashboardSummariesMultiYear(queryYears);
+
+  const [showDetails, setShowDetails] = useState(false);
+  const capReached = selectedYears.length >= MAX_SELECTED_YEARS;
+  const model = buildAnnualComparisonModel(data, queryYears, (view, fiscalYear) =>
+    getTarget('all', view, undefined, fiscalYear),
+  );
+
+  const toggleYear = (year: number) => {
+    setSelectedYears(prev => {
+      if (prev.includes(year)) return prev.filter(fy => fy !== year);
+      if (prev.length >= MAX_SELECTED_YEARS) return prev;
+      return [...prev, year].sort((a, b) => a - b);
+    });
+  };
+
+  const blocked = Boolean(yearsError || targetError || summariesError);
+  const loading = yearsLoading || targetLoading || (selectedYears.length > 0 && summariesLoading);
+
+  return (
+    <div className="flex min-h-screen flex-col bg-zinc-50/50">
+      <SubNav title="เปรียบเทียบข้ามปีงบประมาณ" />
+      <main className="mx-auto w-full max-w-7xl flex-1 space-y-6 px-4 py-8 sm:px-6 lg:px-8">
+        <header className="space-y-1">
+          <h1 className="text-xl font-semibold text-zinc-900 sm:text-2xl">
+            เปรียบเทียบผลการดำเนินงานรายปีงบประมาณ
+          </h1>
+          <p className="text-sm text-zinc-600">
+            เปรียบเทียบข้อมูลสรุปประจำปีตามกลุ่มเด็กอายุ 1, 2, 3 และ 5 ปี
+            โดยแยกมุมมองที่ 1 (รายโดส) และมุมมองที่ 2 (รายคน)
+          </p>
+        </header>
+
+        {!yearsError && yearsReady && availableYears.length > 0 && (
+          <Card className="border-zinc-200 shadow-sm">
+            <CardContent>
+              <h2 className="mb-3 text-sm font-semibold text-zinc-900">เลือกปีงบประมาณที่ต้องการเปรียบเทียบ</h2>
+              <div role="group" aria-label="เลือกปีงบประมาณ" className="flex flex-wrap gap-2">
+                {[...availableYears].reverse().map(year => {
+                  const selected = selectedYears.includes(year);
+                  return (
+                    <button
+                      key={year}
+                      type="button"
+                      aria-pressed={selected}
+                      onClick={() => toggleYear(year)}
+                      disabled={!selected && capReached}
+                      className={`rounded-full px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${
+                        selected ? 'bg-primary text-white' :
+                        'bg-zinc-100 text-zinc-700 hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-50'
+                      }`}
+                    >
+                      ปี {year}
+                    </button>
+                  );
+                })}
+              </div>
+              {capReached && <p className="mt-2 text-xs text-zinc-600">เลือกได้สูงสุด 5 ปีงบประมาณ</p>}
+            </CardContent>
+          </Card>
+        )}
+
+        {yearsError ? (
+          <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+            ไม่สามารถดึงข้อมูลปีงบประมาณที่มีข้อมูลสรุปได้
+          </div>
+        ) : targetError ? (
+          <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+            ไม่สามารถดึงการตั้งค่าเป้าหมายได้
+          </div>
+        ) : summariesError ? (
+          <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+            ไม่สามารถดึงข้อมูลสรุปได้
+          </div>
+        ) : loading ? (
+          <div className="flex h-64 items-center justify-center rounded-2xl border border-zinc-200 bg-white">
+            <div role="status" aria-label="กำลังโหลดข้อมูลสรุป" className="h-8 w-8 animate-spin rounded-full border-b-2 border-primary" />
+          </div>
+        ) : yearsReady && availableYears.length === 0 ? (
+          <div role="status" className="rounded-xl border border-zinc-200 bg-white p-5 text-sm text-zinc-600">
+            ยังไม่มีข้อมูลสรุปประจำปีที่ใช้เปรียบเทียบได้
+          </div>
+        ) : selectedYears.length === 0 ? (
+          <div role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-800">
+            กรุณาเลือกปีงบประมาณอย่างน้อย 1 ปี เพื่อดูข้อมูล
+          </div>
+        ) : !blocked ? (
+          <div className="space-y-5">
+            <div className="grid grid-cols-1 gap-5">
+              {model.ageGroups.map(group => (
+                <AnnualAgeGroupCharts key={group.targetTable} group={group} />
+              ))}
+            </div>
+            <p className="text-xs text-zinc-600">
+              ผลในแต่ละปีมาจากข้อมูลสรุปที่จัดเก็บไว้ ณ เวลาคำนวณของปีนั้น
+              เด็กเป้าหมายและเงื่อนไขการประเมินอาจแตกต่างกันระหว่างปี
+              ตัวเลขนี้ไม่ใช่การติดตามเด็กกลุ่มเดียวกันข้ามปี
+            </p>
+
+            <section className="rounded-2xl border border-zinc-200 bg-white p-4 sm:p-6">
+              <button
+                type="button"
+                aria-expanded={showDetails}
+                onClick={() => setShowDetails(open => !open)}
+                className="flex w-full items-center justify-between gap-3 text-left text-sm font-semibold text-zinc-900 focus-visible:outline-2 focus-visible:outline-primary"
+              >
+                <span>เจาะลึกผลการดำเนินงานรายปีงบประมาณ</span>
+                <span aria-hidden="true">{showDetails ? '−' : '+'}</span>
+              </button>
+              {showDetails && (
+                <div className="mt-5 border-t border-zinc-200 pt-5">
+                  <DeepDivePanel
+                    summaries={data}
+                    selectedYears={queryYears}
+                    resolveTarget={(view, fiscalYear, vaccineGroup) =>
+                      getTarget('all', view, vaccineGroup, fiscalYear)}
+                  />
+                </div>
+              )}
+            </section>
+          </div>
+        ) : null}
       </main>
     </div>
   );

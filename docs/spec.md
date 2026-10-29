@@ -23,7 +23,7 @@
 - **JWT Verification:** ฝั่ง React จะได้รับ ID Token (JWT) จาก Google และส่ง Token นี้พร้อมกับ API Request ทุกครั้ง เพื่อให้ GAS นำไปถอดรหัส (Verify) ยืนยันตัวตนว่า Request มาจากผู้ใช้จริง ป้องกันการ Spoofing สวมรอย
 - **Environment Variables:** เก็บ URL ของ GAS Web App และ Client ID ของ Google ไว้ในไฟล์ `.env` เสมอ ห้าม Hardcode และต้องเพิ่ม `.env` ไว้ใน `.gitignore` ทุกครั้ง
 - **GAS Deployment Settings:** ตั้งค่า Web App ดังนี้: `Execute as: Me (owner)` และ `Who has access: Anyone` เพื่อให้ API รับ Request จากฝั่ง React ได้ (การตรวจสอบสิทธิ์จะทำผ่าน JWT Token แทน)
-- **OpenData API Proxy (CORS):** ฝั่ง React Browser **ไม่สามารถเรียก** `https://opendata.moph.go.th/api/...` โดยตรงได้ เนื่องจากปัญหา CORS ดังนั้นการเรียก OpenData API จะต้องผ่าน **GAS เป็น Proxy** (ฝั่ง React ส่งคำร้อง → GAS เรียก OpenData → ส่งผลคืนฝั่ง React) GAS ไม่มีปัญหา CORS เพราะใช้ `UrlFetchApp` แทน
+- **OpenData Read API / CORS Boundary:** ปัจจุบัน Frontend ไม่มี OpenData dashboard หรือ View 3 และไม่เรียก OpenData API แล้ว แต่ GAS ยังคงรองรับ `getOpenData` สำหรับอ่าน `opendata_cache` (รวม fallback ของ Backend ตามสัญญาเดิม) หากมี Browser consumer ในอนาคต ต้องเรียกผ่าน GAS API แทนการเรียก MOPH OpenData โดยตรงซึ่งติดข้อจำกัด CORS; การตรวจสอบคำขอและสิทธิ์ให้ยึดตาม Backend Router ที่ใช้งานจริง การดึง OpenData เพื่อซิงค์เป็นความรับผิดชอบของ GAS โดยใช้ direct transport หรือ authenticated relay ตามการกำหนดค่าและ [ADR-0005](adr/0005-route-opendata-through-external-relay.md) ไม่ใช่หน้าที่ของ Frontend
 - **OpenData Sync (Rate-limit-aware):** การซิงค์ MOPH/HDC OpenData เป็นความรับผิดชอบของ Backend (GAS) แบบ fail-closed และคำนึงถึง rate limit ของต้นทาง — คำขอทุก dataset/FY pair เป็นแบบ sequential พร้อม pacing ระหว่างคู่ และ bounded transient retry (เฉพาะ 429 / 5xx) คู่ที่ล้มเหลวจะคง last-known-good cache ไว้ และ source ของการเรียก (manual/trigger) ถูกบันทึกใน sanitized sync audit เดิม — เหตุผลและข้อจำกัดโดยละเอียดอยู่ที่ [ADR-0004](adr/0004-rate-limit-safe-moph-opendata-sync.md) เมื่อมีการกำหนดค่า relay (Script Properties คู่เดียวแบบ atomic) ช่องทางการดึงข้อมูลจะวิ่งผ่าน external fetch relay แบบ authenticated ที่แยกเป็น deployable ของตัวเอง (`relay/`) โดย lifecycle/cache/audit ยังอยู่ที่ GAS ทั้งหมด — ดู [ADR-0005](adr/0005-route-opendata-through-external-relay.md)
 
 ### 3.2 ประสิทธิภาพ (Performance & Scalability)
@@ -39,7 +39,6 @@
 - นำหลักการ **Feature-Sliced Design (FSD)** มาใช้ในการจัดโครงสร้างโปรเจกต์ React:
   - `src/features/auth` (จัดการ Login, OAuth, สิทธิ์ผู้ใช้งาน)
   - `src/features/vaccine-1yr` (Dashboard ติดตามวัคซีน 1 ปี — มุมมองที่ 1 และ 2)
-  - `src/features/opendata` (Dashboard สถิติรวมจาก HDC OpenData — มุมมองที่ 3)
   - `src/features/upload` (จัดการการอัปโหลดไฟล์ Excel และ Batch Sync)
   - `src/features/admin` (จัดการผู้ใช้, อนุมัติสมาชิก)
 - โครงสร้างนี้จะช่วยให้สามารถต่อยอดระบบวัคซีน 2 ปี, 3 ปี และ 5 ปี ได้อย่างเป็นระเบียบในอนาคต

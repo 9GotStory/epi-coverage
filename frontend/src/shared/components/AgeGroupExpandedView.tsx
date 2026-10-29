@@ -3,6 +3,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import type { LegacyCompatibleGroupSummary } from '../utils/dashboardLogic';
 import { useTargetSettings } from '../hooks/useTargetSettings';
 import { useVaccineRules } from '../hooks/useVaccineRules';
+import { HdcAgeAnnualComparison } from './HdcAgeAnnualComparison';
 
 function shortenFacilityName(name: string) {
   return name.replace(/โรงพยาบาลส่งเสริมสุขภาพตำบล/g, 'รพ.สต.')
@@ -24,6 +25,7 @@ interface AgeGroupExpandedViewProps {
   fiscalYear: number;
   quarter: number | 'all';
   ageGroup: string;
+  updatedAt?: string | null;
 }
 
 interface FacilityGroupProps {
@@ -65,12 +67,12 @@ const FacilityGroup = ({ title, facilities, target, isPassedGroup }: FacilityGro
           <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${classes.ping} opacity-75`}></span>
           <span className={`relative inline-flex rounded-full h-2 w-2 ${classes.dot}`}></span>
         </span>
-        {title} {target !== undefined ? `(≥ ${target}%)` : '(ไม่ได้กำหนดเป้า)'}
+        {title} {target !== undefined ? `(เป้าหมาย ${target}% ขึ้นไป)` : ''}
       </h5>
       <div className="space-y-1">
         {facilities.length === 0 ? (
           <p className={`text-xs ${classes.emptyText} py-2`}>
-            {isPassedGroup ? 'ยังไม่มีหน่วยบริการที่ผ่านเกณฑ์' : 'ทุกหน่วยบริการผ่านเกณฑ์ยอดเยี่ยม!'}
+            ยังไม่มีหน่วยบริการในกลุ่มนี้
           </p>
         ) : (
           facilities.map((fac, idx) => {
@@ -94,7 +96,7 @@ const FacilityGroup = ({ title, facilities, target, isPassedGroup }: FacilityGro
   );
 };
 
-export function AgeGroupExpandedView({ summary, targetView1, targetView2, fiscalYear, quarter, ageGroup }: AgeGroupExpandedViewProps) {
+export function AgeGroupExpandedView({ summary, targetView1, targetView2, fiscalYear, quarter, ageGroup, updatedAt }: AgeGroupExpandedViewProps) {
   const { getTarget } = useTargetSettings();
   const { rules } = useVaccineRules(fiscalYear, ageGroup);
   // จับคู่ชื่อเกณฑ์ (display_name จาก summary) → vaccine_group จาก vaccine_rules — ไม่เดาจากชื่อ
@@ -127,18 +129,17 @@ export function AgeGroupExpandedView({ summary, targetView1, targetView2, fiscal
         </div>
 
         <TabsContent value="view1" className="space-y-8 outline-none">
-          {!!summary.view1UnknownDoses && <p role="status" className="text-sm text-muted-foreground">ข้อมูลไม่พอประเมิน {summary.view1UnknownDoses.toLocaleString()} รายการ ไม่นับในตัวหารความครอบคลุม</p>}
+          {!!summary.view1UnknownDoses && <p role="status" className="text-sm text-muted-foreground">ข้อมูลไม่เพียงพอ {summary.view1UnknownDoses.toLocaleString()} รายการ จึงไม่รวมในการคำนวณร้อยละ</p>}
           {/* View 1 Breakdown */}
           <div>
             <div className="mb-4">
               <h4 className="text-sm font-bold text-blue-800 flex items-center gap-2">
                 <div className="w-1.5 h-4 bg-blue-500 rounded-full" />
-                สัดส่วนการได้รับวัคซีนรายชนิด (View 1)
+                ผลการประเมินวัคซีนรายเข็ม
               </h4>
               <p className="text-[11px] text-zinc-500 mt-1.5 ml-3.5 leading-relaxed bg-blue-50/50 p-2 rounded-md border border-blue-100/50">
-                <strong className="text-blue-700 font-semibold mr-1">คำชี้แจง:</strong> 
-                การประเมินมุมมองที่ 1 คิดแยกเป็น <strong>"รายเข็ม" (Per Dose)</strong> เพื่อตรวจสอบความครบถ้วนของการบันทึกข้อมูล 
-                (วัคซีนเข็มใดที่เด็กยังอายุไม่ถึงเกณฑ์ฉีด จะถูกหักออกจากตัวหารเป้าหมายโดยอัตโนมัติ)
+                <strong className="text-blue-700 font-semibold mr-1">วิธีอ่านผล:</strong>
+                ระบบประเมินวัคซีนแต่ละเข็มแยกกัน โดยไม่นับเข็มที่เด็กยังอายุไม่ถึงเกณฑ์รับวัคซีน
               </p>
             </div>
             {summary.view1Breakdown.length > 0 ? (
@@ -158,7 +159,16 @@ export function AgeGroupExpandedView({ summary, targetView1, targetView2, fiscal
                 })}
               </div>
             ) : (
-              <div className="text-xs text-zinc-400 py-2">ไม่มีข้อมูลวัคซีนในเงื่อนไข</div>
+              <div className="text-xs text-zinc-400 py-2">ไม่มีข้อมูลวัคซีนสำหรับช่วงที่เลือก</div>
+            )}
+            {quarter === 'all' && (
+              <HdcAgeAnnualComparison
+                ageGroup={ageGroup}
+                fiscalYear={fiscalYear}
+                summary={summary}
+                rules={rules}
+                updatedAt={updatedAt}
+              />
             )}
           </div>
 
@@ -167,16 +177,16 @@ export function AgeGroupExpandedView({ summary, targetView1, targetView2, fiscal
             <div className="mb-4">
               <h4 className="text-sm font-bold text-zinc-800 flex items-center gap-2">
                 <div className="w-1.5 h-4 bg-zinc-800 rounded-full" />
-                ผลการดำเนินงานรายหน่วยบริการ (รพ.สต.) - มุมมองที่ 1
+                ความครอบคลุมวัคซีนรายเข็ม แยกตามหน่วยบริการ
               </h4>
               <p className="text-[11px] text-zinc-500 mt-1.5 ml-3.5 leading-relaxed bg-zinc-50 p-2 rounded-md border border-zinc-200/60">
-                <strong className="text-zinc-700 font-semibold mr-1">คำชี้แจง:</strong> 
-                ตัวเลขในวงเล็บแสดงสัดส่วน <strong>(จำนวนโดสที่ฉีดได้ / จำนวนโดสเป้าหมายทั้งหมด)</strong> ซึ่งจะสอดคล้องกับตัวเลขรายงานมาตรฐานของ HDC
+                <strong className="text-zinc-700 font-semibold mr-1">วิธีอ่านผล:</strong>
+                ตัวเลขในวงเล็บคือ <strong>รายการวัคซีนที่ผ่านเกณฑ์ / รายการที่ประเมินได้</strong> ผลอาจต่างจากรายงาน HDC
               </p>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <FacilityGroup title="กลุ่มผ่านเกณฑ์" facilities={passedFacilitiesV1} target={targetView1} isPassedGroup={true} />
-              <FacilityGroup title="กลุ่มต้องเร่งติดตาม" facilities={failedFacilitiesV1} target={targetView1} isPassedGroup={false} />
+              <FacilityGroup title={targetView1 === undefined ? 'ผลรายหน่วยบริการ' : 'หน่วยบริการที่ถึงเป้าหมาย'} facilities={passedFacilitiesV1} target={targetView1} isPassedGroup={true} />
+              {targetView1 !== undefined && <FacilityGroup title="หน่วยบริการที่ยังไม่ถึงเป้าหมาย" facilities={failedFacilitiesV1} target={targetView1} isPassedGroup={false} />}
             </div>
           </div>
         </TabsContent>
@@ -187,12 +197,12 @@ export function AgeGroupExpandedView({ summary, targetView1, targetView2, fiscal
             <div className="mb-4">
               <h4 className="text-sm font-bold text-emerald-800 flex items-center gap-2">
                 <div className="w-1.5 h-4 bg-emerald-500 rounded-full" />
-                สัดส่วนตามกฎประเมินภายใน (View 2)
+                ผลการประเมินวัคซีนครบชุด
               </h4>
               <p className="text-[11px] text-zinc-500 mt-1.5 ml-3.5 leading-relaxed bg-emerald-50/50 p-2 rounded-md border border-emerald-100/50">
-                <strong className="text-emerald-700 font-semibold mr-1">คำชี้แจง:</strong> 
-                สรุปนี้คำนวณจากกฎภายในระบบ ส่วนหน้ารายบุคคลมุมมองที่ 2 แสดงผล HDC ต้นทาง ภาพรวม Fully Immunized คิดแบบ <strong>"ต้องผ่านทุกหมวด" (All or Nothing)</strong>
-                หากตกเกณฑ์แค่วัคซีนหมวดเดียวจะถือว่าตกภาพรวมทันที (เปอร์เซ็นต์รวมจึงไม่ใช่การนำกราฟแท่งมาหาค่าเฉลี่ย)
+                <strong className="text-emerald-700 font-semibold mr-1">วิธีอ่านผล:</strong>
+                ผลครบชุดประเมินเป็นรายคน โดยใช้เกณฑ์ของระบบร่วมกับสถานะที่นำเข้าจาก HDC
+                <strong> ร้อยละรวมไม่ใช่ค่าเฉลี่ยของวัคซีนแต่ละชนิด</strong>
               </p>
             </div>
             {summary.view2Breakdown.length > 0 ? (
@@ -211,7 +221,7 @@ export function AgeGroupExpandedView({ summary, targetView1, targetView2, fiscal
                 })}
               </div>
             ) : (
-              <div className="text-xs text-zinc-400 py-2">ไม่มีข้อมูลวัคซีนในเงื่อนไข</div>
+              <div className="text-xs text-zinc-400 py-2">ไม่มีข้อมูลวัคซีนสำหรับช่วงที่เลือก</div>
             )}
           </div>
 
@@ -220,16 +230,16 @@ export function AgeGroupExpandedView({ summary, targetView1, targetView2, fiscal
             <div className="mb-4">
               <h4 className="text-sm font-bold text-zinc-800 flex items-center gap-2">
                 <div className="w-1.5 h-4 bg-zinc-800 rounded-full" />
-                ผลการดำเนินงานรายหน่วยบริการ (รพ.สต.) - มุมมองที่ 2
+                ความครอบคลุมวัคซีนครบชุด แยกตามหน่วยบริการ
               </h4>
               <p className="text-[11px] text-zinc-500 mt-1.5 ml-3.5 leading-relaxed bg-zinc-50 p-2 rounded-md border border-zinc-200/60">
-                <strong className="text-zinc-700 font-semibold mr-1">คำชี้แจง:</strong> 
-                ตัวเลขในวงเล็บแสดงสัดส่วน <strong>(จำนวนเด็กที่ผ่านเกณฑ์ / จำนวนเด็กเป้าหมายทั้งหมด)</strong> ซึ่งจะสอดคล้องกับตัวเลขรายงานมาตรฐานของ HDC
+                <strong className="text-zinc-700 font-semibold mr-1">วิธีอ่านผล:</strong>
+                ตัวเลขในวงเล็บคือ <strong>เด็กที่ผ่านเกณฑ์ / เด็กที่ประเมินได้</strong> ผลอาจต่างจากรายงาน HDC
               </p>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <FacilityGroup title="กลุ่มผ่านเกณฑ์" facilities={passedFacilitiesV2} target={targetView2} isPassedGroup={true} />
-              <FacilityGroup title="กลุ่มต้องเร่งติดตาม" facilities={failedFacilitiesV2} target={targetView2} isPassedGroup={false} />
+              <FacilityGroup title={targetView2 === undefined ? 'ผลรายหน่วยบริการ' : 'หน่วยบริการที่ถึงเป้าหมาย'} facilities={passedFacilitiesV2} target={targetView2} isPassedGroup={true} />
+              {targetView2 !== undefined && <FacilityGroup title="หน่วยบริการที่ยังไม่ถึงเป้าหมาย" facilities={failedFacilitiesV2} target={targetView2} isPassedGroup={false} />}
             </div>
           </div>
         </TabsContent>
