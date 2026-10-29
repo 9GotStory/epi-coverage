@@ -191,6 +191,11 @@ function createUser(userData) {
   // แปลง object ให้ตรงกับลำดับ headers
   const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
   const newRow = headers.map(header => {
+    // Issue #72: endpoint นี้เป็นสาธารณะ — role/status เป็นสิ่งที่เซิร์ฟเวอร์ตัดสินใจเท่านั้น
+    // (ห้ามเชื่อ authorization state จาก client — CLAUDE.md §7) ผู้สมัครใหม่เข้าเป็น
+    // user ปกติสถานะ pending เสมอ แล้ว admin จึงอนุมัติผ่าน updateUserStatus (docs/features.md §1)
+    if (header === 'role') return 'user';
+    if (header === 'status') return 'pending';
     let val = userData[header] || "";
     if (header === 'hoscode' && val) {
       val = "'" + val; // Prepend apostrophe to strictly enforce string type
