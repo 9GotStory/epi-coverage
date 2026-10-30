@@ -30,6 +30,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
+const SHEETTEXT_SOURCE = fs.readFileSync(path.join(__dirname, '../src/SheetText.js'), 'utf8'); // Issue #77: shared formula-injection escape
 const RULES_SOURCE = fs.readFileSync(path.join(__dirname, '../src/VaccineRules.js'), 'utf8');
 
 /** Forward vaccine_rules schema (Decision E): today's canonical schema plus metric_key. */
@@ -98,6 +99,7 @@ function createHarness({ rows = [] } = {}) {
     SpreadsheetApp: { flush() {} },
     console,
   });
+  vm.runInContext(SHEETTEXT_SOURCE, context);
   vm.runInContext(RULES_SOURCE, context);
   return { context, sheet };
 }

@@ -51,8 +51,10 @@ function writeEpiRows(sheet, headers, rows) {
       sheet.getRange(1, index + 1, rows.length, 1).setNumberFormat('@');
     }
   });
-  // Prevent imported text being executed as a Sheet formula, including free-text addresses.
-  const safeRows = rows.map(row => row.map(value => typeof value === 'string' && value.startsWith('=') ? "'" + value : value));
+  // Prevent imported text being executed as a Sheet formula (=, +, -, @ prefixes — Issue #77),
+  // including free-text names and addresses. The escape apostrophe is consumed by Sheets,
+  // so stored values read back exactly as imported.
+  const safeRows = rows.map(row => row.map(sanitizeSheetText));
   sheet.getRange(1, 1, rows.length, headers.length).setValues(safeRows);
 }
 

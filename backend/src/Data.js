@@ -34,7 +34,8 @@ function upsertFacility(hoscode, hosname, isActive, adminEmail) {
       const finalIsActive = isActive !== undefined ? isActive : data[i][headers.indexOf('is_active')];
       
       const updateRange = sheet.getRange(i + 1, headers.indexOf('hosname') + 1, 1, 2);
-      updateRange.setValues([[finalName, finalIsActive]]);
+      // Issue #77: escape formula triggers (=, +, -, @) in admin-supplied facility names.
+      updateRange.setValues([[sanitizeSheetText(finalName), finalIsActive]]);
       
       const statusText = isActive !== undefined ? ` (Active: ${isActive})` : '';
       
@@ -49,7 +50,7 @@ function upsertFacility(hoscode, hosname, isActive, adminEmail) {
   
   const newRow = headers.map(header => {
     if (header === 'hoscode') return "'" + hoscode;
-    if (header === 'hosname') return hosname;
+    if (header === 'hosname') return sanitizeSheetText(hosname);
     if (header === 'is_active') return isActive !== undefined ? isActive : true;
     return "";
   });
@@ -201,7 +202,8 @@ function saveAiAnalysis(recordKey, targetTable, aiAnalysis, auth) {
   }
 
   const now = new Date();
-  sheet.getRange(targetRow, aiAnalysisCol + 1, 1, 2).setValues([[aiAnalysis, now.toISOString()]]);
+  // Issue #77: escape formula triggers (=, +, -, @) in user/AI-supplied analysis free text.
+  sheet.getRange(targetRow, aiAnalysisCol + 1, 1, 2).setValues([[sanitizeSheetText(aiAnalysis), now.toISOString()]]);
   logAction(auth.userId, auth.email, 'save_ai_analysis', `Saved AI analysis for CID ${recordKey.cid} in ${targetTable}`);
   return { success: true, message: "AI Analysis saved", aiAnalyzedAt: now.toISOString() };
 }
@@ -329,7 +331,9 @@ function logAction(userId, email, action, details) {
   const timestamp = new Date().toISOString();
   const logId = Utilities.getUuid();
   
-  sheet.appendRow([logId, userId, email, action, details, timestamp]);
+  // Issue #77: escape formula triggers (=, +, -, @) — email/details can embed user-supplied
+  // text (e.g. the self-declared signup email audited by the public createUser endpoint).
+  sheet.appendRow([logId, userId, email, action, details, timestamp].map(sanitizeSheetText));
 }
 
 /**
