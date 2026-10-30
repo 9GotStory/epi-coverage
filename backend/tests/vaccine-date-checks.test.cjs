@@ -12,6 +12,7 @@ function setup() {
     getLastRow: () => cells.length,
     getDataRange: () => ({ getValues: () => cells.map(row => Array.from({ length: cells[0].length }, (_, i) => row[i] ?? '')) }),
     getRange: (row, col, height = 1, width = 1) => ({
+      getValues: () => Array.from({ length: height }, (_, i) => Array.from({ length: width }, (_, j) => cells[row - 1 + i]?.[col - 1 + j] ?? '')),
       setNumberFormat() { return this; },
       setValues(values) {
         assert.equal(values.length, height);
@@ -21,7 +22,7 @@ function setup() {
       clearContent() { for (let i = 0; i < height; i++) for (let j = 0; j < width; j++) cells[row - 1 + i][col - 1 + j] = ''; },
     }),
   };
-  const context = vm.createContext({ getSpreadsheet: () => ({ getSheetByName: () => sheet }), arrayToObj: (h, r) => Object.fromEntries(h.map((k, i) => [k, r[i]])), logAction() {}, Utilities: { getUuid: () => 'uuid' } });
+  const context = vm.createContext({ getSpreadsheet: () => ({ getSheetByName: () => sheet }), arrayToObj: (h, r) => Object.fromEntries(h.map((k, i) => [k, r[i]])), logAction() {}, Utilities: { getUuid: () => 'uuid' }, LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) }, SpreadsheetApp: { flush() {} } });
   vm.runInContext(source, context);
   return { context, cells };
 }

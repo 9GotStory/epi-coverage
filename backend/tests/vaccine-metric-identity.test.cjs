@@ -53,6 +53,7 @@ function makeRuleSheet({ rows = [] } = {}) {
     getDataRange() { return { getValues: () => cells.map(row => Array.from({ length: HEADERS.length }, (_, i) => row[i] ?? '')) }; },
     getRange(row, column, height = 1, width = 1) {
       return {
+        getValues() { return Array.from({ length: height }, (_, i) => Array.from({ length: width }, (_, j) => cells[row - 1 + i]?.[column - 1 + j] ?? '')); },
         setNumberFormat() { return this; },
         setValues(values) {
           values.forEach((entry, i) => {
@@ -92,6 +93,9 @@ function createHarness({ rows = [] } = {}) {
     arrayToObj: (headers, row) => Object.fromEntries(headers.map((key, i) => [key, row[i]])),
     logAction() {},
     Utilities: { getUuid: createUuidCounter() },
+    // Issue #76: rule mutations take the script lock and flush after commit
+    LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) },
+    SpreadsheetApp: { flush() {} },
     console,
   });
   vm.runInContext(RULES_SOURCE, context);

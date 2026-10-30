@@ -213,6 +213,76 @@ function suggestRuleDateChecks(rules) {
  * @param {string} ageGroup - กลุ่มอายุ ('1yr', '2yr', '3yr', '5yr')
  * @returns {object[]} Array ของ Rules ทั้งหมดของปีและกลุ่มอายุนั้น
  */
+/**
+ * Issue #76: bounded script lock around every vaccine_rules mutation — ทั้งชุด
+ * อ่าน-ตัดสิน-เขียนเกิดภายใต้ lock เดียวและปล่อยเสมอใน finally ก่อนหน้านี้
+ * batchSaveRules/seed/clone ทำ read-modify-write ทั้งชีตโดยไม่มี lock ทำให้
+ * การบันทึกพร้อมกันเขียนทับกันเงียบ ๆ
+ */
+const RULES_WRITE_LOCK_TIMEOUT_MS = 60000;
+
+function withRulesLock_(work) {
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(RULES_WRITE_LOCK_TIMEOUT_MS);
+  } catch (e) {
+    return { success: false, status: 'rules_busy', error: 'vaccine_rules lock busy; no changes were made.' };
+  }
+  try {
+    return work();
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
+ * Issue #76: cell parity สำหรับ read-back verification — เซลล์สตริงต้องอ่านกลับเป็น
+ * สตริงเดิมทุกประการ, Date เทียบตาม instant, Number ยอมรับเพิ่มรูปข้อความทศนิยมตรงตัว
+ * (เซลล์ที่ถูก format เป็นข้อความ) นอกนั้นเทียบเคร้งครัด เจตนาเดียวกับ openDataCellParity
+ * (OpenData.js) โดยไม่ผูก graph การโหลดของสองไฟล์เข้าด้วยกัน
+ */
+function ruleCellParity_(intended, observed) {
+  if (typeof intended === 'string') return observed === intended;
+  if (intended instanceof Date) return observed instanceof Date && observed.getTime() === intended.getTime();
+  if (typeof intended === 'number' && Number.isFinite(intended)) {
+    return observed === intended || observed === String(intended);
+  }
+  return observed === intended;
+}
+
+/**
+ * Issue #76: commit บริเวณข้อมูลทั้งหมดด้วย setValues สี่เหลี่ยมเดียวแบบเติม padding —
+ * ไม่มี clear-before-write — แล้วตรวจ read-back ด้วย commit states ที่ซื่อสัตย์
+ * (ตามวินัยเดียวกับ sync OpenData ที่ harden ไว้แล้ว) padding เติมหางเดิมที่ยาวกว่า
+ * ให้ว่างในการเขียนครั้งเดียวกัน จึงไม่ต้อง clearContent หรือ deleteRow อีก
+ * คืน { verified: true } หรือ { verified: false, commitState: 'commit_uncertain' | 'commit_failure' }
+ */
+function commitRulesRectangle_(sheet, headers, rows, previousDataRowCount) {
+  const width = headers.length;
+  const height = Math.max(previousDataRowCount, rows.length);
+  const matrix = rows.slice();
+  while (matrix.length < height) matrix.push(Array(width).fill(''));
+  let writeAttempted = false;
+  try {
+    const hdcCodeColIndex = headers.indexOf('hdc_code');
+    if (hdcCodeColIndex !== -1) {
+      sheet.getRange(2, hdcCodeColIndex + 1, height, 1).setNumberFormat('@');
+    }
+    const target = sheet.getRange(2, 1, height, width);
+    writeAttempted = true; // throw หลังจุดนี้คือความไม่ชัดเจน (batch อาจถูก apply ไปแล้ว)
+    target.setValues(matrix);
+    SpreadsheetApp.flush();
+    const readBack = target.getValues();
+    const verified = readBack.length === height && readBack.every((row, i) =>
+      row.length === width && row.every((cell, j) => ruleCellParity_(matrix[i][j], cell)));
+    return verified ? { verified: true } : { verified: false, commitState: 'commit_uncertain' };
+  } catch (e) {
+    // writeAttempted เป็นตัวกำกับความจริงเท่านั้น: format-throw = ค่ายังไม่ถูกเขียน (commit_failure);
+    // setValues/flush/read-back throw = เขียนแล้วหรือไม่ก็ไม่รู้ (commit_uncertain) — ห้ามอ้างว่าสำเร็จ
+    return { verified: false, commitState: writeAttempted ? 'commit_uncertain' : 'commit_failure' };
+  }
+}
+
 function getVaccineRules(fiscalYear, ageGroup) {
   const ss = getSpreadsheet();
   const sheet = ss.getSheetByName(VACCINE_RULES_SHEET);
@@ -280,78 +350,81 @@ function saveVaccineRule(rule, adminEmail) {
   } catch (error) { return { success: false, error: error.message }; }
   ensureDateChecksColumn_(sheet);
 
-  const data = sheet.getDataRange().getValues();
-  const headers = data[0];
-  const idCol = headers.indexOf('rule_id');
+  // Issue #76: อ่าน-ตัดสิน-เขียนทั้งลำดับเกิดภายใต้ lock เดียว (release เสมอใน finally)
+  return withRulesLock_(() => {
+    const data = sheet.getDataRange().getValues();
+    const headers = data[0];
+    const idCol = headers.indexOf('rule_id');
 
-  // Serialize JSON fields
-  const requiredFieldsJson = JSON.stringify(Array.isArray(rule.required_fields) ? rule.required_fields : []);
-  const branchAltFieldsJson = JSON.stringify(Array.isArray(rule.branch_alt_fields) ? rule.branch_alt_fields : []);
+    // Serialize JSON fields
+    const requiredFieldsJson = JSON.stringify(Array.isArray(rule.required_fields) ? rule.required_fields : []);
+    const branchAltFieldsJson = JSON.stringify(Array.isArray(rule.branch_alt_fields) ? rule.branch_alt_fields : []);
 
-  const now = new Date();
+    const now = new Date();
 
-  // ค้นหา Row ที่มีอยู่แล้ว
-  let existingRowIndex = -1;
-  for (let i = 1; i < data.length; i++) {
-    if (data[i][idCol] === rule.rule_id) {
-      existingRowIndex = i + 1; // 1-indexed
-      break;
+    // ค้นหา Row ที่มีอยู่แล้ว
+    let existingRowIndex = -1;
+    for (let i = 1; i < data.length; i++) {
+      if (data[i][idCol] === rule.rule_id) {
+        existingRowIndex = i + 1; // 1-indexed
+        break;
+      }
     }
-  }
 
-  // Issue #26 (Decision E): resolve the forward identity BEFORE any sheet mutation —
-  // an unauthorized lineage change fails closed leaving the row fully untouched.
-  const metricKeyCol = headers.indexOf('metric_key');
-  const storedKey = existingRowIndex > 0 && metricKeyCol !== -1
-    ? data[existingRowIndex - 1][metricKeyCol]
-    : undefined;
-  const metricKeyResolution = resolveMetricKeyForSave_(rule, storedKey);
-  if (metricKeyResolution.error) {
-    return { success: false, error: metricKeyResolution.error };
-  }
-
-  // ป้องกันเลข 0 นำหน้าหาย สำหรับ hdc_code
-  const hdcCodeColIndex = headers.indexOf('hdc_code');
-  if (hdcCodeColIndex !== -1) {
-    const targetRow = existingRowIndex !== -1 ? existingRowIndex : sheet.getLastRow() + 1;
-    sheet.getRange(targetRow, hdcCodeColIndex + 1).setNumberFormat('@');
-  }
-
-  const rowData = headers.map(header => {
-    switch (header) {
-      case 'rule_id': return rule.rule_id;
-      case 'fiscal_year': return rule.fiscal_year;
-      case 'age_group': return rule.age_group;
-      case 'view_type': return rule.view_type;
-      case 'vaccine_group': return rule.vaccine_group || '';
-      case 'display_name': return rule.display_name || '';
-      case 'hdc_code': return rule.hdc_code || '';
-      case 'required_fields': return requiredFieldsJson;
-      case 'logic_type': return rule.logic_type;
-      case 'branch_alt_fields': return branchAltFieldsJson;
-      case 'is_required_for_v2': return rule.is_required_for_v2 !== false;
-      case 'is_active': return rule.is_active !== false;
-      case 'target_age_months': return rule.target_age_months !== undefined ? rule.target_age_months : '';
-      case 'date_checks': return rule.date_checks === undefined ? (existingRowIndex > 0 ? data[existingRowIndex - 1][headers.indexOf('date_checks')] || '' : '') : JSON.stringify(rule.date_checks);
-      case 'note': return rule.note || '';
-      case 'metric_key': return metricKeyResolution.key;
-      case 'updated_at': return now;
-      case 'updated_by': return adminEmail || '';
-      default: return '';
+    // Issue #26 (Decision E): resolve the forward identity BEFORE any sheet mutation —
+    // an unauthorized lineage change fails closed leaving the row fully untouched.
+    const metricKeyCol = headers.indexOf('metric_key');
+    const storedKey = existingRowIndex > 0 && metricKeyCol !== -1
+      ? data[existingRowIndex - 1][metricKeyCol]
+      : undefined;
+    const metricKeyResolution = resolveMetricKeyForSave_(rule, storedKey);
+    if (metricKeyResolution.error) {
+      return { success: false, error: metricKeyResolution.error };
     }
+
+    // ป้องกันเลข 0 นำหน้าหาย สำหรับ hdc_code
+    const hdcCodeColIndex = headers.indexOf('hdc_code');
+    if (hdcCodeColIndex !== -1) {
+      const targetRow = existingRowIndex !== -1 ? existingRowIndex : sheet.getLastRow() + 1;
+      sheet.getRange(targetRow, hdcCodeColIndex + 1).setNumberFormat('@');
+    }
+
+    const rowData = headers.map(header => {
+      switch (header) {
+        case 'rule_id': return rule.rule_id;
+        case 'fiscal_year': return rule.fiscal_year;
+        case 'age_group': return rule.age_group;
+        case 'view_type': return rule.view_type;
+        case 'vaccine_group': return rule.vaccine_group || '';
+        case 'display_name': return rule.display_name || '';
+        case 'hdc_code': return rule.hdc_code || '';
+        case 'required_fields': return requiredFieldsJson;
+        case 'logic_type': return rule.logic_type;
+        case 'branch_alt_fields': return branchAltFieldsJson;
+        case 'is_required_for_v2': return rule.is_required_for_v2 !== false;
+        case 'is_active': return rule.is_active !== false;
+        case 'target_age_months': return rule.target_age_months !== undefined ? rule.target_age_months : '';
+        case 'date_checks': return rule.date_checks === undefined ? (existingRowIndex > 0 ? data[existingRowIndex - 1][headers.indexOf('date_checks')] || '' : '') : JSON.stringify(rule.date_checks);
+        case 'note': return rule.note || '';
+        case 'metric_key': return metricKeyResolution.key;
+        case 'updated_at': return now;
+        case 'updated_by': return adminEmail || '';
+        default: return '';
+      }
+    });
+
+    if (existingRowIndex > 0) {
+      sheet.getRange(existingRowIndex, 1, 1, headers.length).setValues([rowData]);
+    } else {
+      const nextRow = sheet.getLastRow() + 1;
+      sheet.getRange(nextRow, 1, 1, headers.length).setValues([rowData]);
+    }
+
+    logAction('SYSTEM', adminEmail, 'save_vaccine_rule',
+      `Saved rule ${rule.rule_id} for fiscal_year=${rule.fiscal_year}, age_group=${rule.age_group}`);
+
+    return { success: true, rule_id: rule.rule_id, action: existingRowIndex > 0 ? 'updated' : 'inserted' };
   });
-
-  if (existingRowIndex > 0) {
-    sheet.getRange(existingRowIndex, 1, 1, headers.length).setValues([rowData]);
-  } else {
-    const nextRow = sheet.getLastRow() + 1;
-    sheet.getRange(nextRow, 1, 1, headers.length).setValues([rowData]);
-  }
-
-  logAction('SYSTEM', adminEmail, 'save_vaccine_rule',
-    `Saved rule ${rule.rule_id} for fiscal_year=${rule.fiscal_year}, age_group=${rule.age_group}`);
-
-  return { success: true, rule_id: rule.rule_id, action: existingRowIndex > 0 ? 'updated' : 'inserted' };
 }
 
 /**
@@ -363,103 +436,107 @@ function batchSaveRules(fiscalYear, ageGroup, rules, adminEmail) {
     return { success: false, error: 'fiscalYear, ageGroup, and rules array are required' };
   }
 
-  const ss = getSpreadsheet();
-  const sheet = ss.getSheetByName(VACCINE_RULES_SHEET);
-  if (!sheet) return { success: false, error: 'vaccine_rules sheet not found.' };
+  // Issue #76: ทั้ง lifecycle (อ่าน keptRows, ตัดสิน metric_key, commit) เกิดภายใต้ lock
+  // เดียว — กันการบันทึกพร้อมกันอ่านสแนปช็อตเก่าแล้วเขียนทับกันเงียบ ๆ
+  return withRulesLock_(() => {
+    const ss = getSpreadsheet();
+    const sheet = ss.getSheetByName(VACCINE_RULES_SHEET);
+    if (!sheet) return { success: false, error: 'vaccine_rules sheet not found.' };
 
-  try {
-    const incoming = rules;
-    const known = new Set(Object.keys(TARGET_AGE_MONTHS_BY_FIELD));
-    const peers = getVaccineRules(incoming[0]?.fiscal_year || fiscalYear, incoming[0]?.age_group || ageGroup);
-    [...incoming, ...peers].forEach(r => [...(r.required_fields || []), ...(r.branch_alt_fields || [])].forEach(f => {
-      if (typeof f === 'string' && /^[a-z][a-z0-9_]*_date$/.test(f)) known.add(f);
-    }));
-    incoming.forEach(r => validateDateChecks_(r.date_checks, r, known));
-  } catch (error) { return { success: false, error: error.message }; }
-  ensureDateChecksColumn_(sheet);
+    try {
+      const incoming = rules;
+      const known = new Set(Object.keys(TARGET_AGE_MONTHS_BY_FIELD));
+      const peers = getVaccineRules(incoming[0]?.fiscal_year || fiscalYear, incoming[0]?.age_group || ageGroup);
+      [...incoming, ...peers].forEach(r => [...(r.required_fields || []), ...(r.branch_alt_fields || [])].forEach(f => {
+        if (typeof f === 'string' && /^[a-z][a-z0-9_]*_date$/.test(f)) known.add(f);
+      }));
+      incoming.forEach(r => validateDateChecks_(r.date_checks, r, known));
+    } catch (error) { return { success: false, error: error.message }; }
+    ensureDateChecksColumn_(sheet);
 
-  const data = sheet.getDataRange().getValues();
-  const headers = data[0];
+    const data = sheet.getDataRange().getValues();
+    const headers = data[0];
 
-  // 1. แยก row ที่ไม่เกี่ยวข้องเก็บไว้ (ปีอื่น หรือกลุ่มอายุอื่น)
-  const keptRows = [];
-  for (let i = 1; i < data.length; i++) {
-    const row = data[i];
-    const obj = arrayToObj(headers, row);
-    // ถ้าไม่ใช่เป้าหมาย ให้เก็บไว้
-    if (String(obj.fiscal_year) !== String(fiscalYear) || obj.age_group !== ageGroup) {
-      keptRows.push(row);
-    }
-  }
-
-  // Issue #26 (Decision E): resolve every incoming rule's forward identity against its
-  // STORED key BEFORE any sheet mutation. Established keys survive older-client omission
-  // and replacement; attempted lineage reassignment fails the whole batch with the
-  // (FY, ageGroup) ruleset untouched.
-  const idColIndex = headers.indexOf('rule_id');
-  const metricKeyColIndex = headers.indexOf('metric_key');
-  const storedKeyByRuleId = new Map();
-  for (let i = 1; i < data.length; i++) {
-    if (String(arrayToObj(headers, data[i]).fiscal_year) === String(fiscalYear) && arrayToObj(headers, data[i]).age_group === ageGroup) {
-      storedKeyByRuleId.set(data[i][idColIndex], metricKeyColIndex !== -1 ? data[i][metricKeyColIndex] : undefined);
-    }
-  }
-  const resolvedMetricKeys = new Map();
-  for (const rule of rules) {
-    const resolution = resolveMetricKeyForSave_(rule, storedKeyByRuleId.get(rule.rule_id));
-    if (resolution.error) {
-      return { success: false, error: `rule ${rule.rule_id}: ${resolution.error}` };
-    }
-    resolvedMetricKeys.set(rule.rule_id, resolution.key);
-  }
-
-  // 2. แปลง new rules ให้เป็นรูปแบบ row
-  const now = new Date();
-  const newRows = rules.map(rule => {
-    return headers.map(header => {
-      switch (header) {
-        case 'rule_id': return rule.rule_id;
-        case 'fiscal_year': return fiscalYear;
-        case 'age_group': return ageGroup;
-        case 'view_type': return rule.view_type;
-        case 'vaccine_group': return rule.vaccine_group || '';
-        case 'display_name': return rule.display_name || '';
-        case 'hdc_code': return rule.hdc_code || '';
-        case 'required_fields': return JSON.stringify(rule.required_fields || []);
-        case 'logic_type': return rule.logic_type;
-        case 'branch_alt_fields': return JSON.stringify(rule.branch_alt_fields || []);
-        case 'is_required_for_v2': return rule.is_required_for_v2 !== false;
-        case 'is_active': return rule.is_active !== false;
-        case 'target_age_months': return rule.target_age_months !== undefined ? rule.target_age_months : '';
-        case 'date_checks': return rule.date_checks === undefined ? (data.slice(1).find(row => row[headers.indexOf('rule_id')] === rule.rule_id)?.[headers.indexOf('date_checks')] || '') : JSON.stringify(rule.date_checks);
-        case 'metric_key': return resolvedMetricKeys.get(rule.rule_id);
-      case 'note': return rule.note || '';
-        case 'updated_at': return now;
-        case 'updated_by': return adminEmail || '';
-        default: return '';
+    // 1. แยก row ที่ไม่เกี่ยวข้องเก็บไว้ (ปีอื่น หรือกลุ่มอายุอื่น)
+    const keptRows = [];
+    for (let i = 1; i < data.length; i++) {
+      const row = data[i];
+      const obj = arrayToObj(headers, row);
+      // ถ้าไม่ใช่เป้าหมาย ให้เก็บไว้
+      if (String(obj.fiscal_year) !== String(fiscalYear) || obj.age_group !== ageGroup) {
+        keptRows.push(row);
       }
-    });
-  });
-
-  // 3. Clear Sheet แล้วเขียนข้อมูลที่เก็บไว้ + ข้อมูลใหม่
-  // เพื่อหลีกเลี่ยง error "Cannot clear the last row", clear แบบเหลือ header
-  if (sheet.getLastRow() > 1) {
-    sheet.getRange(2, 1, sheet.getLastRow() - 1, headers.length).clearContent();
-  }
-  
-  const finalRows = [...keptRows, ...newRows];
-  if (finalRows.length > 0) {
-    const hdcCodeColIndex = headers.indexOf('hdc_code');
-    if (hdcCodeColIndex !== -1) {
-      sheet.getRange(2, hdcCodeColIndex + 1, finalRows.length, 1).setNumberFormat('@');
     }
-    sheet.getRange(2, 1, finalRows.length, headers.length).setValues(finalRows);
-  }
 
-  logAction('SYSTEM', adminEmail, 'batch_save_rules',
-    `Batch saved ${newRows.length} rules for fiscal_year=${fiscalYear}, age_group=${ageGroup}`);
+    // Issue #26 (Decision E): resolve every incoming rule's forward identity against its
+    // STORED key BEFORE any sheet mutation. Established keys survive older-client omission
+    // and replacement; attempted lineage reassignment fails the whole batch with the
+    // (FY, ageGroup) ruleset untouched.
+    const idColIndex = headers.indexOf('rule_id');
+    const metricKeyColIndex = headers.indexOf('metric_key');
+    const storedKeyByRuleId = new Map();
+    for (let i = 1; i < data.length; i++) {
+      if (String(arrayToObj(headers, data[i]).fiscal_year) === String(fiscalYear) && arrayToObj(headers, data[i]).age_group === ageGroup) {
+        storedKeyByRuleId.set(data[i][idColIndex], metricKeyColIndex !== -1 ? data[i][metricKeyColIndex] : undefined);
+      }
+    }
+    const resolvedMetricKeys = new Map();
+    for (const rule of rules) {
+      const resolution = resolveMetricKeyForSave_(rule, storedKeyByRuleId.get(rule.rule_id));
+      if (resolution.error) {
+        return { success: false, error: `rule ${rule.rule_id}: ${resolution.error}` };
+      }
+      resolvedMetricKeys.set(rule.rule_id, resolution.key);
+    }
 
-  return { success: true, saved_count: newRows.length };
+    // 2. แปลง new rules ให้เป็นรูปแบบ row
+    const now = new Date();
+    const newRows = rules.map(rule => {
+      return headers.map(header => {
+        switch (header) {
+          case 'rule_id': return rule.rule_id;
+          case 'fiscal_year': return fiscalYear;
+          case 'age_group': return ageGroup;
+          case 'view_type': return rule.view_type;
+          case 'vaccine_group': return rule.vaccine_group || '';
+          case 'display_name': return rule.display_name || '';
+          case 'hdc_code': return rule.hdc_code || '';
+          case 'required_fields': return JSON.stringify(rule.required_fields || []);
+          case 'logic_type': return rule.logic_type;
+          case 'branch_alt_fields': return JSON.stringify(rule.branch_alt_fields || []);
+          case 'is_required_for_v2': return rule.is_required_for_v2 !== false;
+          case 'is_active': return rule.is_active !== false;
+          case 'target_age_months': return rule.target_age_months !== undefined ? rule.target_age_months : '';
+          case 'date_checks': return rule.date_checks === undefined ? (data.slice(1).find(row => row[headers.indexOf('rule_id')] === rule.rule_id)?.[headers.indexOf('date_checks')] || '') : JSON.stringify(rule.date_checks);
+          case 'metric_key': return resolvedMetricKeys.get(rule.rule_id);
+          case 'note': return rule.note || '';
+          case 'updated_at': return now;
+          case 'updated_by': return adminEmail || '';
+          default: return '';
+        }
+      });
+    });
+
+    // 3. Issue #76: single padded rectangular replacement — ไม่มี clear-before-write อีกต่อไป
+    //    (ช่องว่าง clear→setValues เดิมทำให้พังชั่วขณะแล้วกฎหายทุกปีทั้งชีต) stale tail
+    //    ถูกเติมให้ว่างในการเขียนครั้งเดียวกัน และ read-back ถูกตรวจก่อนอ้างความสำเร็จ
+    const commit = commitRulesRectangle_(sheet, headers, [...keptRows, ...newRows], data.length - 1);
+    if (!commit.verified) {
+      logAction('SYSTEM', adminEmail, 'batch_save_rules',
+        `Commit ${commit.commitState} for fiscal_year=${fiscalYear}, age_group=${ageGroup} — no success claimed`);
+      return {
+        success: false, status: commit.commitState,
+        error: commit.commitState === 'commit_failure'
+          ? 'vaccine_rules commit failed before any value write.'
+          : 'vaccine_rules commit could not be verified; the sheet may be partially applied — inspect before retrying.'
+      };
+    }
+
+    logAction('SYSTEM', adminEmail, 'batch_save_rules',
+      `Batch saved ${newRows.length} rules for fiscal_year=${fiscalYear}, age_group=${ageGroup}`);
+
+    return { success: true, saved_count: newRows.length };
+  });
 }
 
 /**
@@ -475,6 +552,12 @@ function cloneRulesFromYear(fromYear, toYear, adminEmail) {
   if (String(fromYear) === String(toYear)) {
     return { success: false, error: 'fromYear and toYear must be different' };
   }
+
+  // Issue #76: read-check-insert ทั้งลำดับอยู่ใต้ lock เดียว
+  return withRulesLock_(() => cloneRulesFromYearLocked_(fromYear, toYear, adminEmail));
+}
+
+function cloneRulesFromYearLocked_(fromYear, toYear, adminEmail) {
 
   const ss = getSpreadsheet();
   const sheet = ss.getSheetByName(VACCINE_RULES_SHEET);
@@ -523,13 +606,19 @@ function cloneRulesFromYear(fromYear, toYear, adminEmail) {
     });
   });
 
-  // Batch insert
-  const startRow = sheet.getLastRow() + 1;
-  const hdcCodeColIndex = headers.indexOf('hdc_code');
-  if (hdcCodeColIndex !== -1) {
-    sheet.getRange(startRow, hdcCodeColIndex + 1, newRows.length, 1).setNumberFormat('@');
+  // Issue #76: commit ทั้งบริเวณข้อมูล (แถวเดิม + แถว clone) ด้วยสี่เหลี่ยมเดียวแบบตรวจ
+  // read-back — แทนการ append ท้ายชีตแบบเดิมที่พังกลางทางแล้วปีปลายทางติดค้างบางส่วน
+  const commit = commitRulesRectangle_(sheet, headers, [...data.slice(1), ...newRows], data.length - 1);
+  if (!commit.verified) {
+    logAction('SYSTEM', adminEmail, 'clone_vaccine_rules',
+      `Commit ${commit.commitState} for ${fromYear} → ${toYear} — no success claimed`);
+    return {
+      success: false, status: commit.commitState,
+      error: commit.commitState === 'commit_failure'
+        ? 'vaccine_rules clone commit failed before any value write.'
+        : 'vaccine_rules clone commit could not be verified; the sheet may be partially applied — inspect before retrying.'
+    };
   }
-  sheet.getRange(startRow, 1, newRows.length, headers.length).setValues(newRows);
 
   logAction('SYSTEM', adminEmail, 'clone_vaccine_rules',
     `Cloned ${newRows.length} rules from year ${fromYear} to ${toYear}`);
@@ -548,6 +637,12 @@ function seedVaccineRules(fiscalYear, adminEmail, force = false) {
     return { success: false, error: 'fiscalYear is required' };
   }
 
+  // Issue #76: read-check-commit ทั้งลำดับอยู่ใต้ lock เดียว
+  return withRulesLock_(() => seedVaccineRulesLocked_(fiscalYear, adminEmail, force));
+}
+
+function seedVaccineRulesLocked_(fiscalYear, adminEmail, force) {
+
   const ss = getSpreadsheet();
   const sheet = ss.getSheetByName(VACCINE_RULES_SHEET);
   if (!sheet) return { success: false, error: 'vaccine_rules sheet not found. Run setup first.' };
@@ -559,25 +654,17 @@ function seedVaccineRules(fiscalYear, adminEmail, force = false) {
     const obj = arrayToObj(headers, row);
     return String(obj.fiscal_year) === String(fiscalYear);
   });
-  
-  if (existing.length > 0) {
-    if (force) {
-      const rowsToDelete = [];
-      data.forEach((row, idx) => {
-        if (idx === 0) return;
-        const obj = arrayToObj(headers, row);
-        if (String(obj.fiscal_year) === String(fiscalYear)) {
-          rowsToDelete.push(idx + 1);
-        }
-      });
-      // Delete from bottom to top to avoid index shifting
-      for (let i = rowsToDelete.length - 1; i >= 0; i--) {
-        sheet.deleteRow(rowsToDelete[i]);
-      }
-    } else {
-      return { success: false, error: `Year ${fiscalYear} already has ${existing.length} rules. Use cloneVaccineRules or delete existing rules first.` };
-    }
+
+  if (existing.length > 0 && !force) {
+    return { success: false, error: `Year ${fiscalYear} already has ${existing.length} rules. Use cloneVaccineRules or delete existing rules first.` };
   }
+
+  // Issue #76: force ไม่ลบทีละแถวอีกต่อไป — แถวของปีอื่นถูกเก็บไว้แล้วเขียนทับทั้งบริเวณ
+  // ด้วยสี่เหลี่ยมเดียว จึงไม่มีหน้าต่าง delete→append ที่พังครึ่งทางแล้วปีนั้นหายบางส่วน
+  const keptRows = data.slice(1).filter(row => {
+    const obj = arrayToObj(headers, row);
+    return String(obj.fiscal_year) !== String(fiscalYear);
+  });
 
   // ──────────────────────────────────────────────────────────
   // Default Rules
@@ -838,15 +925,19 @@ function seedVaccineRules(fiscalYear, adminEmail, force = false) {
     });
   });
 
-  const startRow = sheet.getLastRow() + 1;
-  
-  // ป้องกันเลข 0 นำหน้าหาย สำหรับ hdc_code
-  const hdcCodeColIndex = headers.indexOf('hdc_code');
-  if (hdcCodeColIndex !== -1) {
-    sheet.getRange(startRow, hdcCodeColIndex + 1, rows.length, 1).setNumberFormat('@');
+  // Issue #76: commit สี่เหลี่ยมเดียวแบบตรวจ read-back — เขียนแถวของปีอื่นที่เก็บไว้
+  // รวมกับแถว seed ในครั้งเดียว (ยังจัด '@' ให้คอลัมน์ hdc_code ทั้งคอลัมน์เช่นเดิม)
+  const commit = commitRulesRectangle_(sheet, headers, [...keptRows, ...rows], data.length - 1);
+  if (!commit.verified) {
+    logAction('SYSTEM', adminEmail || 'system', 'seed_vaccine_rules',
+      `Commit ${commit.commitState} for fiscal_year=${fiscalYear} — no success claimed`);
+    return {
+      success: false, status: commit.commitState,
+      error: commit.commitState === 'commit_failure'
+        ? 'vaccine_rules seed commit failed before any value write.'
+        : 'vaccine_rules seed commit could not be verified; the sheet may be partially applied — inspect before retrying.'
+    };
   }
-  
-  sheet.getRange(startRow, 1, rows.length, headers.length).setValues(rows);
 
   logAction('SYSTEM', adminEmail || 'system', 'seed_vaccine_rules',
     `Seeded ${rows.length} vaccine rules for fiscal_year=${fiscalYear}`);
