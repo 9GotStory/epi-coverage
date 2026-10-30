@@ -124,8 +124,28 @@ function getEpiData(hoscode, targetTable = 'Epi_1_Year', fiscalYear = null) {
   return records;
 }
 
+/**
+ * Normalize one birth value to its calendar day (yyyy-MM-dd) for composite-key comparison.
+ * Sheet Date cells carry the calendar date in the SPREADSHEET timezone (เที่ยงคืนตามเวลาไทย),
+ * while composite keys from the client are plain yyyy-MM-dd strings (UTC midnight when parsed) —
+ * comparing raw instants therefore skews by the UTC offset and never matches (Issue #75).
+ * Both sides normalize to the spreadsheet-timezone calendar day, the same convention as
+ * normalizeEpiDateFields_ และ epiImportKey
+ */
+function aiBirthDay_(value, timeZone) {
+  if (Object.prototype.toString.call(value) === '[object Date]') {
+    return Utilities.formatDate(value, timeZone, 'yyyy-MM-dd');
+  }
+  const text = String(value == null ? '' : value).trim();
+  if (/^\d{4}-\d{2}-\d{2}T/.test(text)) {
+    const parsed = new Date(text);
+    if (!isNaN(parsed.getTime())) return Utilities.formatDate(parsed, timeZone, 'yyyy-MM-dd');
+  }
+  return text.slice(0, 10);
+}
+
 /** Locate the AI target by the exact composite key (hoscode + pid/cid + sex + birth + check_vhid); 1-based sheet row, or -1 when absent. */
-function findAiTargetRow(data, headers, recordKey) {
+function findAiTargetRow(data, headers, recordKey, timeZone) {
   const iHoscode = headers.indexOf('hoscode');
   const iPid = headers.indexOf('pid');
   const iCid = headers.indexOf('cid');
@@ -133,7 +153,7 @@ function findAiTargetRow(data, headers, recordKey) {
   const iBirth = headers.indexOf('birth');
   const iCheckVhid = headers.indexOf('check_vhid');
   if (iHoscode === -1 || iPid === -1 || iCid === -1 || iSex === -1 || iBirth === -1 || iCheckVhid === -1) return -1;
-  const targetBirth = new Date(recordKey.birth).getTime();
+  const targetBirth = aiBirthDay_(recordKey.birth, timeZone);
   for (let i = 1; i < data.length; i++) {
     const row = data[i];
     if (
@@ -141,7 +161,7 @@ function findAiTargetRow(data, headers, recordKey) {
       String(row[iPid]) === String(recordKey.pid) &&
       String(row[iCid]) === String(recordKey.cid) &&
       String(row[iSex]) === String(recordKey.sex) &&
-      new Date(row[iBirth]).getTime() === targetBirth &&
+      aiBirthDay_(row[iBirth], timeZone) === targetBirth &&
       String(row[iCheckVhid] || '') === String(recordKey.check_vhid || '')
     ) {
       return i + 1;
@@ -175,7 +195,7 @@ function saveAiAnalysis(recordKey, targetTable, aiAnalysis, auth) {
     return { success: false, error: "Missing required columns in database schema for AI Analysis (Composite Key)." };
   }
 
-  const targetRow = findAiTargetRow(data, headers, recordKey);
+  const targetRow = findAiTargetRow(data, headers, recordKey, ss.getSpreadsheetTimeZone());
   if (targetRow === -1) {
     return { success: false, error: "Record not found for Composite Key" };
   }
@@ -194,9 +214,10 @@ function analyzeVaccineData(prompt, recordKey, targetTable, auth) {
   if (!auth) return { success: false, error: 'Forbidden: AI analysis is limited to your facility.' };
   if (!getEpiSchemas()[targetTable]) return { success: false, error: 'Unknown EPI table' };
   // Read-only resolution of the exact target record: recordKey.hoscode alone proves nothing.
-  const sheet = getSpreadsheet().getSheetByName(targetTable);
+  const ss = getSpreadsheet();
+  const sheet = ss.getSheetByName(targetTable);
   const data = sheet ? sheet.getDataRange().getValues() : [];
-  const targetRow = findAiTargetRow(data, data[0] || [], recordKey);
+  const targetRow = findAiTargetRow(data, data[0] || [], recordKey, ss.getSpreadsheetTimeZone());
   if (targetRow === -1) return { success: false, error: 'Record not found for Composite Key' };
   const actualHoscode = String(data[targetRow - 1][data[0].indexOf('hoscode')]);
   if (!isDistrictScope(auth) && actualHoscode !== String(auth.hoscode)) {
