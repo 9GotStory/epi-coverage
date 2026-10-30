@@ -1,24 +1,31 @@
 import { hasSourceColumn } from './sourceColumns';
 import type { EpiRecord } from '../../types';
 import type { VaccineRule } from './ruleEngine';
-import { format } from 'date-fns';
+
+/** เขตเวลาไทยถาวร (UTC+7) — ข้อมูล EPI เป็นข้อมูลไทย วันปฏิทินต้องไม่ขึ้นกับเขตเวลาผู้ใช้ (Issue #80) */
+const THAI_UTC_OFFSET_MS = 7 * 60 * 60 * 1000;
+
+/** วันปฏิทินไทย (yyyy-MM-dd) ของ instant — เลื่อนเป็น UTC+7 แล้วอ่านตาม UTC จึง deterministic ทุก viewer */
+const thaiCalendarDay = (instant: Date): string =>
+  new Date(instant.getTime() + THAI_UTC_OFFSET_MS).toISOString().slice(0, 10);
 
 /**
  * วันปฏิทิน yyyy-MM-dd — จัดการ 3 รูปแบบให้ถูกต้อง:
  * 1. วันที่ล้วน "2024-10-31" → ใช้ตรง ๆ ตาม literal
  * 2. Timestamp ที่มี timezone (เช่น "2024-10-30T17:00:00.000Z" ที่ GAS สร้างจากเที่ยงคืนไทย)
- *    → แปลงเป็นวันตามเขตเวลาท้องถิ่นของผู้ใช้ ไม่ตัดข้อความหน้า T ตรง ๆ (วันจะเลื่อนหลัง 1 วัน)
+ *    → แปลงเป็นวันตามเขตเวลาไทย (UTC+7) เสมอ ไม่ใช่เขตเวลาท้องถิ่นของผู้ใช้
+ *    และไม่ตัดข้อความหน้า T ตรง ๆ (วันจะเลื่อนหลัง 1 วัน)
  * คืนค่า: null = ไม่มีค่า/ขีด, '' = รูปแบบไม่ถูกต้อง, ไม่งั้นคืน "yyyy-MM-dd"
  */
 export function calendarDay(value: unknown): string | null {
-  if (value instanceof Date) return Number.isNaN(value.getTime()) ? '' : format(value, 'yyyy-MM-dd');
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? '' : thaiCalendarDay(value);
   const text = String(value ?? '').trim();
   if (!text || text === '-' || text === '—') return null;
   const match = /^(\d{4}-\d{2}-\d{2})(T.*)?$/.exec(text);
   if (!match) return '';
   if (match[2]) {
     const parsed = new Date(text);
-    return Number.isNaN(parsed.getTime()) ? '' : format(parsed, 'yyyy-MM-dd');
+    return Number.isNaN(parsed.getTime()) ? '' : thaiCalendarDay(parsed);
   }
   const day = match[1];
   const parsed = new Date(`${day}T00:00:00Z`);
@@ -42,7 +49,7 @@ export function hdcValue(value: unknown): string {
   return value instanceof Date ? value.toISOString() : String(value);
 }
 
-/** Display the source calendar day — timestamp ที่มี timezone ถูกแปลงตามเขตเวลาท้องถิ่นก่อน */
+/** Display the source calendar day — timestamp ที่มี timezone ถูกแปลงเป็นวันตามเขตเวลาไทย (UTC+7) ก่อน */
 export function formatHdcDate(value: unknown): string {
   const text = hdcValue(value).trim();
   if (text === '—') return text;

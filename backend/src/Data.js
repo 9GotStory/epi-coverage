@@ -38,8 +38,10 @@ function upsertFacility(hoscode, hosname, isActive, adminEmail) {
       updateRange.setValues([[sanitizeSheetText(finalName), finalIsActive]]);
       
       const statusText = isActive !== undefined ? ` (Active: ${isActive})` : '';
-      
-      logAction('SYSTEM', adminEmail || 'Admin', 'update_facility', `Updated facility ${hoscode} - ${finalName}${statusText}`);
+
+      // Issue #80: Router ส่งอีเมลจาก session ที่ตรวจสอบแล้ว — fallback 'unknown'
+      // เมื่อบัญชีไม่มีอีเมล ไม่เขียน 'Admin' แบบ generic ที่ทำให้ attribution สับสน
+      logAction('SYSTEM', adminEmail || 'unknown', 'update_facility', `Updated facility ${hoscode} - ${finalName}${statusText}`);
       return { success: true, message: "Facility updated" };
     }
   }
@@ -58,7 +60,7 @@ function upsertFacility(hoscode, hosname, isActive, adminEmail) {
   range.setNumberFormat("@");
   range.setValues([newRow]);
   
-  logAction('SYSTEM', adminEmail || 'Admin', 'add_facility', `Added facility ${hoscode} - ${hosname}`);
+  logAction('SYSTEM', adminEmail || 'unknown', 'add_facility', `Added facility ${hoscode} - ${hosname}`);
   return { success: true, message: "Facility created" };
 }
 
@@ -112,10 +114,11 @@ function getEpiData(hoscode, targetTable = 'Epi_1_Year', fiscalYear = null) {
     const obj = normalizeEpiDateFields_(arrayToObj(headers, row), timeZone);
     
     // 1. สสอ. (00588) เห็นข้อมูลทั้งหมด | รพ.สต. อื่นเห็นเฉพาะของตนเอง
-    // 2. เฉพาะบรรทัดที่ Active
+    // 2. เฉพาะบรรทัดที่ Active — fail closed (Issue #80): แถวที่กรอกมือแล้ว is_active
+    //    ว่าง/สะกดผิดถือว่าไม่ active มีเพียง TRUE (boolean หรือข้อความ) เท่านั้นที่ active
     // 3. กรองตามปีงบประมาณ (fiscalYear) ถ้ามีการระบุ
     const isHoscodeMatch = hoscode === '00588' || obj.hoscode === hoscode;
-    const isActiveMatch = String(obj.is_active).toUpperCase() !== 'FALSE';
+    const isActiveMatch = String(obj.is_active).toUpperCase() === 'TRUE';
     const isFiscalYearMatch = !fiscalYear || String(obj.fiscal_year) === String(fiscalYear);
 
     if (isHoscodeMatch && isActiveMatch && isFiscalYearMatch) {
@@ -204,7 +207,9 @@ function saveAiAnalysis(recordKey, targetTable, aiAnalysis, auth) {
   const now = new Date();
   // Issue #77: escape formula triggers (=, +, -, @) in user/AI-supplied analysis free text.
   sheet.getRange(targetRow, aiAnalysisCol + 1, 1, 2).setValues([[sanitizeSheetText(aiAnalysis), now.toISOString()]]);
-  logAction(auth.userId, auth.email, 'save_ai_analysis', `Saved AI analysis for CID ${recordKey.cid} in ${targetTable}`);
+  // Issue #80: ไม่บันทึก CID ลง audit_logs (data minimization) — ตัวตนผู้กระทำและตาราง
+  // เพียงพอต่อการตรวจสอบ ส่วนเวลาวิเคราะห์บันทึกอยู่ในแถวข้อมูล (ai_analyzed_at) แล้ว
+  logAction(auth.userId, auth.email, 'save_ai_analysis', `Saved AI analysis in ${targetTable}`);
   return { success: true, message: "AI Analysis saved", aiAnalyzedAt: now.toISOString() };
 }
 
@@ -289,6 +294,36 @@ function getAuditLogs() {
     logs.push(arrayToObj(headers, data[i]));
   }
   return logs.reverse(); // คืนค่าจากล่าสุดไปเก่าสุด
+}
+
+/**
+ * ดึงเวลาล่าสุดที่นำเข้าข้อมูลสำเร็จ (Issue #80)
+ * สำหรับผู้ใช้ทุกสถานะที่ต้องการแสดง "ข้อมูล ณ วันที่…" — คืนเฉพาะ timestamp
+ * ล่าสุดของ action `cleanup_epi_data` (การ finalize batch นำเข้า) ไม่มี email/รายละเอียด
+ * ใด ๆ จาก audit_logs (การอ่าน audit ฉบับเต็มยังเป็น admin action ตามเดิม)
+ * @returns {{ success: boolean, timestamp: string|null }}
+ */
+function getLatestImportTime() {
+  const ss = getSpreadsheet();
+  const sheet = ss.getSheetByName('audit_logs');
+  if (!sheet) return { success: true, timestamp: null };
+
+  const data = sheet.getDataRange().getValues();
+  if (data.length <= 1) return { success: true, timestamp: null };
+
+  const headers = data[0];
+  const actionCol = headers.indexOf('action');
+  const timestampCol = headers.indexOf('timestamp');
+  if (actionCol === -1 || timestampCol === -1) return { success: true, timestamp: null };
+
+  let latest = null;
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][actionCol] !== 'cleanup_epi_data') continue;
+    const ts = data[i][timestampCol];
+    // timestamp เก็บเป็น ISO 8601 เสมอ (logAction) เทียบเป็นข้อความได้
+    if (ts !== '' && ts != null && (latest === null || String(ts) > latest)) latest = String(ts);
+  }
+  return { success: true, timestamp: latest };
 }
 
 /**

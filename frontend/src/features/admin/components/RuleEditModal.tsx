@@ -247,6 +247,21 @@ export function RuleEditModal({ rule, allRules, isOpen, onClose, onSave, fiscalY
         seen.add(id);
       }
     }
+    // Issue #80: ผลประเมินถูกคีย์ด้วย display_name — กฎ active สองตัวชื่อเดียวกันในมุมมองเดียวกัน
+    // จะยุบรวมผลแต่นับซ้ำ ทำให้ coverage เกิน 100% ได้ (backend ปฏิเสธชุดเช่นนี้เสมอ
+    // ตรวจตั้งแต่ฉบับร่างเพื่อไม่ให้ Batch Save ไปตกลงกลางทาง)
+    if (data.is_active) {
+      const duplicatePeer = allRules.find(r =>
+        r.rule_id !== rule?.rule_id &&
+        r.is_active !== false &&
+        Number(r.view_type) === Number(data.view_type) &&
+        (r.display_name || '').trim() === data.display_name.trim()
+      );
+      if (duplicatePeer) {
+        form.setError('display_name', { message: `ชื่อนี้ซ้ำกับกฎ "${duplicatePeer.display_name}" ที่เปิดใช้งานอยู่ในมุมมองเดียวกัน — ชื่อที่ใช้งานต้องไม่ซ้ำกันในมุมมองเดียวกัน` });
+        return;
+      }
+    }
     const isNew = !rule;
     
     const updatedRule: VaccineRule = {

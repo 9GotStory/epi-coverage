@@ -230,17 +230,18 @@ function arrayToObj(headers, row) {
 
 /**
  * อัปเดตสถานะและสิทธิ์ของผู้ใช้ (สำหรับ Admin)
+ * Issue #80: audit ใช้ตัวตนจาก session ที่ตรวจสอบแล้ว (auth) ไม่ใช้ชื่อ 'Admin' แบบ generic
  */
-function updateUserStatus(googleId, newStatus, newRole) {
+function updateUserStatus(googleId, newStatus, newRole, auth) {
   const ss = getSpreadsheet();
   const sheet = ss.getSheetByName('Users');
   const data = sheet.getDataRange().getValues();
   const headers = data[0];
-  
+
   const idCol = headers.indexOf('google_id');
   const statusCol = headers.indexOf('status');
   const roleCol = headers.indexOf('role');
-  
+
   for (let i = 1; i < data.length; i++) {
     if (data[i][idCol] === googleId) {
       const email = data[i][headers.indexOf('email')];
@@ -253,11 +254,10 @@ function updateUserStatus(googleId, newStatus, newRole) {
         sheet.getRange(i + 1, roleCol + 1).setValue(sanitizeSheetText(newRole)); // Issue #77: escape formula triggers
         details.push(`role to ${newRole}`);
       }
-      
+
       if (details.length > 0) {
-        // Here we just use a generic 'Admin' email since we don't have the calling admin's email easily available in the backend payload
-        // We will pass adminEmail in the payload from frontend
-        logAction('SYSTEM', 'Admin', 'update_user_status', `Updated ${email} ${details.join(' and ')}`);
+        logAction(auth && auth.userId || 'SYSTEM', auth && auth.email || 'unknown',
+          'update_user_status', `Updated ${email} ${details.join(' and ')}`);
       }
       return { success: true, message: `User updated successfully.` };
     }
@@ -267,28 +267,30 @@ function updateUserStatus(googleId, newStatus, newRole) {
 
 /**
  * อัปเดตสังกัด รพ.สต. (hoscode) ของผู้ใช้
+ * Issue #80: audit ใช้ตัวตนจาก session ที่ตรวจสอบแล้ว (auth) ไม่ใช้ชื่อ 'Admin' แบบ generic
  */
-function updateUserFacility(googleId, newHoscode) {
+function updateUserFacility(googleId, newHoscode, auth) {
   const ss = getSpreadsheet();
   const sheet = ss.getSheetByName('Users');
   const data = sheet.getDataRange().getValues();
   const headers = data[0];
-  
+
   const idCol = headers.indexOf('google_id');
   const hoscodeCol = headers.indexOf('hoscode');
-  
+
   for (let i = 1; i < data.length; i++) {
     if (data[i][idCol] === googleId) {
       const email = data[i][headers.indexOf('email')];
-      
+
       if (newHoscode) {
         // Prepend apostrophe to preserve leading zeros in Excel/Sheets
         const safeHoscode = "'" + newHoscode;
         const range = sheet.getRange(i + 1, hoscodeCol + 1);
         range.setNumberFormat("@");
         range.setValue(safeHoscode);
-        
-        logAction('SYSTEM', 'Admin', 'update_user_facility', `Updated ${email} facility to ${newHoscode}`);
+
+        logAction(auth && auth.userId || 'SYSTEM', auth && auth.email || 'unknown',
+          'update_user_facility', `Updated ${email} facility to ${newHoscode}`);
         return { success: true, message: `User facility updated successfully.` };
       }
     }
@@ -318,23 +320,69 @@ function updateLastLogin(googleId) {
 }
 
 /**
+ * SHA-256 hex ของข้อความ — ใช้แทนการเก็บ credential ดิบในชีต (Issue #80)
+ * (computeDigest คืน signed bytes ใน GAS — & 0xff ก่อนแปลงเป็น hex ทุก byte)
+ */
+function sha256Hex_(text) {
+  const digestBytes = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, String(text || ''));
+  return digestBytes.map(b => (b & 0xff).toString(16).padStart(2, '0')).join('');
+}
+
+/**
  * สร้างเซสชันใหม่เมื่อล็อกอินสำเร็จ
  */
 function createSession(userId, token, ipAddress, userAgent) {
   const ss = getSpreadsheet();
   const sheet = ss.getSheetByName('sessions');
-  
+
   const sessionId = Utilities.getUuid();
   const createdAt = new Date();
   // หมดอายุใน 24 ชั่วโมง
   const expiresAt = new Date(createdAt.getTime() + 24 * 60 * 60 * 1000).toISOString();
-  
+
+  // Issue #80: เก็บเฉพาะ digest ทางเดียว (SHA-256 hex) ของ Google access token —
+  // คอลัมน์นี้ไม่ถูกอ่านกลับเพื่อยืนยันตัวตน (validateTokenAndGetRole ใช้ session_id)
+  // การเก็บ token ดิบคือ credential ที่ใช้งานได้ค้างอยู่ในชีต ซึ่งขัดสัญญา docs/schema.md §8
+  const tokenDigest = sha256Hex_(token);
+
   // Issue #77: escape formula triggers (=, +, -, @) — ip/UA are client-controlled request headers.
-  sheet.appendRow([sessionId, userId, token, ipAddress, userAgent, expiresAt, createdAt.toISOString()].map(sanitizeSheetText));
-  
+  sheet.appendRow([sessionId, userId, tokenDigest, ipAddress, userAgent, expiresAt, createdAt.toISOString()].map(sanitizeSheetText));
+
   logAction(userId, 'SYSTEM', 'login', `User logged in from ${ipAddress}`);
-  
+
   return { success: true, session_id: sessionId };
+}
+
+/**
+ * Issue #80 (migration รันครั้งเดียว): แปลง Google access token ดิบที่เคยเก็บไว้ในชีต
+ * sessions ก่อนการแก้ไข ให้เป็น SHA-256 hex digest เหมือะที่ createSession เขียนในปัจจุบัน
+ * — เซสชันหมดอายุไม่ถูกลบออกจากชีต ดังนั้น credential เดิมจำกว่าจะค้างอยู่ถ้าไม่เยียวยา
+ * เรียกจาก GAS editor ครั้งเดียวหลัง deploy (แบบเดียวกับ migrateVaccineRulesTargetAge)
+ * เขียนกลับทั้งบริเดียวด้วย setValues ครั้งเดียว และ idempotent (ค่าที่เป็น hex 64 ตัวอยู่แล้วไม่แตะ)
+ */
+function migrateSessionsTokenDigest() {
+  const ss = getSpreadsheet();
+  const sheet = ss.getSheetByName('sessions');
+  if (!sheet) return { success: false, error: 'Sheet sessions not found' };
+
+  const range = sheet.getDataRange();
+  const values = range.getValues();
+  if (values.length <= 1) return { success: true, migrated: 0 };
+
+  const headers = values[0];
+  const tokenCol = headers.indexOf('token');
+  if (tokenCol === -1) return { success: false, error: 'sessions token column not found' };
+
+  const isSha256Hex = value => /^[0-9a-f]{64}$/.test(String(value || ''));
+  let migrated = 0;
+  for (let i = 1; i < values.length; i++) {
+    const token = values[i][tokenCol];
+    if (token === '' || token == null || isSha256Hex(token)) continue;
+    values[i][tokenCol] = sanitizeSheetText(sha256Hex_(token));
+    migrated++;
+  }
+  if (migrated > 0) range.setValues(values);
+  return { success: true, migrated };
 }
 
 /**

@@ -42,7 +42,7 @@
 | `batch_id` | String | รหัสรอบการอัปโหลด (UUID สร้างตอนอัปโหลดแต่ละครั้ง) |
 | `fiscal_year` | String | ปีงบประมาณของข้อมูลชุดนี้ (ระบุตอนอัปโหลด เพื่อกำหนด Scope) |
 | `last_seen_batch` | String | รหัสอ้างอิงรอบการอัปโหลดล่าสุด (ใช้ตรวจสอบเด็กที่ย้ายออกโดยสร้าง Soft Delete) |
-| `is_active` | Boolean | สถานะยังอยู่ในพื้นที่หรือไม่ (TRUE/FALSE) |
+| `is_active` | Boolean | สถานะยังอยู่ในพื้นที่หรือไม่ (TRUE/FALSE) — การอ่านเป็นแบบ fail closed: เฉพาะ TRUE ชัด ๆ เท่านั้นที่ active ค่าว่าง/สะกดผิด (แถวที่กรอกมือ) ถือว่าไม่ active |
 | `ai_analysis` | String | ผลการวิเคราะห์จาก AI (Gemini) สำหรับเคสที่มีปัญหา (รักษาค่าเดิมเมื่ออัปโหลด แต่ไม่ถือว่าเป็นผลวิเคราะห์ใหม่) |
 | `ai_analyzed_at` | DateTime | วันเวลาที่ AI ทำการประมวลผล |
 
@@ -101,7 +101,7 @@
 | :--- | :--- | :--- |
 | `session_id` | String | รหัสเซสชัน (UUID) |
 | `user_id` | String | รหัสผู้ใช้ (Foreign Key เชื่อมโยงกับ `id` ในตาราง `Users`) |
-| `token` | String | Session Token หรือ JWT Token ที่เข้ารหัสแล้ว |
+| `token` | String | SHA-256 hex digest ของ Google access token ที่ใช้ล็อกอิน (เก็บเพื่อสอบทานเท่านั้น) — ไม่มี credential ที่ใช้งานได้ถูกเก็บในชีต การยืนยันตัวตนใช้ `session_id` ไม่ได้ใช้คอลัมน์นี้ แถวเดิมที่เคยเก็บ token ดิบเยียวยาครั้งเดียวหลัง deploy ด้วย `migrateSessionsTokenDigest` (GAS editor) |
 | `ip_address` | String | หมายเลข IP ของผู้ใช้งาน |
 | `user_agent` | String | ข้อมูลเบราว์เซอร์และอุปกรณ์ (User Agent) |
 | `expires_at` | DateTime | วันเวลาที่เซสชันหมดอายุ |
@@ -109,6 +109,8 @@
 
 
 ## 9. `vaccine_rules` — การตั้งค่าตรวจวันที่
+
+การอ่านผ่าน `getVaccineRules` (endpoint สาธารณะ — เรียกได้โดยไม่ต้อง authenticate) ส่งเฉพาะคอลัมน์ที่ engine ใช้เท่านั้น ไม่รวม `updated_by` (อีเมล admin) และห้ามมี `display_name` ของกฎที่ active ซ้ำกันภายใน (`fiscal_year`, `age_group`, `view_type`) เดียวกัน — ผลประเมินถูกคีย์ด้วย `display_name` ชื่อซ้ำจะยุบรวมผลแต่นับซ้ำ ทำให้ coverage เกิน 100% ได้ (การบันทึกเดี่ยว/ชุดปฏิเสธชุดที่ซ้ำชื่อ ต่าง view_type หรือกฎที่ปิดอยู่ไม่กระทบกัน)
 
 คอลัมน์ `date_checks` เก็บ JSON: `before_birth` (Boolean), `allow_on_birth` (Boolean), `same_day_pairs` และ `ordered_pairs` (รายการ `{field, other_field}`)
 

@@ -309,7 +309,9 @@ function getVaccineRules(fiscalYear, ageGroup) {
       let branchAltFields = [];
       try { requiredFields = JSON.parse(r.required_fields || '[]'); } catch (e) { /* ignore */ }
       try { branchAltFields = JSON.parse(r.branch_alt_fields || '[]'); } catch (e) { /* ignore */ }
-      return {
+      // Issue #80: projection สำหรับการอ่านสาธารณะ — ตัด updated_by (อีเมล admin)
+      // ออกจาก payload เพราะ endpoint นี้เรียกได้โดยไม่ต้อง authenticate
+      const { updated_by, ...publicRule } = {
         ...r,
         fiscal_year: Number(r.fiscal_year),
         view_type: Number(r.view_type),
@@ -323,7 +325,33 @@ function getVaccineRules(fiscalYear, ageGroup) {
         is_active: r.is_active === true || r.is_active === 'TRUE' || r.is_active === 'true',
         is_required_for_v2: r.is_required_for_v2 === true || r.is_required_for_v2 === 'TRUE' || r.is_required_for_v2 === 'true'
       };
+      return publicRule;
     });
+}
+
+/**
+ * Issue #80: ชื่อแสดงผล (display_name) เป็นคีย์ของผลประเมินใน engine (results/passedVaccines)
+ * rule ที่ active ชื่อซ้ำกันใน (fiscal_year, age_group, view_type) เดียวกันจะถูกยุบรวม
+ * ขณะที่ตัวนับนับทั้งสอง rule — coverage เกิน 100% ได้ จึงต้องปฏิเสธชุดที่ซ้ำชื่อ
+ * (ต่าง view_type หรือ is_active = false ไม่กระทบกัน)
+ *
+ * PRECONDITION: ผู้เรียกต้องส่ง rules ที่ถูกจำกัดขอบเขตเหลือหนึ่ง (fiscal_year, age_group)
+ * แล้วเท่านั้น — คีย์ของการตรวจคือ view_type + display_name (trim แล้ว) สอดคล้องกับ
+ * การเทียบชื่อใน RuleEditModal ฝั่งหน้าเว็บ
+ * @returns {string|null} ข้อความ error เมื่อพบชื่อซ้ำ ไม่งั้น null
+ */
+function findDuplicateActiveDisplayName_(rules) {
+  const seen = new Set();
+  for (const rule of rules) {
+    if (rule.is_active === false) continue;
+    const name = String(rule.display_name || '').trim();
+    const key = `${Number(rule.view_type)}|${name}`;
+    if (seen.has(key)) {
+      return `duplicate active display_name "${name}" in view ${Number(rule.view_type)} — evaluation results are keyed by display_name`;
+    }
+    seen.add(key);
+  }
+  return null;
 }
 
 /**
@@ -361,6 +389,15 @@ function saveVaccineRule(rule, adminEmail) {
     const data = sheet.getDataRange().getValues();
     const headers = data[0];
     const idCol = headers.indexOf('rule_id');
+
+    // Issue #80: ตัดสินชื่อ active ซ้ำภายใต้ lock จาก snapshot เดียวกับที่จะเขียน —
+    // ตัดสินก่อนขึ้น lock ทำให้การบันทึกสองฉบับพร้อมกันผ่านการตรวจทั้งคู่ (TOCTOU)
+    // (เทียบกับ peers ที่ตัดตัว rule เองออก เพื่อให้แก้ชื่อ/บันทึกซ้ำที่เดิมผ่านได้)
+    const duplicateName = findDuplicateActiveDisplayName_([
+      rule,
+      ...getVaccineRules(rule.fiscal_year, rule.age_group).filter(p => p.rule_id !== rule.rule_id),
+    ]);
+    if (duplicateName) return { success: false, error: duplicateName };
 
     // Serialize JSON fields
     const requiredFieldsJson = JSON.stringify(Array.isArray(rule.required_fields) ? rule.required_fields : []);
@@ -459,6 +496,10 @@ function batchSaveRules(fiscalYear, ageGroup, rules, adminEmail) {
         if (typeof f === 'string' && /^[a-z][a-z0-9_]*_date$/.test(f)) known.add(f);
       }));
       incoming.forEach(r => validateDateChecks_(r.date_checks, r, known));
+      // Issue #80: batch แทนที่ rules ของ (fiscal_year, age_group) ทั้งชุด —
+      // ตรวจชื่อ active ซ้ำภายในชุดใหม่เอง (ชุดเดิมจะถูกแทนที่ทั้งหมด)
+      const duplicateName = findDuplicateActiveDisplayName_(incoming);
+      if (duplicateName) return { success: false, error: duplicateName };
     } catch (error) { return { success: false, error: error.message }; }
     ensureDateChecksColumn_(sheet);
 

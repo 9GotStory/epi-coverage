@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 
 import { AgeGroupExpandedView } from '../shared/components/AgeGroupExpandedView';
+import { isRenderableGroupSummary } from '../shared/utils/dashboardLogic';
 import type { LegacyCompatibleGroupSummary } from '../shared/utils/dashboardLogic';
 import { formatDateTimeStr, getCurrentFiscalYear } from '../shared/utils/dateUtils';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../shared/components/ui/select';
@@ -223,7 +224,9 @@ export function Dashboard() {
 
   const getSummary = (table: string) => {
     // Backend owns canonical annual precedence (_all over legacy, Issue #22).
-    const found = summaries.find(s => s.targetTable === table && s.summaryData);
+    // Issue #80: a parseable-but-fieldless summaryData row is NOT renderable —
+    // treat it as no summary instead of crashing on `view2Coverage.toFixed`.
+    const found = summaries.find(s => s.targetTable === table && isRenderableGroupSummary(s.summaryData));
     return found
       ? { data: found.summaryData as LegacyCompatibleGroupSummary, updatedAt: found.updated_at }
       : { data: null, updatedAt: null };
