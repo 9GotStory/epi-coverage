@@ -165,11 +165,13 @@ export const evaluateDynamicV1 = (record: EpiRecord, rules: VaccineRule[], evalu
 
   for (const rule of v1Rules) {
     const primaryKnown = rule.required_fields.length > 0 && rule.required_fields.every(field => hasSourceColumn(record, field));
-    const alternativeKnown = (rule.branch_alt_fields?.length || 0) > 0 && rule.branch_alt_fields!.every(field => hasSourceColumn(record, field));
-    const primaryPassed = primaryKnown && rule.required_fields.every(field => Boolean(dateKey(record[field as keyof EpiRecord])));
-    const alternativePassed = alternativeKnown && rule.branch_alt_fields!.every(field => Boolean(dateKey(record[field as keyof EpiRecord])));
+    // ไม่มีทางเลือก (branch_alt_fields ว่าง) = ไม่มีคอลัมน์ที่ต้องยืนยันเพิ่ม จึงไม่ทำให้ rule ประเมินไม่ได้
+    const alternativeKnown = !rule.branch_alt_fields || rule.branch_alt_fields.length === 0 || rule.branch_alt_fields.every(field => hasSourceColumn(record, field));
+    // BRANCH ตัดสินได้ต่อเมื่อยืนยันคอลัมน์ครบทั้งสองทางเลือก (Issue #78) — ไฟล์ที่เห็นทางเดียว
+    // ถ้านับเฉพาะคนที่ผ่านทางที่มองเห็น ตัวหาร coverage จะคัดเอาแต่คนผ่าน (เทียม 100%)
+    // รายการทั้งกฎจึงเป็น "ข้อมูลไม่พอประเมิน" รวมเด็กที่ครบทางที่มองเห็นด้วย
     const incompleteSource = rule.logic_type === 'BRANCH'
-      ? !primaryPassed && !alternativePassed && (!primaryKnown || !alternativeKnown)
+      ? !primaryKnown || !alternativeKnown
       : !primaryKnown;
     if (rule.unavailable_reason || (rule.source_aware && incompleteSource)) {
       results[rule.display_name] = false;
