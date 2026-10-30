@@ -41,7 +41,13 @@ const currentYear = getCurrentFiscalYear();
 const previousYear = currentYear - 1;
 const earlierYear = currentYear - 2;
 
-const makeRow = (table: string, year: number, total: number, coverage = 60): DashboardSummaryRow => ({
+const makeRow = (
+  table: string,
+  year: number,
+  total: number,
+  coverage = 60,
+  extra?: Partial<NonNullable<DashboardSummaryRow['summaryData']>>,
+): DashboardSummaryRow => ({
   id: `${table}_${year}_all`,
   targetTable: table as DashboardSummaryRow['targetTable'],
   fiscalYear: year,
@@ -57,6 +63,7 @@ const makeRow = (table: string, year: number, total: number, coverage = 60): Das
     view2Breakdown: [],
     facilityBreakdownV1: [],
     facilityBreakdownV2: [],
+    ...extra,
   },
 });
 
@@ -143,6 +150,27 @@ describe('Dashboard fiscal-year selection', () => {
     expect(within(age1).getAllByText('0.00').length).toBeGreaterThan(0);
     expect(within(age2).getByText(`ยังไม่มีข้อมูลสรุปปีงบประมาณ ${currentYear}`)).toBeTruthy();
     expect(within(age2).queryByText('0.00')).toBeNull();
+  });
+
+  // Issue #79: a current-contract summary where NO child is evaluable yet (whole cohort
+  // pending, view2ApplicableTotal = 0) must render the "not evaluable" em dash on the
+  // View 2 headline — never a measured-looking 0.00% (docs/features.md §3.5/§3.7). The
+  // case above stays distinct: that legacy-style row omits view2ApplicableTotal entirely,
+  // so its stored number keeps rendering.
+  it('renders the em dash, never 0.00%, for View 2 when the applicable denominator is zero (Issue #79)', () => {
+    renderDashboard(yearTables, {
+      [`${currentYear}:all`]: [
+        makeRow('Epi_1_Year', currentYear, 15, 0, {
+          view1Coverage: 60,
+          view2ApplicableTotal: 0,
+          view2PendingCount: 15,
+        }),
+      ],
+    });
+    const age1 = screen.getByText('ภาพรวมเด็กอายุครบ 1 ปี').closest('section')!;
+    expect(within(age1).getAllByText('ยังประเมินไม่ได้').length).toBeGreaterThan(0);
+    expect(within(age1).getAllByText('—').length).toBeGreaterThan(0);
+    expect(within(age1).queryByText('0.00')).toBeNull();
   });
 
   it('offers the current FY and a no-data state when no annual years exist', () => {

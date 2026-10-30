@@ -148,7 +148,10 @@ const AgeGroupSection = memo(function AgeGroupSection({
 
           <div className="mt-4 flex items-end justify-between">
             <div>
-              <p className="text-3xl font-bold text-zinc-900 tracking-tight">{summary.view2Coverage.toFixed(2)}<span className="text-xl text-zinc-400 font-medium ml-0.5">%</span></p>
+              {/* Issue #79: a zero applicable denominator means the cohort is not evaluable yet —
+                  show the em dash like View 1, never a measured-looking 0.00% (docs/features.md §3.5/§3.7).
+                  Legacy snapshots without view2ApplicableTotal keep showing their stored number. */}
+              <p className="text-3xl font-bold text-zinc-900 tracking-tight">{summary.view2ApplicableTotal === 0 ? '—' : summary.view2Coverage.toFixed(2)}<span className="text-xl text-zinc-400 font-medium ml-0.5">%</span></p>
               <p className="text-sm text-zinc-500 mt-1">
                 ผ่านเกณฑ์ <strong className="text-zinc-800">{summary.view2Passed.toLocaleString()}</strong> คน
                 <span className="mx-1.5 text-zinc-300">|</span>
