@@ -24,6 +24,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
+const SHEETTEXT_SOURCE = fs.readFileSync(path.join(__dirname, '../src/SheetText.js'), 'utf8'); // Issue #77: shared formula-injection escape
 const RULES_SOURCE = fs.readFileSync(path.join(__dirname, '../src/VaccineRules.js'), 'utf8');
 const HEADERS = [
   'rule_id', 'fiscal_year', 'age_group', 'view_type', 'vaccine_group', 'display_name',
@@ -109,6 +110,7 @@ function createHarness({
     },
     SpreadsheetApp: { flush() { if (failOnFlush) throw new Error('harness: flush failure'); } },
   });
+  vm.runInContext(SHEETTEXT_SOURCE, context);
   vm.runInContext(RULES_SOURCE, context);
   return { context, cells, events, ops, lock, readRules: (fy, age) => context.getVaccineRules(fy, age) };
 }

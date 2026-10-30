@@ -2,6 +2,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
+const sheetTextSource = fs.readFileSync(require('node:path').join(__dirname, '../src/SheetText.js'), 'utf8'); // Issue #77: shared formula-injection escape
 const source = fs.readFileSync(require('node:path').join(__dirname, '../src/VaccineRules.js'), 'utf8');
 const headers = ['rule_id', 'fiscal_year', 'age_group', 'view_type', 'required_fields', 'branch_alt_fields', 'logic_type', 'is_active', 'hdc_code'];
 const checks = { before_birth: true, allow_on_birth: false, same_day_pairs: [{ field: 'hbv1_date', other_field: 'dtp1_date' }], ordered_pairs: [] };
@@ -23,6 +24,7 @@ function setup() {
     }),
   };
   const context = vm.createContext({ getSpreadsheet: () => ({ getSheetByName: () => sheet }), arrayToObj: (h, r) => Object.fromEntries(h.map((k, i) => [k, r[i]])), logAction() {}, Utilities: { getUuid: () => 'uuid' }, LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) }, SpreadsheetApp: { flush() {} } });
+  vm.runInContext(sheetTextSource, context);
   vm.runInContext(source, context);
   return { context, cells };
 }

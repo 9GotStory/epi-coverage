@@ -11,6 +11,8 @@
  *     `role='user'`, `status='pending'`, no matter what the client sends.
  *   - Legitimate registration data (google_id/email/name/hoscode) still maps
  *     through, and the leading-zero hoscode text protection is unchanged.
+ *   - Issue #77: self-declared free text (name/email) is persisted with the
+ *     formula-injection escape for every trigger prefix (=, +, -, @).
  *
  * All fixtures are synthetic; no real accounts, tokens, or person data.
  */
@@ -71,6 +73,7 @@ function setup() {
     SpreadsheetApp: { flush() {} },
     Utilities: { getUuid: () => 'uuid' },
   });
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/SheetText.js'), 'utf8'), context); // Issue #77: shared formula-injection escape
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/Auth.js'), 'utf8'), context);
   createSheet('Users', [USERS_HEADER]);
   const readUsers = () => {
@@ -113,4 +116,22 @@ test('createUser keeps legitimate registration data and hoscode text protection 
   assert.ok(h.numberFormats.some(f => f.sheet === 'Users' && f.format === '@'),
     'the written row is still text-formatted');
   assert.ok(h.audit.some(a => a.action === 'create_user'), 'create_user audit still emitted');
+});
+
+test('createUser escapes formula trigger prefixes in self-declared free text (Issue #77)', () => {
+  for (const trigger of ['=', '+', '-', '@']) {
+    const h = setup();
+    const namePayload = `${trigger}HYPERLINK("http://evil.example","คลิก")`;
+    const result = h.context.createUser({
+      id: 'u1', google_id: 'g-1', email: `${trigger}attacker@example.test`, name: namePayload,
+      hoscode: '06422', created_at: '2026-10-30T00:00:00Z', last_login: '',
+    });
+    assert.equal(result.success, true, `a ${trigger}-prefixed self-registration still succeeds (validation is unchanged)`);
+    const stored = h.readUsers()[0];
+    assert.equal(stored.name, `'${namePayload}`, `name starting with '${trigger}' is persisted escaped`);
+    assert.equal(stored.email, `'${trigger}attacker@example.test`, `email starting with '${trigger}' is persisted escaped`);
+    assert.ok(String(stored.hoscode).startsWith("'"), 'the manual hoscode apostrophe is not double-processed');
+    assert.equal(stored.role, 'user', 'privilege contract unchanged by the escape');
+    assert.equal(stored.status, 'pending', 'privilege contract unchanged by the escape');
+  }
 });

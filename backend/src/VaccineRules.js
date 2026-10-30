@@ -240,9 +240,12 @@ function withRulesLock_(work) {
  * สตริงเดิมทุกประการ, Date เทียบตาม instant, Number ยอมรับเพิ่มรูปข้อความทศนิยมตรงตัว
  * (เซลล์ที่ถูก format เป็นข้อความ) นอกนั้นเทียบเคร้งครัด เจตนาเดียวกับ openDataCellParity
  * (OpenData.js) โดยไม่ผูก graph การโหลดของสองไฟล์เข้าด้วยกัน
+ * Issue #77: ค่าที่ถูก escape (sanitizeSheetText) มีสถานะหลังเขียนที่ชอบธรรมสองแบบ —
+ * Sheets กลืน apostrophe นำหน้าตอนเขียน (USER_ENTERED) จึงอ่านกลับเป็นข้อความก่อน escape
+ * ส่วน harness sheet เก็บรูป escape ตรง ๆ ยอมรับเฉพาะสองสถานะนี้ ไม่ยอมอื่น
  */
 function ruleCellParity_(intended, observed) {
-  if (typeof intended === 'string') return observed === intended;
+  if (typeof intended === 'string') return observed === intended || observed === unescapeSheetText(intended);
   if (intended instanceof Date) return observed instanceof Date && observed.getTime() === intended.getTime();
   if (typeof intended === 'number' && Number.isFinite(intended)) {
     return observed === intended || observed === String(intended);
@@ -262,6 +265,9 @@ function commitRulesRectangle_(sheet, headers, rows, previousDataRowCount) {
   const height = Math.max(previousDataRowCount, rows.length);
   const matrix = rows.slice();
   while (matrix.length < height) matrix.push(Array(width).fill(''));
+  // Issue #77: escape formula triggers (=, +, -, @) ในสตริงทุกค่าที่จะ persist —
+  // ทั้งข้อความที่ admin ส่งมาและแถวเดิมที่ถูกเขียนซ้ำผ่าน rectangle
+  const safeMatrix = matrix.map(row => row.map(sanitizeSheetText));
   let writeAttempted = false;
   try {
     const hdcCodeColIndex = headers.indexOf('hdc_code');
@@ -270,11 +276,11 @@ function commitRulesRectangle_(sheet, headers, rows, previousDataRowCount) {
     }
     const target = sheet.getRange(2, 1, height, width);
     writeAttempted = true; // throw หลังจุดนี้คือความไม่ชัดเจน (batch อาจถูก apply ไปแล้ว)
-    target.setValues(matrix);
+    target.setValues(safeMatrix);
     SpreadsheetApp.flush();
     const readBack = target.getValues();
     const verified = readBack.length === height && readBack.every((row, i) =>
-      row.length === width && row.every((cell, j) => ruleCellParity_(matrix[i][j], cell)));
+      row.length === width && row.every((cell, j) => ruleCellParity_(safeMatrix[i][j], cell)));
     return verified ? { verified: true } : { verified: false, commitState: 'commit_uncertain' };
   } catch (e) {
     // writeAttempted เป็นตัวกำกับความจริงเท่านั้น: format-throw = ค่ายังไม่ถูกเขียน (commit_failure);
@@ -413,11 +419,13 @@ function saveVaccineRule(rule, adminEmail) {
       }
     });
 
+    // Issue #77: escape formula triggers (=, +, -, @) in admin-supplied rule text before persisting.
+    const safeRowData = rowData.map(sanitizeSheetText);
     if (existingRowIndex > 0) {
-      sheet.getRange(existingRowIndex, 1, 1, headers.length).setValues([rowData]);
+      sheet.getRange(existingRowIndex, 1, 1, headers.length).setValues([safeRowData]);
     } else {
       const nextRow = sheet.getLastRow() + 1;
-      sheet.getRange(nextRow, 1, 1, headers.length).setValues([rowData]);
+      sheet.getRange(nextRow, 1, 1, headers.length).setValues([safeRowData]);
     }
 
     logAction('SYSTEM', adminEmail, 'save_vaccine_rule',

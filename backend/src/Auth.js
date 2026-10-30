@@ -200,7 +200,10 @@ function createUser(userData) {
     if (header === 'hoscode' && val) {
       val = "'" + val; // Prepend apostrophe to strictly enforce string type
     }
-    return val;
+    // Issue #77: this endpoint is public — escape formula triggers (=, +, -, @) in the
+    // self-declared name/email before persisting (the manual hoscode apostrophe is safe:
+    // an escaped or apostrophe-first value never starts with a trigger).
+    return sanitizeSheetText(val);
   });
   
   const nextRow = sheet.getLastRow() + 1;
@@ -243,11 +246,11 @@ function updateUserStatus(googleId, newStatus, newRole) {
       const email = data[i][headers.indexOf('email')];
       let details = [];
       if (newStatus) {
-        sheet.getRange(i + 1, statusCol + 1).setValue(newStatus);
+        sheet.getRange(i + 1, statusCol + 1).setValue(sanitizeSheetText(newStatus)); // Issue #77: escape formula triggers
         details.push(`status to ${newStatus}`);
       }
       if (newRole) {
-        sheet.getRange(i + 1, roleCol + 1).setValue(newRole);
+        sheet.getRange(i + 1, roleCol + 1).setValue(sanitizeSheetText(newRole)); // Issue #77: escape formula triggers
         details.push(`role to ${newRole}`);
       }
       
@@ -326,7 +329,8 @@ function createSession(userId, token, ipAddress, userAgent) {
   // หมดอายุใน 24 ชั่วโมง
   const expiresAt = new Date(createdAt.getTime() + 24 * 60 * 60 * 1000).toISOString();
   
-  sheet.appendRow([sessionId, userId, token, ipAddress, userAgent, expiresAt, createdAt.toISOString()]);
+  // Issue #77: escape formula triggers (=, +, -, @) — ip/UA are client-controlled request headers.
+  sheet.appendRow([sessionId, userId, token, ipAddress, userAgent, expiresAt, createdAt.toISOString()].map(sanitizeSheetText));
   
   logAction(userId, 'SYSTEM', 'login', `User logged in from ${ipAddress}`);
   

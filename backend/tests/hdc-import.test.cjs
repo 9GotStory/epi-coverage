@@ -53,7 +53,7 @@ function setup() {
     SpreadsheetApp: { flush() {} },
     Utilities: { formatDate: (value, timeZone) => new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(value), getUuid: () => 'uuid', DigestAlgorithm: { SHA_256: 'sha256' }, computeDigest: (_, data) => crypto.createHash('sha256').update(data).digest(), base64Encode: data => Buffer.from(data).toString('base64') },
   });
-  for (const file of ['Setup.js', 'Upload.js', 'Data.js']) vm.runInContext(fs.readFileSync(path.join(__dirname, '../src', file), 'utf8'), context);
+  for (const file of ['SheetText.js', 'Setup.js', 'Upload.js', 'Data.js']) vm.runInContext(fs.readFileSync(path.join(__dirname, '../src', file), 'utf8'), context);
   context.logAction = () => {};
   const read = (table = 'Epi_1_Year') => {
     const values = sheets.get(table).getDataRange().getValues();
