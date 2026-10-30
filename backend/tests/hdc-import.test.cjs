@@ -243,6 +243,30 @@ test('calendar birth dates from native Sheets Date cells match normalized import
   assert.equal(read()[0].birth, '2025-01-01');
 });
 
+test('AI composite key matches native Sheets Date-cell births without UTC-offset skew (Issue #75)', () => {
+  const { c, call, read, sheets } = routerContext(ordinary);
+  const own = person({ hoscode: '00002', cid: '0000000000002', sex: '1', check_vhid: '00123456' });
+  upload(c, [own], 'ai-date');
+  const sheet = sheets.get('Epi_1_Year');
+  const birthCol = sheet.cells[0].indexOf('birth');
+  // A native Sheets Date cell holds the calendar date at spreadsheet-timezone (Bangkok) midnight —
+  // 2025-01-01T00:00+07:00 === 2024-12-31T17:00:00Z. Before Issue #75 the key comparison parsed the
+  // client's '2025-01-01' as UTC midnight, so the instants never matched and every Date-cell row
+  // came back "Record not found" for saveAiAnalysis/analyzeVaccineData.
+  sheet.cells[1][birthCol] = new Date('2024-12-31T17:00:00.000Z');
+
+  const key = { hoscode: own.hoscode, pid: own.pid, cid: own.cid, sex: own.sex, birth: '2025-01-01', check_vhid: own.check_vhid };
+  assert.equal(call('saveAiAnalysis', { recordKey: key, targetTable: 'Epi_1_Year', aiAnalysis: 'date-cell ok' }).data.success, true,
+    'a Date-typed birth cell must match the same calendar day from the client key');
+  assert.equal(read()[0].ai_analysis, 'date-cell ok');
+
+  // A genuinely different calendar day must remain a mismatch (the fix adds no tolerance).
+  const wrongDay = { ...key, birth: '2025-01-02' };
+  assert.equal(call('saveAiAnalysis', { recordKey: wrongDay, targetTable: 'Epi_1_Year', aiAnalysis: 'should not land' }).data.success, false,
+    'a different calendar day stays a composite-key mismatch');
+  assert.equal(read()[0].ai_analysis, 'date-cell ok');
+});
+
 function routerContext(auth, extra = {}) {
   const harness = setup();
   const { context: c } = harness;
