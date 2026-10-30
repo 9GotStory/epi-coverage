@@ -235,6 +235,91 @@ describe('rules-driven View 1 evaluation (no hardcode)', () => {
     expect(blank.missingVaccines).toEqual(['DTP เข็ม 1']);
   });
 
+  // Issue #78: BRANCH ตัดสินได้ต่อเมื่อไฟล์/manifest ยืนยันคอลัมน์ครบทั้งสองทางเลือก
+  const rotaFullRules = markSourceAware([v1Rule({
+    rule_id: 'rota-full', display_name: 'Rota (ครบ)', vaccine_group: 'Rota',
+    required_fields: ['rv21_date', 'rv22_date'], branch_alt_fields: ['rv31_date', 'rv32_date', 'rv33_date'],
+    logic_type: 'BRANCH', target_age_months: 6,
+  })]);
+
+  it('marks a BRANCH rule not evaluable when the file lacks one branch\'s columns, even for a child who completed the visible branch (Issue #78)', () => {
+    // ไฟล์มีคอลัมน์ชุด 2 เข็ม (rv21, rv22) แต่ไม่มี rv31-33 — เด็กครบชุด 2 เข็มก็ตัดสิน "ครบ" ทั้งกฎไม่ได้
+    // เพราะเด็กที่ได้ชุด 3 เข็มดูไม่เห็น นับเฉพาะคนผ่านเป็นตัวหารจะได้ coverage เทียม 100%
+    const record = {
+      ...baseRecord,
+      rv21_date: '2024-03-01', rv22_date: '2024-05-01',
+      source_columns: JSON.stringify(['bcg_date', 'dtp1_date', 'rv21_date', 'rv22_date']),
+    } as EpiRecord;
+    const result = evaluateDynamicV1(record, rotaFullRules);
+    expect(result.unknownRuleNames).toEqual(['Rota (ครบ)']);
+    expect(result.missingVaccines).toEqual([]);
+    expect(result.pendingVaccines).toEqual([]);
+    expect(result.passedCount).toBe(0);
+  });
+
+  it('evaluates a BRANCH rule normally when the file confirms both branches — pass and missing both count in the denominator', () => {
+    const columns = { source_columns: JSON.stringify(['bcg_date', 'dtp1_date', 'rv21_date', 'rv22_date', 'rv31_date', 'rv32_date', 'rv33_date']) };
+    const complete2Dose = evaluateDynamicV1({ ...baseRecord, rv21_date: '2024-03-01', rv22_date: '2024-05-01', ...columns } as EpiRecord, rotaFullRules);
+    expect(complete2Dose.unknownRuleNames).toEqual([]);
+    expect(complete2Dose.results['Rota (ครบ)']).toBe(true);
+    expect(complete2Dose.passedCount).toBe(1);
+    const noRota = evaluateDynamicV1({ ...baseRecord, ...columns } as EpiRecord, rotaFullRules);
+    expect(noRota.unknownRuleNames).toEqual([]);
+    expect(noRota.missingVaccines).toEqual(['Rota (ครบ)']);
+    expect(noRota.passedCount).toBe(0);
+  });
+
+  it('applies the same rule to the LAJE/JE alternative — j12 without je3 columns is not evaluable (Issue #78)', () => {
+    // ตัวอย่างที่สองของ Issue #78: ไฟล์ 3/5 ปีมี LAJE แต่ไม่มีคอลัมน์ JE — กลไกเดียวกันทุกกฎ BRANCH
+    const rules = markSourceAware([v1Rule({
+      rule_id: 'laje-je3', display_name: 'LAJE เข็ม 2 / JE เข็ม 3', vaccine_group: 'JE',
+      required_fields: ['j12_date'], branch_alt_fields: ['je3_date'],
+      logic_type: 'BRANCH', target_age_months: 30,
+    })]);
+    const record = {
+      ...baseRecord, j12_date: '2024-07-01',
+      source_columns: JSON.stringify(['bcg_date', 'dtp1_date', 'j12_date']),
+    } as EpiRecord;
+    const result = evaluateDynamicV1(record, rules);
+    expect(result.unknownRuleNames).toEqual(['LAJE เข็ม 2 / JE เข็ม 3']);
+    expect(result.passedCount).toBe(0);
+  });
+
+  it('treats a legacy row without a manifest as unconfirmable for the hidden branch — not evaluable, not passed (Issue #78)', () => {
+    // แถวเก่าก่อนมี source_columns: ค่าว่างยืนยันไม่ได้ว่าไฟล์มีคอลัมน์นั้นจริง (docs/hdc-column-upgrade.md)
+    // เด็กที่ครบชุด 2 เข็มจึงผ่านเกณฑ์ "อย่างเป็นทางการ" ไม่ได้ — ตัวเลข coverage รวมจะเทียม
+    const legacy = { ...baseRecord, rv21_date: '2024-03-01', rv22_date: '2024-05-01', source_columns: '' } as EpiRecord;
+    const result = evaluateDynamicV1(legacy, rotaFullRules);
+    expect(result.unknownRuleNames).toEqual(['Rota (ครบ)']);
+    expect(result.passedCount).toBe(0);
+  });
+
+  it('still evaluates a legacy row that evidences both branches with non-empty values', () => {
+    // ขอบเขตของแถวเก่า: ค่าไม่ว่างคือหลักฐานคอลัมน์ — แถวที่มีค่าครบทั้งสองทางยังประเมินได้ (และผ่านอยู่แล้วโดยผลของข้อมูล)
+    const legacy = {
+      ...baseRecord,
+      rv21_date: '2024-03-01', rv22_date: '2024-05-01',
+      rv31_date: '2024-03-01', rv32_date: '2024-05-01', rv33_date: '2024-07-01',
+      source_columns: '',
+    } as EpiRecord;
+    const result = evaluateDynamicV1(legacy, rotaFullRules);
+    expect(result.unknownRuleNames).toEqual([]);
+    expect(result.results['Rota (ครบ)']).toBe(true);
+  });
+
+  it('degenerates a BRANCH rule without branch_alt_fields to primary-only evaluation', () => {
+    // กติกาไม่มีทางเลือก = ไม่มีคอลัมน์ที่ต้องยืนยันเพิ่ม ห้ามกลายเป็นประเมินไม่ได้ถาวร
+    const noAlt = v1Rule({ rule_id: 'rota-1', display_name: 'Rota เข็ม 1', vaccine_group: 'Rota', required_fields: ['rv21_date'], logic_type: 'BRANCH', target_age_months: 2 });
+    const rules = markSourceAware([noAlt]);
+    const columns = { source_columns: JSON.stringify(['bcg_date', 'dtp1_date', 'rv21_date']) };
+    const withDose = evaluateDynamicV1({ ...baseRecord, rv21_date: '2024-03-01', ...columns } as EpiRecord, rules);
+    expect(withDose.unknownRuleNames).toEqual([]);
+    expect(withDose.results['Rota เข็ม 1']).toBe(true);
+    const noDose = evaluateDynamicV1({ ...baseRecord, ...columns } as EpiRecord, rules);
+    expect(noDose.unknownRuleNames).toEqual([]);
+    expect(noDose.missingVaccines).toEqual(['Rota เข็ม 1']);
+  });
+
   it('reports nothing missing when there are no rules at all', () => {
     const result = evaluateDynamicV1(baseRecord, []);
     expect(result.missingVaccines).toEqual([]);
