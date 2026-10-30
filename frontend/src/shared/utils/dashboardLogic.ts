@@ -19,6 +19,9 @@ export interface GroupSummary {
   view2ApplicableTotal: number;
   /** Issue #23: records excluded from the View 2 denominator by current pending semantics — counted directly (required on every newly generated summary). */
   view2PendingCount: number;
+  /** Issue #89: records excluded from the View 2 denominator because a required V2 rule cannot be
+   * evaluated from the source columns (ประเมินไม่ได้) — counted directly (required on every newly generated summary). */
+  view2NotEvaluableCount: number;
 }
 
 /**
@@ -26,8 +29,8 @@ export interface GroupSummary {
  * denominator contract above, but historical snapshots may predate it — the denominator fields
  * are OPTIONAL here so legacy rows stay consumable without fabricating values.
  */
-export type LegacyCompatibleGroupSummary = Omit<GroupSummary, 'view2ApplicableTotal' | 'view2PendingCount'> &
-  Partial<Pick<GroupSummary, 'view2ApplicableTotal' | 'view2PendingCount'>>;
+export type LegacyCompatibleGroupSummary = Omit<GroupSummary, 'view2ApplicableTotal' | 'view2PendingCount' | 'view2NotEvaluableCount'> &
+  Partial<Pick<GroupSummary, 'view2ApplicableTotal' | 'view2PendingCount' | 'view2NotEvaluableCount'>>;
 
 /**
  * คำนวณ Summary แยกมุมมองที่ 1 และ 2 สำหรับกลุ่มอายุ
@@ -56,6 +59,7 @@ export function calcGroupSummary(
   let view2Passed = 0;
   let view2ApplicableTotal = 0; // Issue #23: the View 2 coverage denominator, counted directly
   let view2PendingCount = 0;    // Issue #23: records excluded from that denominator by current pending semantics
+  let view2NotEvaluableCount = 0; // Issue #89: records excluded because a required V2 rule is not evaluable from the source columns
   
   const view1Details: Record<string, number> = {};
   const view1TargetDetails: Record<string, number> = {}; // NEW: track applicable target per vaccine
@@ -98,11 +102,26 @@ export function calcGroupSummary(
     }
 
     const v2 = evalView2Fn(r);
-    
-    // ถ้ามี pendingVaccines ใน View 2 แปลว่าอายุยังไม่ถึงเกณฑ์การประเมินภาพรวม ให้ข้ามการประเมิน (ไม่นับเป็นตัวหาร)
-    const v2Applicable = !(v2.pendingVaccines && v2.pendingVaccines.length > 0);
-    
-    if (v2Applicable) {
+
+    // Issue #89: แบ่งกลุ่มต่อ record เป็น 3 ส่วนไม่ซ้ำกัน — pending (อายุยังไม่ถึงเกณฑ์ #23)
+    // → not evaluable (กฎ V2 ที่ไฟล์ยืนยันคอลัมน์ไม่ได้) → applicable (ตัวหาร coverage)
+    // เด็ก pending มีลำดับก่อน: ยังไม่ถึงอายุต้องประเมินอยู่แล้ว คอลัมน์ครบหรือไม่จะพิสูจน์ตอนอายุถึง
+    const v2Pending = !!(v2.pendingVaccines && v2.pendingVaccines.length > 0);
+
+    if (v2Pending) {
+      // Issue #23: count pending records directly in the loop — the loop itself creates the
+      // exact partition view2ApplicableTotal + view2PendingCount === total (no post-loop derivation).
+      view2PendingCount++;
+    } else if (v2.status === 'NOT_EVALUABLE') {
+      // Issue #89: กฎ V2 ที่ประเมินไม่ได้ทำให้ตัดสินรายคนไม่ได้ — ออกจากตัวหาร นับแยกตามสัญญา
+      // view2ApplicableTotal + view2PendingCount + view2NotEvaluableCount === total
+      view2NotEvaluableCount++;
+      // เก็บชื่อกฎไว้ใน breakdown ที่ total 0 เพื่อให้ UI แสดง "ยังประเมินไม่ได้" รายกฎ (เหมือน View 1)
+      for (const vac of v2.notEvaluableVaccines ?? []) {
+        if (view2Details[vac] === undefined) view2Details[vac] = 0;
+        if (view2TargetDetails[vac] === undefined) view2TargetDetails[vac] = 0;
+      }
+    } else {
       view2ApplicableTotal++;
       if (v2.isFullyImmunized) view2Passed++;
       facilityMap[hoscode].totalV2 += 1;
@@ -134,10 +153,6 @@ export function calcGroupSummary(
           view2TargetDetails[vac]++;
         }
       }
-    } else {
-      // Issue #23: count pending records directly in the loop — the loop itself creates the
-      // exact partition view2ApplicableTotal + view2PendingCount === total (no post-loop derivation).
-      view2PendingCount++;
     }
   }
 
@@ -215,5 +230,6 @@ export function calcGroupSummary(
     facilityBreakdownV2,
     view2ApplicableTotal,
     view2PendingCount,
+    view2NotEvaluableCount,
   };
 }

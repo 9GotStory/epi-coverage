@@ -540,7 +540,8 @@ When a new domain concept appears repeatedly and cannot be expressed clearly usi
 **View 2 Applicable Total** is the number of Individual EPI Records included in the denominator of a stored View 2 (Fully Immunized) coverage summary for that snapshot.
 
 - Records whose View 2 evaluation is still pending are excluded from the applicable denominator and counted separately (`view2PendingCount`).
-- A newly generated summary partitions its cohort exactly into applicable + pending; coverage uses applicable as the denominator.
+- Records with a required View 2 rule that the source file cannot confirm columns for are "ประเมินไม่ได้" (not evaluable): also excluded and counted separately (`view2NotEvaluableCount`, Issue #89). They are a data-quality follow-up, never a vaccination chase list.
+- A newly generated summary partitions its cohort exactly into applicable + pending + not evaluable; coverage uses applicable as the denominator.
 - Historical summary snapshots may predate this persisted contract and lack the fields; they remain valid without them.
 
 This is a summary-aggregation concept. It does not change per-record View 2 display authority (see §12) or the Vaccine Rules Engine (§26).

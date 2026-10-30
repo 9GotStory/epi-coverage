@@ -111,8 +111,10 @@ export interface EpiRecord {
 
 export interface VaccineStatus {
   isFullyImmunized: boolean; // Keep for backward compatibility initially, though status replaces it
-  status?: 'PASS' | 'FAIL' | 'PENDING';
+  status?: 'PASS' | 'FAIL' | 'PENDING' | 'NOT_EVALUABLE';
   missingVaccines: string[];
   pendingVaccines?: string[];
   passedVaccines: string[];
+  /** Issue #89: display_name ของกฎ V2 ที่ไฟล์/`source_columns` ยืนยันคอลัมน์ไม่ได้ (เหตุของ status NOT_EVALUABLE) */
+  notEvaluableVaccines?: string[];
 }

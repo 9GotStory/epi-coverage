@@ -147,6 +147,20 @@ export function markSourceAware(rules: VaccineRule[]): VaccineRule[] {
 }
 
 /**
+ * Issue #89 (ข้อ 5 จากเจ้าของข้อมูล): ประตูตรวจคอลัมน์ต้นทางรายกฎ — ใช้ร่วมทั้ง View 1 และ View 2
+ * เพื่อให้สองมุมมองตัดสิน "ข้อมูลไม่พอประเมิน" ด้วยเกณฑ์เดียวกัน ไม่เบี่ยงแยกกันอีก
+ *
+ * - ALL/ANY ตัดสินได้ต่อเมื่อไฟล์/`source_columns` ยืนยันคอลัมน์ required_fields ครบทุกฟิลด์
+ * - BRANCH ตัดสินได้ต่อเมื่อยืนยันครบ **ทั้งสองทางเลือก** (Issue #78) — กฎไม่มีทางเลือก
+ *   (branch_alt_fields ว่าง) ไม่มีคอลัมน์ที่ต้องยืนยันเพิ่ม จึงไม่กลายเป็นประเมินไม่ได้
+ */
+export function ruleSourceDecidable(rule: VaccineRule, record: EpiRecord): boolean {
+  const primaryKnown = rule.required_fields.length > 0 && rule.required_fields.every(field => hasSourceColumn(record, field));
+  const alternativeKnown = !rule.branch_alt_fields || rule.branch_alt_fields.length === 0 || rule.branch_alt_fields.every(field => hasSourceColumn(record, field));
+  return rule.logic_type === 'BRANCH' ? primaryKnown && alternativeKnown : primaryKnown;
+}
+
+/**
  * Evaluate Dynamic View 1 (รายเข็ม)
  * Return structure ให้เข้ากันกับ View1Evaluation
  */
@@ -164,16 +178,7 @@ export const evaluateDynamicV1 = (record: EpiRecord, rules: VaccineRule[], evalu
   let passedCount = 0;
 
   for (const rule of v1Rules) {
-    const primaryKnown = rule.required_fields.length > 0 && rule.required_fields.every(field => hasSourceColumn(record, field));
-    // ไม่มีทางเลือก (branch_alt_fields ว่าง) = ไม่มีคอลัมน์ที่ต้องยืนยันเพิ่ม จึงไม่ทำให้ rule ประเมินไม่ได้
-    const alternativeKnown = !rule.branch_alt_fields || rule.branch_alt_fields.length === 0 || rule.branch_alt_fields.every(field => hasSourceColumn(record, field));
-    // BRANCH ตัดสินได้ต่อเมื่อยืนยันคอลัมน์ครบทั้งสองทางเลือก (Issue #78) — ไฟล์ที่เห็นทางเดียว
-    // ถ้านับเฉพาะคนที่ผ่านทางที่มองเห็น ตัวหาร coverage จะคัดเอาแต่คนผ่าน (เทียม 100%)
-    // รายการทั้งกฎจึงเป็น "ข้อมูลไม่พอประเมิน" รวมเด็กที่ครบทางที่มองเห็นด้วย
-    const incompleteSource = rule.logic_type === 'BRANCH'
-      ? !primaryKnown || !alternativeKnown
-      : !primaryKnown;
-    if (rule.unavailable_reason || (rule.source_aware && incompleteSource)) {
+    if (rule.unavailable_reason || (rule.source_aware && !ruleSourceDecidable(rule, record))) {
       results[rule.display_name] = false;
       unknownRuleNames.push(rule.display_name);
       unknownVaccines.push(`${rule.display_name}: ${rule.unavailable_reason || 'ไฟล์ไม่มีคอลัมน์ที่จำเป็น'}`);
@@ -225,17 +230,32 @@ export const evaluateDynamicV1 = (record: EpiRecord, rules: VaccineRule[], evalu
 /**
  * Evaluate Dynamic View 2 (Fully Immunized)
  * Return structure ให้เข้ากันกับ VaccineStatus
+ *
+ * Issue #89: กฎ V2 ที่ไฟล์/`source_columns` ยืนยันคอลัมน์ไม่ได้ (BRANCH ต้องครบทั้งสองทาง)
+ * เป็น "ประเมินไม่ได้" (notEvaluableVaccines) ไม่นับเป็นขาด — เด็กที่มีกฎลักษณะนี้แม้ข้อเดียว
+ * ตัดสินรายคนไม่ได้ (status NOT_EVALUABLE) และออกจากตัวหาร coverage (แบบเดียวกับ pending)
+ *
+ * ลำดับความสำคัญ (ข้อ 2 จากเจ้าของข้อมูล): คำตัดสิน HDC > กฎในระบบ > ประเมินไม่ได้ —
+ * `result = ผ่าน` → PASS (backfill เหมือนเดิม), `result = ไม่ผ่าน` → FAIL (เป็นคำตัดสินของ HDC
+ * ไม่ใช่ช่องว่างข้อมูลของเรา), `result` ว่าง + คอลัมน์ไม่พอ → NOT_EVALUABLE, ว่าง + ครบ → กฎในระบบ
  */
 export const evaluateDynamicV2 = (record: EpiRecord, rules: VaccineRule[], evaluationDate: Date = new Date()): VaccineStatus => {
   const missingVaccines: string[] = [];
   const pendingVaccines: string[] = [];
   const passedVaccines: string[] = [];
+  const notEvaluableVaccines: string[] = [];
 
   const currentAgeMonths = getAgeInMonths(record.birth, evaluationDate);
 
   const v2Rules = rules.filter(r => r.view_type === 2 && r.is_active);
 
   for (const rule of v2Rules) {
+    // Issue #89: ประตูตรวจคอลัมน์รายกฎเดียวกับ View 1 — กฎที่ตัดสินไม่ได้ไม่ถูกนับเป็นขาด
+    if (rule.unavailable_reason || (rule.source_aware && !ruleSourceDecidable(rule, record))) {
+      notEvaluableVaccines.push(rule.display_name);
+      continue;
+    }
+
     const dataError = ruleHasDataError(record, rule, rules);
     if (dataError) {
       // V2 เก็บ "ชื่อกฎสะอาด" เท่านั้น — ข้อความ warning ต้องไม่หลุดมาเป็นชื่อวัคซีนใน
@@ -270,7 +290,7 @@ export const evaluateDynamicV2 = (record: EpiRecord, rules: VaccineRule[], evalu
     }
   }
 
-  let status: 'PASS' | 'FAIL' | 'PENDING' = 'PASS';
+  let status: 'PASS' | 'FAIL' | 'PENDING' | 'NOT_EVALUABLE' = 'PASS';
   let isFullyImmunized = true;
 
   if (missingVaccines.length > 0) {
@@ -282,29 +302,42 @@ export const evaluateDynamicV2 = (record: EpiRecord, rules: VaccineRule[], evalu
   }
 
   // Safety Net จาก HDC (Master Source of Truth) - ย้ายมาไว้ด้านล่างเพื่อให้ passedVaccines เก็บรายการย่อยไว้ทำ Breakdown
-  if (record.result && typeof record.result === 'string') {
-    if (record.result.includes('ผ่าน') && !record.result.includes('ไม่ผ่าน')) {
-      // HDC ถือว่าครบทุกเกณฑ์ → กลุ่มที่ local ยังไม่ผ่าน/ยังไม่ถึงกำหนด ให้ย้ายเข้า passedVaccines
-      // เพื่อให้ผลรวม Breakdown สอดคล้องกับ headline coverage (ดู calcGroupSummary)
-      for (const v of [...missingVaccines, ...pendingVaccines]) {
-        if (!passedVaccines.includes(v)) passedVaccines.push(v);
-      }
-      isFullyImmunized = true;
-      status = 'PASS';
-      missingVaccines.length = 0;
-      pendingVaccines.length = 0;
-    } else if (record.result.includes('ไม่ผ่าน')) {
-      isFullyImmunized = false;
+  const hdcResult = typeof record.result === 'string' ? record.result : '';
+  const hdcPassed = hdcResult.includes('ผ่าน') && !hdcResult.includes('ไม่ผ่าน');
+  const hdcFailed = !hdcPassed && hdcResult.includes('ไม่ผ่าน');
 
-      // If local logic says PENDING, keep it as PENDING (because HDC doesn't have PENDING state in export)
-      if (status !== 'PENDING') {
-        status = 'FAIL';
-        if (missingVaccines.length === 0 && pendingVaccines.length === 0) {
-          missingVaccines.push('ไม่ผ่านเกณฑ์ HDC (ตรวจสอบรายละเอียดในระบบ)');
-        }
+  if (hdcPassed) {
+    // HDC ถือว่าครบทุกเกณฑ์ → กลุ่มที่ local ยังไม่ผ่าน/ยังไม่ถึงกำหนด/ประเมินไม่ได้ ให้ย้ายเข้า passedVaccines
+    // เพื่อให้ผลรวม Breakdown สอดคล้องกับ headline coverage (ดู calcGroupSummary)
+    for (const v of [...missingVaccines, ...pendingVaccines, ...notEvaluableVaccines]) {
+      if (!passedVaccines.includes(v)) passedVaccines.push(v);
+    }
+    isFullyImmunized = true;
+    status = 'PASS';
+    missingVaccines.length = 0;
+    pendingVaccines.length = 0;
+    notEvaluableVaccines.length = 0;
+  } else if (hdcFailed) {
+    isFullyImmunized = false;
+
+    // If local logic says PENDING, keep it as PENDING (because HDC doesn't have PENDING state in export).
+    // กรณีอื่น (รวม NOT_EVALUABLE) ให้เป็น FAIL — คำตัดสิน "ไม่ผ่าน" ของ HDC เป็นคำตัดสินเชิงบวก
+    // ไม่ใช่ช่องว่างข้อมูลของเรา (Issue #89 ข้อ 2)
+    if (status !== 'PENDING') {
+      status = 'FAIL';
+      if (missingVaccines.length === 0 && pendingVaccines.length === 0) {
+        missingVaccines.push('ไม่ผ่านเกณฑ์ HDC (ตรวจสอบรายละเอียดในระบบ)');
       }
     }
+  } else if (pendingVaccines.length === 0 && notEvaluableVaccines.length > 0) {
+    // ไม่มีคำตัดสิน HDC (ว่าง หรือค่าที่ระบบไม่รู้จัก เช่น '-') + มีกฎที่ประเมินไม่ได้
+    // → ตัดสินรายคนไม่ได้ (Option A ระดับรายการ, Issue #89 ข้อ 1)
+    // เด็กยังเล็กกว่าอายุเกณฑ์ (pending) คงสถานะ PENDING ตามสัญญา #23 — อายุถึงแล้วคอลัมน์ยังไม่ครบ
+    // จึงกลายเป็น NOT_EVALUABLE ไม่ใช่ขาดวัคซีน เด็กกลุ่มนี้ต้องตามหาไฟล์ใหม่ ไม่ใช่ตามฉีดวัคซีน (ข้อ 4)
+    status = 'NOT_EVALUABLE';
+    isFullyImmunized = false;
+    missingVaccines.length = 0;
   }
 
-  return { isFullyImmunized, status, missingVaccines, pendingVaccines, passedVaccines };
+  return { isFullyImmunized, status, missingVaccines, pendingVaccines, passedVaccines, notEvaluableVaccines };
 };

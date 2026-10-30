@@ -156,7 +156,7 @@
 | `id` | String | `<targetTable>_<fiscalYear>_<quarter\|all>` เช่น `Epi_1_Year_2568_all`, `Epi_1_Year_2568_1` (ไตรมาส 1–4) และรูปแบบรุ่นเดิม `<targetTable>_<fiscalYear>` (legacy) |
 | `targetTable` | String | `Epi_1_Year` / `Epi_2_Year` / `Epi_3_Year` / `Epi_5_Year` |
 | `fiscalYear` | String/Number | ปีงบประมาณของสรุปชุดนั้น |
-| `summaryData` | String (JSON) | สรุปตามมุมมองที่ 1/2 (`total`, `view2Coverage`, `view2Passed`, `view2ApplicableTotal`, `view2PendingCount`, breakdown ตามวัคซีน/หน่วยบริการ) — โครงสร้างมีการวิวัฒน์ตามรุ่น สรุปรุ่นเก่าอาจไม่มีฟิลด์ที่เพิ่มในภายหลัง |
+| `summaryData` | String (JSON) | สรุปตามมุมมองที่ 1/2 (`total`, `view2Coverage`, `view2Passed`, `view2ApplicableTotal`, `view2PendingCount`, `view2NotEvaluableCount`, breakdown ตามวัคซีน/หน่วยบริการ) — โครงสร้างมีการวิวัฒน์ตามรุ่น สรุปรุ่นเก่าอาจไม่มีฟิลด์ที่เพิ่มในภายหลัง |
 | `updated_at` | DateTime | เวลาที่คำนวณ/เขียนสรุปชุดนั้นล่าสุด (ไม่ใช่เวลาอัปโหลดไฟล์ต้นทาง) |
 
 ข้อตกลง (Issue #22):
@@ -165,9 +165,9 @@
 - การอ่านสรุปไตรมาส 1–4 ยังอิง id ระบุไตรมาสของแต่ละแถวตามเดิม
 - ปีที่ "ใช้งานได้" สำหรับ Comparison = ปีที่แถวที่ถูกเลือกตามกฎข้างต้นแยก JSON ได้และมี `total`/`view2Coverage`/`view2Passed` เป็นตัวเลขจริง (0 ถือว่าใช้ได้) — ปีที่ไม่ผ่านเงื่อนไขไม่ถูกแจ้งว่ามีข้อมูลสรุป
 
-ข้อตกลงสรุปรุ่นปัจจุบัน (Issue #23):
+ข้อตกลงสรุปรุ่นปัจจุบัน (Issue #23, ขยายโดย Issue #89):
 
-- สรุปที่สร้างใหม่ทุกแถว (`_all` และ Q1–Q4) บันทึก `view2ApplicableTotal` (จำนวนที่เข้าเกณฑ์ประเมิน = ตัวหารความครอบคลุม) และ `view2PendingCount` (จำนวนที่ยังไม่เข้าเกณฑ์ตามเงื่อนไข pending ปัจจุบันของระบบ) โดยนับตรงจากการประเมินแต่ละรายการ
-- เงื่อนไขที่ระบบรับประกัน: `view2Passed <= view2ApplicableTotal <= total` และ `view2ApplicableTotal + view2PendingCount = total`
+- สรุปที่สร้างใหม่ทุกแถว (`_all` และ Q1–Q4) บันทึก `view2ApplicableTotal` (จำนวนที่เข้าเกณฑ์ประเมิน = ตัวหารความครบคลุม) `view2PendingCount` (จำนวนที่ยังไม่เข้าเกณฑ์ตามเงื่อนไข pending ปัจจุบันของระบบ) และ `view2NotEvaluableCount` (จำนวนที่มีกฎ V2 ซึ่งไฟล์/`source_columns` ยืนยันคอลัมน์ไม่ได้ จึงตัดสินรายคนไม่ได้ — Issue #89) โดยนับตรงจากการประเมินแต่ละรายการ
+- เงื่อนไขที่ระบบรับประกัน: `view2Passed <= view2ApplicableTotal <= total` และ `view2ApplicableTotal + view2PendingCount + view2NotEvaluableCount = total` (สรุปที่สร้างระหว่าง Issue #23–#89 ตอบสัญญาสองพจน์ `applicable + pending = total` และไม่มี `view2NotEvaluableCount`)
 - ไม่บันทึก `view2Failed` — ค่าที่ไม่ผ่านในกลุ่มที่เข้าเกณฑ์คำนวณ ณ ขณะใช้งานเป็น `view2ApplicableTotal - view2Passed`
-- แถวเก่า (legacy) อาจไม่มีสองฟิลด์นี้ ยังคงใช้งานได้ตามฟิลด์ที่มี และไม่มีการ migrate/backfill แถวเดิมใน Issue #นี้
+- แถวเก่า (legacy) อาจไม่มีฟิลด์เหล่านี้ ยังคงใช้งานได้ตามฟิลด์ที่มี และไม่มีการ migrate/backfill แถวเดิมใน Issue #นี้

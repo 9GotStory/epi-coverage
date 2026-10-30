@@ -92,6 +92,37 @@ describe('Dashboard Thai status labels', () => {
   });
 });
 
+describe('Issue #89 — Dashboard View 2 denominator display', () => {
+  it('shows the applicable denominator next to the percentage and counts ประเมินไม่ได้ children separately', () => {
+    const html = renderDashboardWith({
+      ...baseSummary,
+      view2Coverage: 50,
+      view2Passed: 4,
+      view2ApplicableTotal: 8,
+      view2PendingCount: 1,
+      view2NotEvaluableCount: 3,
+    });
+
+    // ตัวหารอยู่ข้างร้อยละเสมอ (ข้อ 5): ผ่าน X/Y คน — ไม่ใช่แค่ X คน
+    expect(html).toContain('ผ่านเกณฑ์ <strong class="text-zinc-800">4/8</strong> คน');
+    expect(html).toContain('ยังไม่ผ่านเกณฑ์ <strong class="text-zinc-800">4</strong> คน');
+    // เด็กที่ไฟล์ไม่มีคอลัมน์ครบตามกฎ V2 แจ้งแยก — ไม่หายไปในตัวเลข ไม่ถูกนับเป็นไม่ผ่าน
+    expect(html).toContain('ข้อมูลไม่ครบ <strong class="text-zinc-800">3</strong> คน (ประเมินไม่ได้ จึงไม่นำมาคำนวณร้อยละ)');
+  });
+
+  it('hides the ข้อมูลไม่ครบ line when the summary carries no unevaluable children (or predates #89)', () => {
+    const html = renderDashboardWith({
+      ...baseSummary,
+      view2Coverage: 50,
+      view2Passed: 5,
+      view2ApplicableTotal: 10,
+      view2PendingCount: 0,
+      view2NotEvaluableCount: 0,
+    });
+    expect(html).not.toContain('ข้อมูลไม่ครบ');
+  });
+});
+
 describe('Issue #23 — Dashboard "ยังไม่ผ่านเกณฑ์" value correctness', () => {
   it('I1: current-contract summary shows the applicable-based missed count (7 - 5 = 2), not total - passed (5)', () => {
     const html = renderDashboardWith({

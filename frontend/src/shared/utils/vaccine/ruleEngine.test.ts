@@ -336,6 +336,180 @@ describe('rules-driven View 1 evaluation (no hardcode)', () => {
   });
 });
 
+describe('Issue #89 — View 2 source gate (ข้อมูลไม่ครบ ≠ ขาดวัคซีน)', () => {
+  // กฎ V2 จำลองจาก seed 1 ปี: BCG (ALL), MMR เข็ม 1 (ALL), Rota ครบชุด (BRANCH สองทางเลือก)
+  const v2Rule = (overrides: Partial<VaccineRule>): VaccineRule => ({
+    rule_id: 'v2', fiscal_year: 2569, age_group: '1yr', view_type: 2, vaccine_group: 'MMR',
+    display_name: 'MMR เข็ม 1', hdc_code: '061', required_fields: ['mmr1_date'], logic_type: 'ALL',
+    is_required_for_v2: true, is_active: true, target_age_months: 9, ...overrides,
+  });
+  const bcgRule = v2Rule({ rule_id: 'v2-bcg', vaccine_group: 'BCG', display_name: 'BCG 1 เข็ม', required_fields: ['bcg_date'], target_age_months: 0 });
+  const mmrRule = v2Rule({});
+  const rotaRule = v2Rule({
+    rule_id: 'v2-rota', vaccine_group: 'Rota', display_name: 'Rota (ครบถ้วนตามเกณฑ์)',
+    required_fields: ['rv21_date', 'rv22_date'], branch_alt_fields: ['rv31_date', 'rv32_date', 'rv33_date'],
+    logic_type: 'BRANCH', target_age_months: 6,
+  });
+  const rules = markSourceAware([bcgRule, mmrRule, rotaRule]);
+
+  /** เด็กอายุ ~12 เดือน ณ วันประเมิน — ผ่านอายุเกณฑ์ทุกกฎแล้ว จึงไม่มีสถานะ pending */
+  const child = (extra: Partial<EpiRecord>): EpiRecord => ({
+    hoscode: '00000', hosname: 'สถานบริการจำลอง', pid: 'P-89', cid: '0000000000000',
+    name: 'เด็กทดสอบ', lname: 'สังเคราะห์', birth: '2022-01-01', ...extra,
+  });
+  // วันประเมินคงที่ — เด็กเกิด 2022-01-01 อายุ 12 เดือนพอดี มากกว่า target 9 เดือนของทุกกฎ
+  const evalDate = new Date('2023-01-01');
+
+  it('marks a child NOT_EVALUABLE (not FAIL) when the file never carried a required rule column', () => {
+    // ไฟล์ 1 ปีไม่มีคอลัมน์ mmr1_date — เด็กครบทุกเข็มที่มองเห็นก็ตัดสิน Fully Immunized ไม่ได้
+    const record = child({
+      bcg_date: '2022-01-01',
+      rv21_date: '2022-03-01', rv22_date: '2022-05-01',
+      source_columns: JSON.stringify(['birth', 'bcg_date', 'rv21_date', 'rv22_date', 'rv31_date', 'rv32_date', 'rv33_date']),
+    });
+    const result = evaluateDynamicV2(record, rules, evalDate);
+    expect(result.status).toBe('NOT_EVALUABLE');
+    expect(result.isFullyImmunized).toBe(false);
+    expect(result.notEvaluableVaccines).toEqual(['MMR เข็ม 1']);
+    // ไม่ถูกนับเป็นขาดวัคซีน — เด็กกลุ่มนี้เป็นงานตามหาไฟล์ใหม่ ไม่ใช่รายชื่อตามฉีด (ข้อ 4)
+    expect(result.missingVaccines).toEqual([]);
+    expect(result.pendingVaccines).toEqual([]);
+  });
+
+  it('keeps the child out of chase lists even when another evaluable rule is genuinely missing', () => {
+    // dtp... ใช้ mmr เป็นตัวอย่าง: ไฟล์ยืนยัน bcg_date (เซลล์ว่าง = ขาดจริง) แต่ไม่มีคอลัมน์ mmr1_date
+    // ตัดสินรายคนไม่ได้ (ข้อ 1: "can neither be certified nor declared failed")
+    const record = child({
+      source_columns: JSON.stringify(['birth', 'bcg_date', 'mmr1_date', 'rv21_date', 'rv22_date', 'rv31_date', 'rv32_date', 'rv33_date']),
+    });
+    const allConfirmed = evaluateDynamicV2(record, rules, evalDate);
+    expect(allConfirmed.status).toBe('FAIL'); // คอลัมน์ครบ → ขาดจริง นับ FAIL ตามเดิม
+    const noMmrColumn = child({
+      source_columns: JSON.stringify(['birth', 'bcg_date', 'rv21_date', 'rv22_date', 'rv31_date', 'rv32_date', 'rv33_date']),
+    });
+    const blocked = evaluateDynamicV2(noMmrColumn, rules, evalDate);
+    expect(blocked.status).toBe('NOT_EVALUABLE');
+    expect(blocked.missingVaccines).toEqual([]); // ขาด BCG จริงก็ไม่เข้าลิสต์ตามฉีดจนกว่าจะประเมินได้
+    expect(blocked.notEvaluableVaccines).toEqual(['MMR เข็ม 1']);
+  });
+
+  it('requires BOTH branches of a BRANCH rule (mirror of Issue #78 for View 2)', () => {
+    // ไฟล์มี rv21/rv22 แต่ไม่มี rv31-33 — กฎ Rota ประเมินไม่ได้ทั้งกฎ แม้เด็กครบชุด 2 เข็มที่มองเห็น
+    const record = child({
+      bcg_date: '2022-01-01', mmr1_date: '2022-10-01',
+      rv21_date: '2022-03-01', rv22_date: '2022-05-01',
+      source_columns: JSON.stringify(['birth', 'bcg_date', 'mmr1_date', 'rv21_date', 'rv22_date']),
+    });
+    const result = evaluateDynamicV2(record, rules, evalDate);
+    expect(result.status).toBe('NOT_EVALUABLE');
+    expect(result.notEvaluableVaccines).toEqual(['Rota (ครบถ้วนตามเกณฑ์)']);
+  });
+
+  it('evaluates locally as before when the file confirms every required column', () => {
+    const columns = { source_columns: JSON.stringify(['birth', 'bcg_date', 'mmr1_date', 'rv21_date', 'rv22_date', 'rv31_date', 'rv32_date', 'rv33_date']) };
+    const complete = evaluateDynamicV2(child({ bcg_date: '2022-01-01', mmr1_date: '2022-10-01', rv21_date: '2022-03-01', rv22_date: '2022-05-01', ...columns }), rules, evalDate);
+    expect(complete.status).toBe('PASS');
+    expect(complete.isFullyImmunized).toBe(true);
+    expect(complete.notEvaluableVaccines).toEqual([]);
+    const incomplete = evaluateDynamicV2(child({ bcg_date: '2022-01-01', ...columns }), rules, evalDate);
+    expect(incomplete.status).toBe('FAIL');
+    expect(incomplete.missingVaccines).toEqual(expect.arrayContaining(['MMR เข็ม 1', 'Rota (ครบถ้วนตามเกณฑ์)']));
+  });
+
+  it('HDC "ผ่าน" still wins over the source gate — PASS with the blocked rule backfilled (ข้อ 2)', () => {
+    const record = child({
+      bcg_date: '2022-01-01',
+      source_columns: JSON.stringify(['birth', 'bcg_date', 'rv21_date', 'rv22_date', 'rv31_date', 'rv32_date', 'rv33_date']),
+      result: 'ผ่าน',
+    });
+    const result = evaluateDynamicV2(record, rules, evalDate);
+    expect(result.status).toBe('PASS');
+    expect(result.isFullyImmunized).toBe(true);
+    expect(result.notEvaluableVaccines).toEqual([]);
+    // กฎที่ประเมินไม่ได้ถูกย้ายเข้า passedVaccines ให้ breakdown สอดคล้องกับ headline (เหมือน backfill เดิม)
+    expect(result.passedVaccines).toContain('MMR เข็ม 1');
+  });
+
+  it('HDC "ไม่ผ่าน" stays FAIL even when some rules are not evaluable (ข้อ 2)', () => {
+    const record = child({
+      bcg_date: '2022-01-01', mmr1_date: '2022-10-01',
+      source_columns: JSON.stringify(['birth', 'bcg_date', 'mmr1_date']), // ไม่มี rv* เลย
+      result: 'ไม่ผ่าน',
+    });
+    const result = evaluateDynamicV2(record, rules, evalDate);
+    expect(result.status).toBe('FAIL');
+    expect(result.isFullyImmunized).toBe(false);
+    expect(result.missingVaccines).toContain('ไม่ผ่านเกณฑ์ HDC (ตรวจสอบรายละเอียดในระบบ)');
+  });
+
+  it('treats an unrecognized non-empty result (e.g. "-") as no HDC verdict — NOT_EVALUABLE still applies', () => {
+    const record = child({
+      bcg_date: '2022-01-01',
+      source_columns: JSON.stringify(['birth', 'bcg_date', 'rv21_date', 'rv22_date', 'rv31_date', 'rv32_date', 'rv33_date']),
+      result: '-',
+    });
+    const result = evaluateDynamicV2(record, rules, evalDate);
+    expect(result.status).toBe('NOT_EVALUABLE');
+    expect(result.notEvaluableVaccines).toEqual(['MMR เข็ม 1']);
+  });
+
+  it('keeps a not-yet-due child PENDING per the #23 contract even in a partial-column file', () => {
+    // เด็กอายุ 4 เดือน (ยังไม่ถึงเกณฑ์ Rota 6 เดือน / MMR 9 เดือน) ในไฟล์ที่ไม่มีคอลัมน์ mmr1_date
+    // ระดับกฎ: MMR ผ่านประตูคอลัมน์ไม่ได้ (เหมือน View 1 — ประตูตรวจก่อนการแบ่ง pending)
+    // ระดับรายคน: ยังมีกฎ pending (Rota) → สถานะ PENDING ตามสัญญา #23 ไม่หายไปอยู่ในกลุ่มอื่น
+    // พออายุเกินเกณฑ์ทุกกฎและคอลัมน์ยังไม่ครบ สถานะจึงเปลี่ยนเป็น NOT_EVALUABLE
+    const record = child({
+      birth: '2022-09-01', bcg_date: '2022-09-01',
+      source_columns: JSON.stringify(['birth', 'bcg_date', 'rv21_date', 'rv22_date', 'rv31_date', 'rv32_date', 'rv33_date']),
+    });
+    const result = evaluateDynamicV2(record, rules, new Date('2023-01-01')); // อายุ 4 เดือน
+    expect(result.status).toBe('PENDING');
+    expect(result.isFullyImmunized).toBe(false);
+    expect(result.pendingVaccines).toEqual(['Rota (ครบถ้วนตามเกณฑ์)']);
+    expect(result.notEvaluableVaccines).toEqual(['MMR เข็ม 1']);
+    expect(result.missingVaccines).toEqual([]);
+  });
+
+  it('legacy rows without a manifest use non-empty values as the only column evidence (#78 precedent)', () => {
+    // แถวเก่ามีค่า rv2 ครบแต่ไม่มีค่า rv3 ใดๆ ยืนยันทางเลือกที่สองไม่ได้ → ประเมินไม่ได้ ไม่ใช่ผ่าน
+    const legacy = child({
+      bcg_date: '2022-01-01', mmr1_date: '2022-10-01',
+      rv21_date: '2022-03-01', rv22_date: '2022-05-01',
+      source_columns: '',
+    });
+    const result = evaluateDynamicV2(legacy, rules, evalDate);
+    expect(result.status).toBe('NOT_EVALUABLE');
+    expect(result.notEvaluableVaccines).toEqual(['Rota (ครบถ้วนตามเกณฑ์)']);
+  });
+
+  it('leaves the gate off for rule sets that were never markSourceAware-marked (backwards compatibility)', () => {
+    // เอนจินถูกเรียกด้วย rules ดิบ (ไม่ผ่าน markSourceAware) → source_aware ไม่ถูกเปิด
+    // พฤติกรรมเดิมคงอยู่: ไม่มีคอลัมน์ = ขาด สำหรับผู้เรียกที่ไม่ขอการตรวจคอลัมน์
+    const record = child({
+      bcg_date: '2022-01-01',
+      source_columns: JSON.stringify(['birth', 'bcg_date']),
+    });
+    const result = evaluateDynamicV2(record, [bcgRule, mmrRule, rotaRule], evalDate);
+    expect(result.status).toBe('FAIL');
+    expect(result.missingVaccines).toEqual(expect.arrayContaining(['MMR เข็ม 1']));
+    expect(result.notEvaluableVaccines).toEqual([]);
+  });
+
+  it('treats a rule with unavailable_reason as not evaluable for View 2 (same as View 1)', () => {
+    const rulesWithReason = markSourceAware([
+      bcgRule,
+      v2Rule({ rule_id: 'v2-unavailable', unavailable_reason: 'ยังไม่รองรับในไฟล์ HDC ปัจจุบัน' }),
+    ]);
+    const record = child({
+      bcg_date: '2022-01-01',
+      source_columns: JSON.stringify(['birth', 'bcg_date']),
+    });
+    const result = evaluateDynamicV2(record, rulesWithReason, evalDate);
+    expect(result.status).toBe('NOT_EVALUABLE');
+    expect(result.notEvaluableVaccines).toEqual(['MMR เข็ม 1']);
+  });
+});
+
 describe('date configuration drives evaluation', () => {
   const rule: VaccineRule = { rule_id: 'hbv', fiscal_year: 2569, age_group: '1yr', view_type: 1, vaccine_group: 'HBV', display_name: 'HBV', hdc_code: '', required_fields: ['hbv1_date'], logic_type: 'ALL', is_active: true, is_required_for_v2: true, date_checks: { before_birth: false, allow_on_birth: true, same_day_pairs: [], ordered_pairs: [] } };
   it('respects disabled birth checks and explicit cross-vaccine pairs', () => {

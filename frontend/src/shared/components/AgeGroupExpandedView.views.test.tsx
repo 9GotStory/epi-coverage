@@ -52,3 +52,26 @@ describe('age-group dashboard views have distinct responsibilities', () => {
     },
   );
 });
+
+describe('Issue #89 — View 2 breakdown shows its denominator and ประเมินไม่ได้ states', () => {
+  it('renders (passed/total) next to every View 2 rule percentage', () => {
+    render(<AgeGroupExpandedView summary={summary} fiscalYear={2569} ageGroup="1yr" quarter="all" />);
+    expect(screen.getByText('(10/20)')).toBeTruthy();
+    expect(screen.getByText('50.0%')).toBeTruthy();
+  });
+
+  it('announces unevaluable children separately from coverage (data-quality, not chase list)', () => {
+    render(<AgeGroupExpandedView summary={{ ...summary, view2NotEvaluableCount: 5 }} fiscalYear={2569} ageGroup="1yr" quarter="all" />);
+    expect(screen.getByText('ข้อมูลไม่ครบตามเกณฑ์ 5 คน ประเมิน Fully Immunized ไม่ได้ จึงไม่รวมในการคำนวณร้อยละ')).toBeTruthy();
+  });
+
+  it('renders a rule with denominator 0 as ยังประเมินไม่ได้ instead of 0.0%', () => {
+    const blocked: LegacyCompatibleGroupSummary = {
+      ...summary,
+      view2Breakdown: [{ name: 'MMR เข็ม 1', passed: 0, total: 0, coverage: 0, metric_key: 'mmr1' }],
+    };
+    render(<AgeGroupExpandedView summary={blocked} fiscalYear={2569} ageGroup="1yr" quarter="all" />);
+    expect(screen.getByText('ยังประเมินไม่ได้')).toBeTruthy();
+    expect(screen.queryByText('0.0%')).toBeNull();
+  });
+});

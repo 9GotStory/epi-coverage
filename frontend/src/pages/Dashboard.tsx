@@ -153,9 +153,12 @@ const AgeGroupSection = memo(function AgeGroupSection({
                   Legacy snapshots without view2ApplicableTotal keep showing their stored number. */}
               <p className="text-3xl font-bold text-zinc-900 tracking-tight">{summary.view2ApplicableTotal === 0 ? '—' : summary.view2Coverage.toFixed(2)}<span className="text-xl text-zinc-400 font-medium ml-0.5">%</span></p>
               <p className="text-sm text-zinc-500 mt-1">
-                ผ่านเกณฑ์ <strong className="text-zinc-800">{summary.view2Passed.toLocaleString()}</strong> คน
-                <span className="mx-1.5 text-zinc-300">|</span>
+                {/* Issue #89: แสดงตัวหารข้างร้อยละเสมอ — "ผ่าน X/Y คน" + จำนวนที่ประเมินไม่ได้แยกไว้
+                    สรุปรุ่นเก่าที่ไม่มี view2ApplicableTotal ยังแสดงเลขที่เก็บไว้เดิม */}
+                ผ่านเกณฑ์ <strong className="text-zinc-800">{summary.view2Passed.toLocaleString()}{typeof summary.view2ApplicableTotal === 'number' ? `/${summary.view2ApplicableTotal.toLocaleString()}` : ''}</strong> คน
+                <span className="mx-1.5 text-zinc-300">·</span>
                 ยังไม่ผ่านเกณฑ์ <strong className="text-zinc-800">{typeof summary.view2ApplicableTotal === 'number' ? (summary.view2ApplicableTotal - summary.view2Passed).toLocaleString() : '—'}</strong> คน
+                {!!summary.view2NotEvaluableCount && <span className="block">ข้อมูลไม่ครบ <strong className="text-zinc-800">{summary.view2NotEvaluableCount.toLocaleString()}</strong> คน (ประเมินไม่ได้ จึงไม่นำมาคำนวณร้อยละ)</span>}
               </p>
             </div>
             <div className="text-right">
