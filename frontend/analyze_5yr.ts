@@ -1,7 +1,11 @@
 ﻿import { evaluateView2_5Yr } from './src/features/vaccine-5yr/utils/vaccineLogic5Yr';
 
 async function run() {
-  const url = 'https://script.google.com/macros/s/AKfycbzRydywYZRLmHcS0Qs8p-1M7-5F3uWqUQWmTNtE-ofOf90DdprrwhM-i2n1Hm3YRKeupA/exec?action=getData&sheetName=Epi_5_Year';
+  // Issue #73: the old one-off deployment URL was removed — the deployment itself was
+  // deleted (it served pre-hardening code). Pass the current endpoint via GAS_API_URL.
+  const base = process.env.GAS_API_URL;
+  if (!base) throw new Error('GAS_API_URL is required');
+  const url = `${base}?action=getData&sheetName=Epi_5_Year`;
   console.log('Fetching data...');
   try {
     const res = await fetch(url);
