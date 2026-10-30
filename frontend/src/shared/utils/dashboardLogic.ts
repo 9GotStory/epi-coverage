@@ -110,7 +110,7 @@ export function calcGroupSummary(
 
     if (v2Pending) {
       // Issue #23: count pending records directly in the loop — the loop itself creates the
-      // exact partition view2ApplicableTotal + view2PendingCount === total (no post-loop derivation).
+      // exact partition (no post-loop derivation); the third bucket lives in the branch below.
       view2PendingCount++;
     } else if (v2.status === 'NOT_EVALUABLE') {
       // Issue #89: กฎ V2 ที่ประเมินไม่ได้ทำให้ตัดสินรายคนไม่ได้ — ออกจากตัวหาร นับแยกตามสัญญา
