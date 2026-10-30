@@ -273,3 +273,22 @@ test('A10: seeded rules start NEW identities (metric_key = own rule_id); same di
   assert.ok(first && second, 'seeded fixture must contain the shared display_name');
   assert.notEqual(first.metric_key, second.metric_key, 'force-recreated years must not recover continuity by name');
 });
+
+// --- A11 — seed HBV completion contract (Issue #74 operator decision) ---------------------------
+
+test('A11: seed View 2 HBV completion requires exactly the four doses in every age group (Issue #74)', () => {
+  // Operator decision 2026-10-30 (Issue #74): Fully Immunized HBV completion = FOUR doses.
+  // The seed was already correct; docs/features.md was reconciled to it. This pin keeps
+  // any future seed/doc drift loud: the union of HBV View 2 required fields per age group
+  // must be exactly the four hbv*_date columns (HOSxP order: hbv4_date = 4 เดือน, hbv3_date = 6 เดือน).
+  const { context } = createHarness({ rows: [] });
+  assert.equal(context.seedVaccineRules(2570, 'admin').success, true);
+  for (const age of ['1yr', '2yr', '3yr', '5yr']) {
+    const hbv = context.getVaccineRules(2570, age).filter(r => r.view_type === 2 && r.vaccine_group === 'HBV');
+    assert.ok(hbv.length > 0, `${age}: seed must contain View 2 HBV rules`);
+    const required = [...new Set(hbv.flatMap(r => r.required_fields))].sort();
+    assert.deepEqual(required, ['hbv1_date', 'hbv2_date', 'hbv3_date', 'hbv4_date'],
+      `${age}: View 2 HBV completion = all four doses (Issue #74 decision)`);
+    assert.ok(hbv.every(r => r.is_required_for_v2 === true), `${age}: every HBV View 2 rule participates in completion`);
+  }
+});
