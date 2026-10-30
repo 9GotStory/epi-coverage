@@ -20,8 +20,11 @@
  *     persisted rows.
  *
  * Partition model (approved invariant, verified against the current loop): every
- * cohort record is exactly one of {applicable, pending} after the HDC override —
- * there is no third exclusion state in `calcGroupSummary()`.
+ * cohort record is exactly one of {applicable, pending} after the HDC override.
+ * Issue #89 extends the partition with a third exclusion bucket — {applicable,
+ * pending, notEvaluable} — for records whose required V2 rule cannot be evaluated
+ * from the source columns; these fixtures never produce that state (view
+ * dashboardLogic.view2SourceGate.test.ts), so the two-term sums below stay exact.
  *
  * All fixtures are synthetic. No real health data, CID, identifiers, or secrets.
  */
@@ -40,6 +43,7 @@ import type { EpiRecord, VaccineStatus } from '../types';
 type ForwardGroupSummary = GroupSummary & {
   view2ApplicableTotal?: number;
   view2PendingCount?: number;
+  view2NotEvaluableCount?: number;
 };
 
 const summarize = (...args: Parameters<typeof calcGroupSummary>): ForwardGroupSummary =>
@@ -107,18 +111,19 @@ describe('Issue #23 — Group B: current-contract invariants', () => {
   ];
 
   for (const [name, statuses] of cases) {
-    it(`satisfies 0 <= passed <= applicable <= total and applicable + pending === total (${name})`, () => {
+    it(`satisfies 0 <= passed <= applicable <= total and applicable + pending + notEvaluable === total (${name})`, () => {
       const { records, v2Eval } = cohortWith(statuses);
       const s = summarize(records, v1Eval, v2Eval);
       // `?? NaN` keeps the assertions TypeScript-valid in RED while failing loudly:
       // a missing contract field is NaN here, never a silently-passing undefined.
       const applicable = s.view2ApplicableTotal ?? NaN;
       const pending = s.view2PendingCount ?? NaN;
+      const notEvaluable = s.view2NotEvaluableCount ?? NaN;
 
       expect(s.view2Passed).toBeGreaterThanOrEqual(0);
       expect(applicable).toBeGreaterThanOrEqual(s.view2Passed);
       expect(s.total).toBeGreaterThanOrEqual(applicable);
-      expect(applicable + pending).toBe(s.total);
+      expect(applicable + pending + notEvaluable).toBe(s.total);
     });
   }
 
@@ -236,6 +241,7 @@ describe('Issue #23 — Group G: persisted JSON contract (writer serializes calc
 
     expect(persisted.view2ApplicableTotal).toBe(2);
     expect(persisted.view2PendingCount).toBe(2);
+    expect(persisted.view2NotEvaluableCount).toBe(0);
     expect('view2Failed' in persisted).toBe(false);
   });
 });

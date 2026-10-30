@@ -48,6 +48,9 @@ export interface DashboardSummaryData {
    *  contract — optional here for legacy backward compatibility. */
   view2ApplicableTotal?: number;
   view2PendingCount?: number;
+  /** Persisted by every newly generated summary (#89 — records whose required V2 rule is not
+   *  evaluable from the source columns); snapshots generated before #89 predate the field. */
+  view2NotEvaluableCount?: number;
 
   view1Breakdown?: VaccineBreakdownEntry[];
   view2Breakdown?: VaccineBreakdownEntry[];

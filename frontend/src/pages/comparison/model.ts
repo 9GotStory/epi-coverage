@@ -39,6 +39,9 @@ export interface AnnualComparisonPoint {
   /** View 2 current-contract only. No fabricated legacy pending or failed. */
   pending: number | null;
   failed: number | null;
+  /** Issue #89 — records not evaluable from the source columns; null when the stored summary
+   *  predates the field (never fabricated as zero). */
+  notEvaluable: number | null;
   /** Annual, per-FY and per-view configuration; null means not configured. */
   target: number | null;
   /** Dashboard_Summaries.updated_at — last summary computation, not upload time. */
@@ -99,6 +102,7 @@ function basePoint(
     denominator: null,
     pending: null,
     failed: null,
+    notEvaluable: null,
     target,
     updatedAt,
     delta: null,
@@ -154,8 +158,11 @@ function toAnnualPoint(
   // Partially evolved/invalid data is not a valid current or legacy contract.
   const denominator = isValidCount(data.view2ApplicableTotal) ? data.view2ApplicableTotal : null;
   const pending = isValidCount(data.view2PendingCount) ? data.view2PendingCount : null;
+  // Issue #89 field: absent on summaries generated before #89 — stays null, never zero.
+  const notEvaluable = isValidCount(data.view2NotEvaluableCount) ? data.view2NotEvaluableCount : null;
   point.denominator = denominator;
   point.pending = pending;
+  point.notEvaluable = notEvaluable;
   if (
     !hasDenominator || !hasPending ||
     numerator === null || denominator === null || pending === null ||

@@ -56,6 +56,9 @@ interface ComparisonRow {
   passed: number | null;
   applicable: number | null;
   pending: number | null;
+  /** Issue #89 — records excluded because a required V2 rule is not evaluable from the
+   *  source columns; null for summaries generated before #89 (never fabricated as zero). */
+  notEvaluable: number | null;
   /** Derived at consumption time for current-contract rows only — never persisted. */
   failed: number | null;
   isCurrentContract: boolean;
@@ -72,6 +75,7 @@ interface ChartRow {
   passed: number | null;
   failed: number | null;
   pending: number | null;
+  notEvaluable: number | null;
   target: number | null;
 }
 
@@ -207,6 +211,7 @@ export const YearComparisonDetail = ({
       passed,
       applicable,
       pending,
+      notEvaluable: isCurrentContract && typeof s.view2NotEvaluableCount === 'number' ? s.view2NotEvaluableCount : null,
       failed: isCurrentContract ? (s.view2ApplicableTotal ?? 0) - s.view2Passed : null,
       isCurrentContract,
       target,
@@ -242,6 +247,7 @@ export const YearComparisonDetail = ({
     passed: row.isCurrentContract ? row.passed : null,
     failed: row.failed,
     pending: row.pending,
+    notEvaluable: row.notEvaluable,
     target: row.target !== undefined ? row.target : null,
   }));
 
@@ -504,6 +510,8 @@ export const YearComparisonDetail = ({
                 <Recharts.Bar dataKey="passed" name="ผ่านเกณฑ์" stackId="v2" fill="#10b981" />
                 <Recharts.Bar dataKey="failed" name="ไม่ผ่านเกณฑ์" stackId="v2" fill="#f43f5e" />
                 <Recharts.Bar dataKey="pending" name="ยังไม่เข้าเกณฑ์ประเมิน" stackId="v2" fill="#a1a1aa" />
+                {/* Issue #89: ประเมินไม่ได้ (ไฟล์ไม่มีคอลัมน์ครบตามกฎ) — แยกจากไม่ผ่านเกณฑ์ */}
+                <Recharts.Bar dataKey="notEvaluable" name="ประเมินไม่ได้ (ข้อมูลไม่ครบ)" stackId="v2" fill="#d4d4d8" />
               </Recharts.BarChart>
             </Recharts.ResponsiveContainer>
           </div>
@@ -530,6 +538,7 @@ export const YearComparisonDetail = ({
                   <th className="py-2 pr-4 font-medium">ผ่านเกณฑ์</th>
                   <th className="py-2 pr-4 font-medium">ไม่ผ่านเกณฑ์</th>
                   <th className="py-2 pr-4 font-medium">ยังไม่เข้าเกณฑ์ประเมิน</th>
+                  <th className="py-2 pr-4 font-medium">ประเมินไม่ได้ (ข้อมูลไม่ครบ)</th>
                   <th className="py-2 pr-4 font-medium">ความครอบคลุม</th>
                   <th className="py-2 pr-4 font-medium">เป้าหมาย</th>
                   <th className="py-2 pr-4 font-medium">ส่วนต่างจากเป้าหมาย</th>
@@ -546,6 +555,7 @@ export const YearComparisonDetail = ({
                     <td className="py-2 pr-4">{row.isCurrentContract && row.passed !== null ? row.passed.toLocaleString() : '—'}</td>
                     <td className="py-2 pr-4">{row.failed !== null ? row.failed.toLocaleString() : '—'}</td>
                     <td className="py-2 pr-4">{row.pending !== null ? row.pending.toLocaleString() : '—'}</td>
+                    <td className="py-2 pr-4">{row.notEvaluable !== null ? row.notEvaluable.toLocaleString() : '—'}</td>
                     <td className="py-2 pr-4">{row.coverage !== null ? `${row.coverage.toFixed(2)}%` : 'ไม่มีข้อมูลสรุป'}</td>
                     <td className="py-2 pr-4">{row.target !== undefined ? `${row.target}%` : 'ไม่ได้กำหนดเป้าหมาย'}</td>
                     <td className="py-2 pr-4">{row.gap !== null ? formatPp(row.gap) : '—'}</td>

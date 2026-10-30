@@ -205,17 +205,28 @@ export function AgeGroupExpandedView({ summary, targetView1, targetView2, fiscal
                 <strong> ร้อยละรวมไม่ใช่ค่าเฉลี่ยของวัคซีนแต่ละชนิด</strong>
               </p>
             </div>
+            {/* Issue #89: เด็กที่ไฟล์ไม่มีคอลัมน์ครบตามกฎ V2 ประเมินรายคนไม่ได้ — แจ้งแยกจากผล
+                (ตามหาไฟล์ใหม่ ไม่ใช่รายชื่อตามฉีดวัคซีน) สรุปรุ่นก่อน #89 ไม่มีฟิลด์นี้ */}
+            {!!summary.view2NotEvaluableCount && (
+              <p role="status" className="text-sm text-muted-foreground mb-3">
+                ข้อมูลไม่ครบตามเกณฑ์ {summary.view2NotEvaluableCount.toLocaleString()} คน ประเมิน Fully Immunized ไม่ได้ จึงไม่รวมในการคำนวณร้อยละ
+              </p>
+            )}
             {summary.view2Breakdown.length > 0 ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1">
                 {summary.view2Breakdown.map(item => {
                   const specificTarget = getSpecificTarget(item.name, targetView2, 2) ?? 0;
                   const isPassed = item.coverage >= specificTarget;
+                  if (item.total === 0) return <div key={item.name} className="flex justify-between gap-3 text-xs py-1.5 border-b"><span>{item.name}</span><span className="text-muted-foreground">ยังประเมินไม่ได้</span></div>;
                   return (
                     <div key={item.name} className={`flex justify-between items-center text-xs py-1.5 border-b ${isPassed ? 'border-emerald-100/30' : 'border-red-100/30'} last:border-0`}>
                       <span className="text-zinc-700 truncate font-medium mr-2" title={item.name}>{item.name}</span>
-                      <span className={`inline-flex items-center justify-center min-w-[3rem] px-1.5 py-0.5 rounded-md font-semibold ${isPassed ? 'text-emerald-700 bg-emerald-100/60' : 'text-red-700 bg-red-100/60'}`}>
-                        {item.coverage.toFixed(1)}%
-                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] text-zinc-400">({item.passed}/{item.total})</span>
+                        <span className={`inline-flex items-center justify-center min-w-[3rem] px-1.5 py-0.5 rounded-md font-semibold ${isPassed ? 'text-emerald-700 bg-emerald-100/60' : 'text-red-700 bg-red-100/60'}`}>
+                          {item.coverage.toFixed(1)}%
+                        </span>
+                      </div>
                     </div>
                   );
                 })}
