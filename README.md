@@ -290,6 +290,17 @@ npm test
 
 Backend tests use Node's built-in test runner.
 
+### End-to-End (browser, mocked auth)
+
+E2E tests exercise post-login flows without a real Google account (Issue #93). Auth is mocked at the browser (`localStorage` seeding through the app's own boot path) and every GAS API call is intercepted with synthetic fixtures — production backend and credentials are never touched. Run them with:
+
+```bash
+cd frontend
+npm run test:e2e
+```
+
+The first run needs the Playwright browser binary (`npx playwright install chromium`). Spec files live in `frontend/e2e/` and use the `.e2e.ts` suffix so Vitest does not pick them up.
+
 ### Verification Rule
 
 Testing, linting, and building are separate checks.
