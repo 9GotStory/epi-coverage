@@ -24,3 +24,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Playwright E2E artifacts (Issue #93)
+/test-results/
+/playwright-report/

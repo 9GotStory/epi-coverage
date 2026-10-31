@@ -132,3 +132,6 @@ Thumbs.db
 
 # Local HDC source records contain personal data
 EPI-*YEAR.json
+
+# Playwright MCP session artifacts (screenshots/snapshots from agent browser sessions)
+/.playwright-mcp/
