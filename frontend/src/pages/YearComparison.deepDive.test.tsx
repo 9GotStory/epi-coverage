@@ -41,6 +41,9 @@ const vaccine = (
   metric_key: string | undefined, name: string, coverage: number,
   passed: number, total: number, vaccine_group = 'dtp',
 ): VaccineBreakdownEntry => ({ metric_key, name, coverage, passed, total, vaccine_group });
+/** Issue #97 writer contract: HDC-verdict bucket — keyless by design, labelled by the writer. */
+const verdictBucket = (passed: number, total: number): VaccineBreakdownEntry =>
+  ({ name: 'ไม่ผ่านเกณฑ์ HDC (ตรวจสอบรายละเอียดในระบบ)', passed, total, coverage: 0, category: 'hdc_verdict' });
 const row = (
   targetTable: EpiTargetTable, fiscalYear: number,
   extra: Partial<DashboardSummaryRow['summaryData']> = {},
@@ -84,7 +87,8 @@ const annualRows: DashboardSummaryRow[] = [
       vaccine('DTP','DTP ชื่อใหม่',92,23,25),
       vaccine('DIFF','DTP ชื่อใหม่',66,33,50),
     ],
-    view2Breakdown: [vaccine('MMR','MMR',80,8,10,'mmr')],
+    // #97 production shape (3yr/View 2): keyed vaccine + HDC-verdict bucket that owns no key by design
+    view2Breakdown: [vaccine('MMR','MMR',80,8,10,'mmr'), verdictBucket(1, 23)],
   }),
   row('Epi_2_Year', 2569, {
     facilityBreakdownV1: [facility('99999','กลุ่มอายุ 2 ปี',88,22,25)],
@@ -178,12 +182,23 @@ describe('Ticket #55: redesigned second card on the real comparison route',()=>{
     clickWithin(panel,'รายวัคซีน');
     expect(within(panel).getByRole('button',{name:'เลือกวัคซีน DTP ชื่อใหม่ รหัส DTP'})).toBeTruthy();
     expect(within(panel).getByRole('button',{name:'เลือกวัคซีน DTP ชื่อใหม่ รหัส DIFF'})).toBeTruthy();
-    expect(within(panel).getByText(/ปี 2568: ไม่มีรหัสเชื่อมโยงวัคซีน/)).toBeTruthy();
+    // #58 Phase 1 copy (#97): measured counts for the SELECTED age+view+FY — 2 vaccine entries, 1 unkeyed
+    expect(within(panel).getByText('ปี 2568 · View 1: ข้อมูลสรุปมีวัคซีน 2 รายการ โดย 1 รายการยังไม่มีรหัสเชื่อมโยงสำหรับการเปรียบเทียบข้ามปี (อีก 1 รายการเปรียบเทียบได้)')).toBeTruthy();
     clickWithin(panel,'เลือกวัคซีน DTP ชื่อใหม่ รหัส DTP');
     expect(within(panel).getByText('ปี 2569 สูงกว่าปี 2568 อยู่ 12.00 จุดร้อยละ')).toBeTruthy();
     clickWithin(panel,'View 2 — รายคน');
     expect(within(panel).queryByRole('button',{name:'เลือกวัคซีน DTP ชื่อใหม่ รหัส DTP'})).toBeNull();
     expect(within(panel).getByRole('button',{name:'เลือกวัคซีน MMR รหัส MMR'})).toBeTruthy();
+  });
+
+  it('U04b: an HDC-verdict bucket owning no key by design never raises the cross-year join warning (#97)',async()=>{
+    mount();const panel=await expand();
+    clickWithin(panel,'รายวัคซีน');
+    clickWithin(panel,'View 2 — รายคน');
+    // FY2569 View 2 = MMR (keyed) + HDC-verdict bucket (keyless by design) → keyed series stays, no warning
+    expect(within(panel).getByRole('button',{name:'เลือกวัคซีน MMR รหัส MMR'})).toBeTruthy();
+    expect(within(panel).queryByText(/ยังไม่มีรหัสเชื่อมโยง/)).toBeNull();
+    expect(within(panel).queryByText(/ไม่มีรหัสเชื่อมโยงวัคซีน/)).toBeNull();
   });
 
   it('U05: ranking is latest-year real coverage ascending, with true zero before non-evaluable and never a fake 0%',async()=>{

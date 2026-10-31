@@ -133,6 +133,22 @@ const resolveMissingRuleNames = (rule: VaccineRule, currentAgeMonths: number): {
 };
 
 /**
+ * Issue #97: bucket คำตัดสิน HDC ที่ engine ปล่อยเข้า missingVaccines — เป็นการรวมคำตัดสิน
+ * รายคนของ HDC ไม่ใช่วัคซีน จึงไม่มี metric_key โดยการออกแบบ summary writer ใช้ชื่อจากที่นี่
+ * ติดป้าย `category: 'hdc_verdict'` ใน breakdown (writer contract #97) — reader ห้ามเดาจากชื่อ display
+ * ถ้ามี bucket คำตัดสินชนิดอื่นในอนาคต (ผ่าน/ประเมินไม่ได้) ให้เพิ่มเข้ามาใน registry นี้เท่านั้น
+ */
+export const HDC_VERDICT_BUCKETS = {
+  /** result = ไม่ผ่าน โดยกฎในระบบไม่มีรายการขาด (ลำดับความสำคัญ #89) */
+  fail: 'ไม่ผ่านเกณฑ์ HDC (ตรวจสอบรายละเอียดในระบบ)',
+} as const;
+
+const HDC_VERDICT_BUCKET_NAMES: ReadonlySet<string> = new Set(Object.values(HDC_VERDICT_BUCKETS));
+
+/** ชื่อนี้เป็น bucket คำตัดสิน HDC (ไม่ใช่วัคซีน) หรือไม่ — ใช้ฝั่ง writer เท่านั้น */
+export const isHdcVerdictBucketName = (name: string): boolean => HDC_VERDICT_BUCKET_NAMES.has(name);
+
+/**
  * เตรียม rules ที่ดึงจากฐานข้อมูล (แหล่งเดียวคือ vaccine_rules) ก่อนใช้งาน:
  * - ติดป้าย source_aware (ค่าเริ่มต้น true) เพื่อเปิดการตรวจ
  *   "ไฟล์ไม่มีคอลัมน์ที่จำเป็น → ข้อมูลไม่พอประเมิน" ใน evaluateDynamicV1
@@ -326,7 +342,7 @@ export const evaluateDynamicV2 = (record: EpiRecord, rules: VaccineRule[], evalu
     if (status !== 'PENDING') {
       status = 'FAIL';
       if (missingVaccines.length === 0 && pendingVaccines.length === 0) {
-        missingVaccines.push('ไม่ผ่านเกณฑ์ HDC (ตรวจสอบรายละเอียดในระบบ)');
+        missingVaccines.push(HDC_VERDICT_BUCKETS.fail);
       }
     }
   } else if (pendingVaccines.length === 0 && notEvaluableVaccines.length > 0) {
