@@ -1,0 +1,7 @@
+# Copy this file to backend/deploy.config.sh (untracked, gitignored) and set the real value.
+#
+# DEPLOYMENT_ID is the GAS Web App deployment ID behind the production /exec URL —
+# the deployment that Cloudflare and the frontend .env point at. Deploying without
+# `-i` (or to any other ID) creates a NEW /exec URL that the frontend does not use.
+# Find it with `npx @google/clasp deployments` or from the existing /exec URL.
+DEPLOYMENT_ID="<production-deployment-id>"

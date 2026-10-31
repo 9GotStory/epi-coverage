@@ -115,6 +115,9 @@ Thumbs.db
 # GAS (Google Apps Script) build/temp files
 .clasp.json
 
+# Untracked deploy config holds the production GAS deployment ID (Issue #73)
+backend/deploy.config.sh
+
 # Scratch scripts / Temporary files
 *.cjs
 *.mjs
