@@ -112,6 +112,8 @@
 
 การอ่านผ่าน `getVaccineRules` (endpoint สาธารณะ — เรียกได้โดยไม่ต้อง authenticate) ส่งเฉพาะคอลัมน์ที่ engine ใช้เท่านั้น ไม่รวม `updated_by` (อีเมล admin) และห้ามมี `display_name` ของกฎที่ active ซ้ำกันภายใน (`fiscal_year`, `age_group`, `view_type`) เดียวกัน — ผลประเมินถูกคีย์ด้วย `display_name` ชื่อซ้ำจะยุบรวมผลแต่นับซ้ำ ทำให้ coverage เกิน 100% ได้ (การบันทึกเดี่ยว/ชุดปฏิเสธชุดที่ซ้ำชื่อ ต่าง view_type หรือกฎที่ปิดอยู่ไม่กระทบกัน)
 
+คอลัมน์ `metric_key` (String) เก็บรหัสเชื่อมโยงเชิงตรรกะข้ามปีงบประมาณ — ความหมายทางธุรกิจ (นิยามคีย์ที่ establish แล้ว กฎการ clone/seed) เป็นของ `docs/specs/comparison-page-improvement.md` Decision E ชีตที่สร้างก่อนมีคอลัมน์นี้ได้รับคอลัมน์เพิ่มท้ายชีตผ่านการย้ายข้อมูลครั้งเดียวโดยแอดมิน (`migrateVaccineMetricKeys`) ซึ่งเติมคีย์ที่ยังว่างด้วย `rule_id` ของแถวนั้น ไม่แตะเซลล์อื่น และรันซ้ำได้อย่าง idempotent
+
 คอลัมน์ `date_checks` เก็บ JSON: `before_birth` (Boolean), `allow_on_birth` (Boolean), `same_day_pairs` และ `ordered_pairs` (รายการ `{field, other_field}`)
 
 - `same_day_pairs`: คู่คอลัมน์ที่ห้ามมีวันฉีดเดียวกัน
