@@ -993,3 +993,213 @@ function seedVaccineRulesLocked_(fiscalYear, adminEmail, force) {
 
   return { success: true, seeded: rows.length, fiscalYear };
 }
+
+/**
+ * ──────────────────────────────────────────────────────────
+ * Issue #59 — migrateVaccineMetricKeys (one-time, admin-only, idempotent)
+ *
+ * ย้ายข้อมูลเชื่อมโยงข้ามปี (Decision E) ลง storage จริงของชีต vaccine_rules
+ * ที่สร้างก่อนสคีมามี metric_key: เพิ่มคอลัมน์ที่ขาด (ครั้งเดียว ต่อท้าย ไม่เรียง
+ * คอลัมน์ใหม่) และเติมคีย์ที่ยังว่างด้วย rule_id ของแถวนั้นเอง เพื่อให้การ clone
+ * ปีงบประมาณถัดไปและ Dashboard_Summaries ที่สร้างใหม่ persist คีย์เชิงตรรกะที่เสถียร
+ *
+ * ขอบเขตที่ไม่ทำ (ตั๋ว #59): ไม่ rewrite Dashboard_Summaries, ไม่คำนวณ metric ใหม่,
+ * ไม่ clone ปีใหม่, ไม่แตะ semantics/updated_at/updated_by หรือเซลล์อื่นใดของ rule
+ *
+ * อีเมลแอดมินมาจาก session ที่ Router ตรวจแล้วฝั่งเซิร์ฟเวอร์ (ใช้เพื่อ audit เท่านั้น)
+ * ค่าที่ client ส่งมาเองไม่ถูกอ่าน
+ * @param {string} adminEmail - อีเมลแอดมินจาก authResult (server-derived)
+ */
+function migrateVaccineMetricKeys(adminEmail) {
+  // Issue #76: อ่าน-ตรวจ-ตัดสิน-เขียน ทั้งลำดับเกิดภายใต้ lock เดียวเหมือน mutation อื่น
+  return withRulesLock_(() => migrateVaccineMetricKeysLocked_(adminEmail));
+}
+
+const METRIC_KEY_MIGRATION_REQUIRED_HEADERS_ = ['rule_id', 'fiscal_year', 'age_group', 'view_type'];
+
+function migrateVaccineMetricKeysLocked_(adminEmail) {
+  const ss = getSpreadsheet();
+  const sheet = ss.getSheetByName(VACCINE_RULES_SHEET);
+  if (!sheet || sheet.getLastRow() < 1) {
+    return { success: false, error: 'vaccine_rules sheet not found. Run setup first.' };
+  }
+
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0];
+
+  // ── Prevalidation ทั้งหมดก่อน mutation แรก — ผิดข้อใดข้อหนึ่ง = fail closed โดยไม่เขียนอะไรเลย
+  for (const required of METRIC_KEY_MIGRATION_REQUIRED_HEADERS_) {
+    const occurrences = headers.filter(header => header === required).length;
+    if (occurrences === 0) {
+      return { success: false, error: `vaccine_rules is missing required header "${required}"` };
+    }
+    if (occurrences > 1) {
+      return { success: false, error: `vaccine_rules has duplicate required header "${required}"` };
+    }
+  }
+  if (headers.filter(header => header === 'metric_key').length > 1) {
+    return { success: false, error: 'vaccine_rules has duplicate metric_key header' };
+  }
+
+  const idCol = headers.indexOf('rule_id');
+  const fyCol = headers.indexOf('fiscal_year');
+  const ageCol = headers.indexOf('age_group');
+  const viewCol = headers.indexOf('view_type');
+  const keyCol = headers.indexOf('metric_key');
+  const appendHeader = keyCol === -1;
+  const targetCol = appendHeader ? headers.length : keyCol;
+
+  // แถว rule = แถวที่มีข้อมูลอย่างน้อยหนึ่งเซลล์ (แถว padding ว่างทั้งแถวไม่นับ)
+  const ruleRows = [];
+  for (let i = 1; i < data.length; i++) {
+    if (data[i].some(cell => cell !== '' && cell !== null && cell !== undefined)) {
+      ruleRows.push(i);
+    }
+  }
+
+  // ทุกแถว rule ต้องมี rule_id ที่ไม่ว่างและไม่ซ้ำกันทั้งชีต
+  const ruleIdByRow = new Map();
+  const seenRuleIds = new Map();
+  for (const i of ruleRows) {
+    const ruleId = data[i][idCol];
+    if (ruleId === '' || ruleId === null || ruleId === undefined) {
+      return { success: false, error: `vaccine_rules row ${i + 1} is non-empty but has no rule_id` };
+    }
+    const id = String(ruleId);
+    if (seenRuleIds.has(id)) {
+      return { success: false, error: `duplicate rule_id "${id}" at rows ${seenRuleIds.get(id) + 1} and ${i + 1}` };
+    }
+    seenRuleIds.set(id, i);
+    ruleIdByRow.set(i, id);
+  }
+
+  // resolved key = metric_key ที่ establish ไว้ (สตริงไม่ว่าง) ไม่งั้น fallback เป็น rule_id ของแถวนั้น
+  // ค่าที่ไม่ใช่สตริงในคอลัมน์ metric_key ถือว่าสคีมาชัดเจนไม่พอ — fail closed ไม่เดา
+  const resolvedKeyByRow = new Map();
+  const keyOwnerByScope = new Map();
+  for (const i of ruleRows) {
+    const stored = keyCol !== -1 ? data[i][keyCol] : undefined;
+    if (stored !== '' && stored !== null && stored !== undefined && typeof stored !== 'string') {
+      return { success: false, error: `vaccine_rules row ${i + 1} has a non-string metric_key value` };
+    }
+    const resolved = establishedMetricKey_(stored) || ruleIdByRow.get(i);
+    resolvedKeyByRow.set(i, resolved);
+    // เอกลักษณ์เชิงตรรกะอ่านภายใน (fiscal_year, age_group, view_type) เดียวกันเท่านั้น —
+    // คีย์เดียวกันข้ามปีงบประมาณคือ lineage เดียวกัน (อนุญาต) แต่ชนกันในสโคปเดียวกัน
+    // คือความกำกวมที่ต้องปฏิเสธ ไม่ใช่สิ่งที่ migration จะตัดสินให้
+    const scope = `${String(data[i][fyCol])}|${String(data[i][ageCol])}|${String(Number(data[i][viewCol]))}`;
+    const scopedKey = `${scope}|${resolved}`;
+    const owner = keyOwnerByScope.get(scopedKey);
+    if (owner !== undefined) {
+      return {
+        success: false,
+        error: `metric_key collision in fiscal_year=${String(data[i][fyCol])}, age_group=${String(data[i][ageCol])}, view_type=${String(Number(data[i][viewCol]))}: rows ${owner + 1} and ${i + 1} both resolve to "${resolved}"`
+      };
+    }
+    keyOwnerByScope.set(scopedKey, i);
+  }
+
+  // แผนการเขียน: เติมเฉพาะเซลล์คีย์ที่ยังว่าง; เซลล์ที่ establish แล้วไม่ถูกเขียนใหม่แม้ค่าเดิม
+  const pendingWrites = [];
+  let preserved = 0;
+  for (const i of ruleRows) {
+    const stored = keyCol !== -1 ? data[i][keyCol] : undefined;
+    if (establishedMetricKey_(stored)) preserved++;
+    else pendingWrites.push({ row: i + 1, value: resolvedKeyByRow.get(i) });
+  }
+
+  const commit = commitMetricKeyMigration_(sheet, data, targetCol, appendHeader, pendingWrites, resolvedKeyByRow, new Set(ruleRows));
+  if (!commit.verified) {
+    logAction('SYSTEM', adminEmail, 'migrate_vaccine_metric_keys',
+      `Commit ${commit.commitState} — no success claimed`);
+    return {
+      success: false, status: commit.commitState,
+      error: commit.commitState === 'commit_failure'
+        ? 'metric_key migration failed before any value write.'
+        : 'metric_key migration could not be verified; the sheet may be partially applied — inspect before retrying.'
+    };
+  }
+
+  const created = appendHeader ? 1 : 0;
+  logAction('SYSTEM', adminEmail, 'migrate_vaccine_metric_keys',
+    `metric_key migration: column_created=${created}, initialized=${pendingWrites.length}, preserved=${preserved}, total=${ruleRows.length}`);
+  return { success: true, created, initialized: pendingWrites.length, preserved, total: ruleRows.length };
+}
+
+/**
+ * Issue #59: commit การย้ายข้อมูล metric_key ตามวินัย commit ของ Issue #76 แต่จำกัด
+ * ขอบเขตที่ "คอลัมน์ identity" เท่านั้น — เขียน header ที่ขาด (ถ้ามี) และเฉพาะเซลล์คีย์
+ * ที่ยังว่าง (แถวติดกันรวมเป็น range เดียว) แล้วพิสูจน์ด้วย read-back ว่า (a) คอลัมน์
+ * เป้าหมายเก็บ resolved key ครบทุกแถว rule และ (b) ทุกเซลล์นอกคอลัมน์เป้าหมายเทียบ
+ * snapshot ก่อนเขียนได้ทุกประการ — การเปลี่ยนแปลงใดนอกเหนือนั้นคือ commit_uncertain
+ * format-throw ก่อน setValues แรก = commit_failure; throw หลังเริ่มเขียน = commit_uncertain
+ */
+function commitMetricKeyMigration_(sheet, snapshot, targetColIndex, appendHeader, pendingWrites, resolvedKeyByRow, ruleRowSet) {
+  let valuesWriteAttempted = false;
+  try {
+    if (appendHeader) {
+      if (sheet.getMaxColumns() < targetColIndex + 1) {
+        sheet.insertColumnsAfter(sheet.getMaxColumns(), targetColIndex + 1 - sheet.getMaxColumns());
+      }
+      valuesWriteAttempted = true; // หลังจุดนี้ throw ไม่พิสูจน์ว่าไม่มีอะไรถูก apply
+      sheet.getRange(1, targetColIndex + 1, 1, 1).setValues([['metric_key']]);
+      const dataRowCount = sheet.getLastRow() - 1;
+      if (dataRowCount > 0) {
+        // คอลัมน์ใหม่เป็น identifier — บังคับข้อความ (วินัยเดียวกับ hdc_code) ก่อนเขียนค่า
+        sheet.getRange(2, targetColIndex + 1, dataRowCount, 1).setNumberFormat('@');
+      }
+    }
+    if (pendingWrites.length > 0) {
+      valuesWriteAttempted = true;
+      let groupStart = -1;
+      let groupValues = [];
+      const flushGroup = () => {
+        sheet.getRange(groupStart, targetColIndex + 1, groupValues.length, 1)
+          .setValues(groupValues.map(value => [value]));
+      };
+      let previousRow = -2;
+      for (const write of pendingWrites) {
+        if (write.row !== previousRow + 1) {
+          if (groupValues.length > 0) flushGroup();
+          groupStart = write.row;
+          groupValues = [];
+        }
+        groupValues.push(sanitizeSheetText(write.value));
+        previousRow = write.row;
+      }
+      if (groupValues.length > 0) flushGroup();
+    }
+    SpreadsheetApp.flush();
+
+    const after = sheet.getDataRange().getValues();
+    if (appendHeader && after[0][targetColIndex] !== 'metric_key') {
+      return { verified: false, commitState: 'commit_uncertain' };
+    }
+    const width = snapshot[0].length;
+    for (let i = 1; i < snapshot.length; i++) {
+      for (let j = 0; j < width; j++) {
+        if (j === targetColIndex && ruleRowSet.has(i)) {
+          if (!ruleCellParity_(sanitizeSheetText(resolvedKeyByRow.get(i)), after[i][j])) {
+            return { verified: false, commitState: 'commit_uncertain' };
+          }
+        } else if (!ruleCellParity_(snapshot[i][j], after[i][j])) {
+          return { verified: false, commitState: 'commit_uncertain' };
+        }
+      }
+      // คอลัมน์ที่ append อยู่นอก snapshot (targetColIndex === width) ต้องตรวจแยก:
+      // rule row อ่านกลับต้องได้ resolved key เป๊ะ ๆ และแถวที่ไม่ใช่ rule row ต้องว่าง
+      if (appendHeader) {
+        if (ruleRowSet.has(i)) {
+          if (!ruleCellParity_(sanitizeSheetText(resolvedKeyByRow.get(i)), after[i][targetColIndex])) {
+            return { verified: false, commitState: 'commit_uncertain' };
+          }
+        } else if (after[i][targetColIndex] !== '') {
+          return { verified: false, commitState: 'commit_uncertain' };
+        }
+      }
+    }
+    return { verified: true };
+  } catch (e) {
+    return { verified: false, commitState: valuesWriteAttempted ? 'commit_uncertain' : 'commit_failure' };
+  }
+}

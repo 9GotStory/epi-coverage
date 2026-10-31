@@ -61,7 +61,8 @@ function handleRequest(method, e) {
       'setup', 'getAllUsers', 'updateUserStatus', 'updateUserFacility',
       'upsertFacility', 'upsertEpiData', 'cleanupEpiData', 'getAuditLogs',
       'saveDashboardSummary', 'forceSyncOpenData', 'setupOpenDataTrigger',
-      'seedVaccineRules', 'saveVaccineRule', 'cloneVaccineRules', 'batchSaveRules', 'suggestRuleTargetAges', 'suggestRuleDateChecks'
+      'seedVaccineRules', 'saveVaccineRule', 'cloneVaccineRules', 'batchSaveRules', 'suggestRuleTargetAges', 'suggestRuleDateChecks',
+      'migrateVaccineMetricKeys'
     ];
     if (adminActions.includes(action) && !['admin', 'superadmin'].includes(authResult.role)) {
       return responseJson({ error: 'Forbidden: Admin access required' }, 403);
@@ -102,6 +103,9 @@ function handleRequest(method, e) {
       case 'batchSaveRules': return responseJson(batchSaveRules(body.fiscalYear, body.ageGroup, body.rules, authResult.email));
       case 'suggestRuleTargetAges': return responseJson(suggestRuleTargetAges(body.rules));
       case 'suggestRuleDateChecks': return responseJson(suggestRuleDateChecks(body.rules));
+      // Issue #59: one-time metric_key migration — audit identity มาจาก session ที่ตรวจแล้ว
+      // (authResult) เท่านั้น ไม่อ่าน body.adminEmail ที่ client ส่งมา (spoofable attribution)
+      case 'migrateVaccineMetricKeys': return responseJson(migrateVaccineMetricKeys(authResult.email));
       default:
         return responseJson({ error: 'Unknown action: ' + action }, 400);
     }
