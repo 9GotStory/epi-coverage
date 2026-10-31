@@ -60,4 +60,17 @@ Read `getOpenData` with `{ payload: { tableName: ageReport.table, year: String(s
 - EPI's existing View 2 `evaluateDynamicV2` includes an imported HDC `record.result` override. Matching percentages with HDC are not independent evidence that the clinical validation algorithms are identical.
 - This removal is **frontend-only**. It does not modify `vaccine_rules`, `Dashboard_Summaries`, `s_epi_complete` source history, GAS, HDC imports, or the existing View 1 mapping and source checks. The source report remains accessible at [HDC Fully Immunized age 1](https://hdc.moph.go.th/pre/public/standard-report-detail/28dd2c7955ce926456240b2ff0100bde?subcatalogId=4df360514655f79f13901ef1181ca1c7).
 
+### `s_epi_complete` report IDs by age group (restored 2026-10-31)
+
+The single `s_epi_complete` table carries one report `id` (hash) per age cohort — the same per-report pattern as `s_epi1/2/3/5`. All four IDs were established empirically in October 2026 (FY2569 numerator/target parity with EPI View 2 per group; originally recorded in commit `fb0fe98`) and re-verified against live `report_data` on 2026-10-31 (four distinct IDs, province 54):
+
+| Group | HDC report ID | FY2569 HDC result/target (parity evidence) |
+| --- | --- | ---: |
+| 1 year | `28dd2c7955ce926456240b2ff0100bde` | 142/181 |
+| 2 years | `35f4a8d465e6e1edc05f3d8ab658c551` | 72/203 |
+| 3 years | `d1fe173d08e959397adf34b1d77e88d7` | 28/231 |
+| 5 years | `f033ab37c30201f73f142449d037028d` | 26/264 |
+
+These IDs are evidence from the FY2569 snapshot, not a timeless guarantee; a future HDC re-key would surface as an unknown ID (fail closed, never a wrong-group number). Re-verified 2026-10-31 against the day's HDC round (`date_com` 202610310301) and the same-day recomputed EPI summaries: numerators matched exactly for all four groups (142 / 72 / 28 / 26); denominators matched 3 of 4 — HDC 3-year target was 230 vs EPI 231 (the known group-age denominator divergence above), and HDC targets move between processing rounds (5-year was 264 on 2026-10-08, 263 on 2026-10-31). See docs/features.md §3.2.2 for the table contract.
+
 The default UX deliberately has one HDC comparison location rather than two parallel dose metrics that serve the same purpose.
