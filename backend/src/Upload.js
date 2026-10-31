@@ -193,7 +193,9 @@ function cleanupEpiData(batchId, touchedHoscodes, adminEmail, fiscalYear, target
     }
     receipt[7] = 'complete'; receipt[8] = new Date().toISOString();
     writeEpiRows(batches, receipts[0], receipts);
-    logAction('SYSTEM', adminEmail || 'Admin', 'cleanup_epi_data', `Batch ${batchId}: ${deactivated} deactivated (${receipt[3]}).`);
+    // Issue #80: Router ส่งอีเมลจาก session ที่ตรวจสอบแล้วเสมอ — fallback 'unknown' แทน
+    // ชื่อ 'Admin' แบบ generic เมื่อบัญชีไม่มีอีเมล
+    logAction('SYSTEM', adminEmail || 'unknown', 'cleanup_epi_data', `Batch ${batchId}: ${deactivated} deactivated (${receipt[3]}).`);
     return { success: true, deactivated };
   });
 }

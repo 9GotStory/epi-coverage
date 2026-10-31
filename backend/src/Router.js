@@ -58,7 +58,7 @@ function handleRequest(method, e) {
     
     // 6. Admin Actions (ต้องเป็น Admin เท่านั้น)
     const adminActions = [
-      'setup', 'getAllUsers', 'getUsers', 'updateUserStatus', 'updateUserFacility',
+      'setup', 'getAllUsers', 'updateUserStatus', 'updateUserFacility',
       'upsertFacility', 'upsertEpiData', 'cleanupEpiData', 'getAuditLogs',
       'saveDashboardSummary', 'forceSyncOpenData', 'setupOpenDataTrigger',
       'seedVaccineRules', 'saveVaccineRule', 'cloneVaccineRules', 'batchSaveRules', 'suggestRuleTargetAges', 'suggestRuleDateChecks'
@@ -79,23 +79,27 @@ function handleRequest(method, e) {
       case 'upsertEpiData': return responseJson(upsertEpiData(body.chunk, body.batchId, authResult, body.fiscalYear, body.targetTable, body.options));
       case 'cleanupEpiData': return responseJson(cleanupEpiData(body.batchId, body.touchedHoscodes, authResult.email, body.fiscalYear, body.targetTable));
 
-      case 'getUsers': return responseJson(getUsers());
+      // Issue #80: as-of timestamp สำหรับผู้ใช้ทุกสถานะ — คืนเฉพาะเวลาล่าสุดของ cleanup_epi_data
+      // (data-minimized) ไม่เปิด audit_logs ฉบับเต็มซึ่งเป็น admin action
+      case 'getLatestImportTime': return responseJson(getLatestImportTime());
       case 'getFacilities': return responseJson(getFacilities());
       case 'getAuditLogs': return responseJson(getAuditLogs(e.parameter.email, e.parameter.actionType));
-      case 'upsertFacility': return responseJson(upsertFacility(body.hoscode, body.hosname, body.isActive, body.adminEmail));
+      // Issue #80: audit identity มาจาก session ที่ตรวจสอบแล้ว (authResult) เท่านั้น
+      // ไม่ใช้ body.adminEmail ที่ client ส่งมา (spoofable attribution)
+      case 'upsertFacility': return responseJson(upsertFacility(body.hoscode, body.hosname, body.isActive, authResult.email));
       case 'getEpiData': return responseJson(getAuthorizedEpiData(authResult, e.parameter.hoscode || body.hoscode, e.parameter.targetTable || body.targetTable, body.fiscalYear || e.parameter.fiscalYear));
-      case 'updateUserStatus': return responseJson(updateUserStatus(body.googleId, body.status, body.role));
-      case 'updateUserFacility': return responseJson(updateUserFacility(body.googleId, body.hoscode));
+      case 'updateUserStatus': return responseJson(updateUserStatus(body.googleId, body.status, body.role, authResult));
+      case 'updateUserFacility': return responseJson(updateUserFacility(body.googleId, body.hoscode, authResult));
       case 'deleteSession': return responseJson(deleteSession(authToken));
       case 'saveDashboardSummary': return responseJson(saveDashboardSummary(body.targetTable, body.fiscalYear, body.quarter, body.summaryData));
       case 'saveAiAnalysis': return responseJson(saveAiAnalysis(body.recordKey, body.targetTable, body.aiAnalysis, authResult));
       case 'analyzeVaccineData': return responseJson(analyzeVaccineData(body.prompt, body.recordKey, body.targetTable, authResult));
       // A1: Migration + Dynamic Sheet (Removed legacy year-based endpoints)
-      // B2: Vaccine Rules CRUD
-      case 'seedVaccineRules': return responseJson(seedVaccineRules(body.fiscalYear, body.adminEmail, body.force));
-      case 'saveVaccineRule': return responseJson(saveVaccineRule(body.rule, body.adminEmail));
-      case 'cloneVaccineRules': return responseJson(cloneRulesFromYear(body.fromYear, body.toYear, body.adminEmail));
-      case 'batchSaveRules': return responseJson(batchSaveRules(body.fiscalYear, body.ageGroup, body.rules, body.adminEmail));
+      // B2: Vaccine Rules CRUD (Issue #80: ใช้อีเมลจาก authResult ไม่ใช้ body.adminEmail)
+      case 'seedVaccineRules': return responseJson(seedVaccineRules(body.fiscalYear, authResult.email, body.force));
+      case 'saveVaccineRule': return responseJson(saveVaccineRule(body.rule, authResult.email));
+      case 'cloneVaccineRules': return responseJson(cloneRulesFromYear(body.fromYear, body.toYear, authResult.email));
+      case 'batchSaveRules': return responseJson(batchSaveRules(body.fiscalYear, body.ageGroup, body.rules, authResult.email));
       case 'suggestRuleTargetAges': return responseJson(suggestRuleTargetAges(body.rules));
       case 'suggestRuleDateChecks': return responseJson(suggestRuleDateChecks(body.rules));
       default:

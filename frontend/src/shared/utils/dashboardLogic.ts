@@ -33,6 +33,24 @@ export type LegacyCompatibleGroupSummary = Omit<GroupSummary, 'view2ApplicableTo
   Partial<Pick<GroupSummary, 'view2ApplicableTotal' | 'view2PendingCount' | 'view2NotEvaluableCount'>>;
 
 /**
+ * Issue #80: renderability gate for a stored snapshot before the Dashboard cards
+ * dereference it. `getSummary` previously checked only truthiness, so a
+ * parseable-but-fieldless `summaryData` row made `view2Coverage.toFixed` throw
+ * (a crash, not a wrong number). A snapshot is renderable when every field the
+ * cards and the expanded view dereference is present with the right type —
+ * legacy snapshots qualify (the denominator fields are optional and handled
+ * defensively downstream). Anything else presents as "ยังไม่มีข้อมูลสรุป".
+ */
+export function isRenderableGroupSummary(value: unknown): value is LegacyCompatibleGroupSummary {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const summary = value as Record<string, unknown>;
+  const numericFields = ['total', 'view1PassedDoses', 'view1TotalDoses', 'view1Coverage', 'view2Passed', 'view2Coverage'];
+  if (!numericFields.every(field => typeof summary[field] === 'number' && Number.isFinite(summary[field]))) return false;
+  const arrayFields = ['view1Breakdown', 'view2Breakdown', 'facilityBreakdownV1', 'facilityBreakdownV2'];
+  return arrayFields.every(field => Array.isArray(summary[field]));
+}
+
+/**
  * คำนวณ Summary แยกมุมมองที่ 1 และ 2 สำหรับกลุ่มอายุ
  *
  * Issue #26 (Decision E — locked seam): the OPTIONAL fifth argument carries the
