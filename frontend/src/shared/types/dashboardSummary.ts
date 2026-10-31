@@ -22,6 +22,11 @@ export interface VaccineBreakdownEntry {
    * snapshots predate it and remain valid without these fields. */
   metric_key?: string;
   vaccine_group?: string;
+  /** Issue #97 writer contract: `'hdc_verdict'` marks a NON-vaccine bucket that aggregates
+   * an HDC person-verdict (e.g. ไม่ผ่านเกณฑ์ HDC) — keyless by design, never joinable by
+   * metric_key and never counted as a vaccine by readers. Absent = ordinary vaccine-rule
+   * aggregate; legacy snapshots predate the field and stay valid without it. */
+  category?: 'hdc_verdict';
 }
 
 /** Facility identifiers are strings — never numerically normalized (CLAUDE.md §5). */

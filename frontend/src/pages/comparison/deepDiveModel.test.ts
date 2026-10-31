@@ -115,7 +115,8 @@ describe('Ticket #53: vaccine identity, gaps and targets', () => {
     expect(series(model,'metric-a').label).toBe('ชื่อใหม่');
     expect(series(model,'metric-a').points.map(p=>p.coverage)).toEqual([70,90]);
     expect(series(model,'metric-b').points.map(p=>p.coverage)).toEqual([null,80]);
-    expect(model.legacyUnjoinableYears).toEqual([2568]);
+    // #97: legacy unjoinable carries measured counts (#58 Phase 1) — 2 vaccine entries, 1 unkeyed
+    expect(model.legacyUnjoinableYears).toEqual([{ fiscalYear: 2568, vaccineEntries: 2, unjoinableEntries: 1 }]);
     expect(model.series.every(s=>s.label!=='อื่น'&&s.label!=='Legacy')).toBe(true);
   });
 
@@ -205,5 +206,67 @@ describe('Ticket #53: historical integrity and invalid data', () => {
     expect(model.series).toHaveLength(1);
     expect(series(model,'one').label).toBe('Selected');
     expect(series(model,'one').points[0].coverage).toBe(80);
+  });
+});
+
+describe('Issue #97: HDC-verdict buckets are not vaccines — excluded from join-warning counts', () => {
+  /** #97 writer contract: verdict bucket entry is keyless BY DESIGN and labelled by the writer. */
+  const verdict = (name: string, passed = 0, total = 5): VaccineBreakdownEntry =>
+    ({ name, passed, total, coverage: total > 0 ? (passed / total) * 100 : 0, category: 'hdc_verdict' });
+
+  it('V1: fully-keyed vaccines + a verdict bucket only → no unjoinable warning at all (production 3yr/View 2 shape)', () => {
+    const rows=[summary('Epi_1_Year',2569,{view2Breakdown:[
+      vac('k-1','BCG 1 เข็ม',90), vac('k-2','MMR เข็ม 1',80),
+      verdict('ไม่ผ่านเกณฑ์ HDC (ตรวจสอบรายละเอียดในระบบ)', 1, 23),
+    ]})];
+    const model=prepare(rows,[2569],{kind:'vaccine',view:2});
+    expect(model.legacyUnjoinableYears).toEqual([]);
+    expect(model.series.map(s=>s.key)).toEqual(['k-2','k-1']); // bucket never becomes a series
+  });
+
+  it('V2: mixed keyed/unkeyed vaccines + a verdict bucket → warning counts real vaccines only (N of M)', () => {
+    const rows=[summary('Epi_1_Year',2569,{view2Breakdown:[
+      vac('k-1','BCG 1 เข็ม',90), vac(undefined,'วัคซีนรุ่นเก่า',66), vac('k-2','MMR เข็ม 1',80),
+      verdict('ไม่ผ่านเกณฑ์ HDC (ตรวจสอบรายละเอียดในระบบ)'),
+    ]})];
+    const model=prepare(rows,[2569],{kind:'vaccine',view:2});
+    expect(model.legacyUnjoinableYears).toEqual([{ fiscalYear: 2569, vaccineEntries: 3, unjoinableEntries: 1 }]);
+    expect(model.series).toHaveLength(2);
+  });
+
+  it('V3: a verdict bucket alone (no keyed vaccine) → no warning, no series — not a fabricated empty-key join', () => {
+    const rows=[summary('Epi_1_Year',2569,{view2Breakdown:[verdict('ไม่ผ่านเกณฑ์ HDC (ตรวจสอบรายละเอียดในระบบ)',0,4)]})];
+    const model=prepare(rows,[2569],{kind:'vaccine',view:2});
+    expect(model.legacyUnjoinableYears).toEqual([]);
+    expect(model.series).toEqual([]);
+  });
+
+  it('V4: legacy snapshot entries (no category field) without keys still warn — backward compatibility', () => {
+    const rows=[summary('Epi_1_Year',2568,{view2Breakdown:[
+      vac('k-1','BCG 1 เข็ม',90),
+      { name:'Legacy ไม่มีป้าย', passed:6, total:9, coverage:66.66666666666667 }, // pre-#97 shape
+    ]})];
+    const model=prepare(rows,[2568],{kind:'vaccine',view:2});
+    expect(model.legacyUnjoinableYears).toEqual([{ fiscalYear: 2568, vaccineEntries: 2, unjoinableEntries: 1 }]);
+  });
+
+  it('V5: verdict buckets are excluded per View — a View 2 bucket never mutes a View 1 unkeyed warning', () => {
+    const rows=[summary('Epi_1_Year',2569,{
+      view1Breakdown:[{ name:'V1 Legacy', passed:6, total:9, coverage:66.67 }],
+      view2Breakdown:[verdict('ไม่ผ่านเกณฑ์ HDC (ตรวจสอบรายละเอียดในระบบ)')],
+    })];
+    expect(prepare(rows,[2569],{kind:'vaccine',view:1}).legacyUnjoinableYears)
+      .toEqual([{ fiscalYear: 2569, vaccineEntries: 1, unjoinableEntries: 1 }]);
+    expect(prepare(rows,[2569],{kind:'vaccine',view:2}).legacyUnjoinableYears).toEqual([]);
+  });
+
+  it('V6: every vaccine unkeyed (N of N, N>1) still warns with full counts — the 0/1/all checklist (#58 Phase 1)', () => {
+    const rows=[summary('Epi_1_Year',2568,{view2Breakdown:[
+      { name:'Legacy A', passed:6, total:9, coverage:66.67 },
+      { name:'Legacy B', passed:3, total:9, coverage:33.33 },
+    ]})];
+    const model=prepare(rows,[2568],{kind:'vaccine',view:2});
+    expect(model.legacyUnjoinableYears).toEqual([{ fiscalYear: 2568, vaccineEntries: 2, unjoinableEntries: 2 }]);
+    expect(model.series).toEqual([]);
   });
 });

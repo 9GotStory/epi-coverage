@@ -1,4 +1,6 @@
 import type { EpiRecord, VaccineStatus } from '../types';
+import type { VaccineBreakdownEntry } from '../types/dashboardSummary';
+import { isHdcVerdictBucketName } from './vaccine/ruleEngine';
 import type { View1Evaluation, VaccineRule } from './vaccine/ruleEngine';
 // We can define the return type for better type safety
 export interface GroupSummary {
@@ -7,12 +9,13 @@ export interface GroupSummary {
   view1PassedDoses: number;
   view1TotalDoses: number;
   view1Coverage: number;
-  view1Breakdown: { name: string; passed: number; total: number; coverage: number; metric_key?: string; vaccine_group?: string }[];
+  /** Issue #97: breakdown entries share the persisted entry contract (incl. category) */
+  view1Breakdown: VaccineBreakdownEntry[];
   facilityBreakdownV1: { hoscode: string; hosname: string; total: number; passed: number; coverage: number }[];
 
   view2Passed: number;
   view2Coverage: number;
-  view2Breakdown: { name: string; passed: number; total: number; coverage: number; metric_key?: string; vaccine_group?: string }[];
+  view2Breakdown: VaccineBreakdownEntry[];
   facilityBreakdownV2: { hoscode: string; hosname: string; total: number; passed: number; coverage: number }[];
 
   /** Issue #23: records included in the View 2 coverage denominator for this snapshot (required on every newly generated summary). */
@@ -192,31 +195,31 @@ export function calcGroupSummary(
     return matches.length === 1 ? matches[0] : undefined;
   };
 
-  const view1Breakdown = Object.entries(view1Details).map(([name, passed]) => {
-    const targetTotal = view1TargetDetails[name] || 0;
-    const rule = rules ? rulesByNameAndView(1, name) : undefined;
+  // Issue #97 (writer contract A): bucket คำตัดสิน HDC ไม่ใช่วัคซีน — ติดป้าย category จาก
+  // ชื่อที่ engine ปล่อย (registry เดียวกับต้นทาง) และไม่มี metric_key/vaccine_group โดยการออกแบบ
+  // แม้จะมี rule ที่ตั้ง display_name ชนิดเดียวกันก็ต้องไม่ยกให้เป็น identity ข้ามปี (fail closed)
+  const breakdownEntry = (
+    name: string, passed: number, targetTotal: number, rule: VaccineRule | undefined,
+  ) => {
+    const isVerdictBucket = isHdcVerdictBucketName(name);
     return {
       name,
       passed,
       total: targetTotal,
       coverage: targetTotal > 0 ? (passed / targetTotal) * 100 : 0,
-      metric_key: rule ? (validKey(rule.metric_key) ?? rule.rule_id) : undefined,
-      vaccine_group: rule?.vaccine_group,
+      metric_key: isVerdictBucket ? undefined : (rule ? (validKey(rule.metric_key) ?? rule.rule_id) : undefined),
+      vaccine_group: isVerdictBucket ? undefined : rule?.vaccine_group,
+      category: isVerdictBucket ? ('hdc_verdict' as const) : undefined,
     };
-  }).sort((a, b) => b.coverage - a.coverage);
+  };
 
-  const view2Breakdown = Object.entries(view2Details).map(([name, passed]) => {
-    const targetTotal = view2TargetDetails[name] || 0;
-    const rule = rules ? rulesByNameAndView(2, name) : undefined;
-    return {
-      name,
-      passed,
-      total: targetTotal,
-      coverage: targetTotal > 0 ? (passed / targetTotal) * 100 : 0,
-      metric_key: rule ? (validKey(rule.metric_key) ?? rule.rule_id) : undefined,
-      vaccine_group: rule?.vaccine_group,
-    };
-  }).sort((a, b) => b.coverage - a.coverage);
+  const view1Breakdown = Object.entries(view1Details).map(([name, passed]) =>
+    breakdownEntry(name, passed, view1TargetDetails[name] || 0, rules ? rulesByNameAndView(1, name) : undefined),
+  ).sort((a, b) => b.coverage - a.coverage);
+
+  const view2Breakdown = Object.entries(view2Details).map(([name, passed]) =>
+    breakdownEntry(name, passed, view2TargetDetails[name] || 0, rules ? rulesByNameAndView(2, name) : undefined),
+  ).sort((a, b) => b.coverage - a.coverage);
   
   const facilityBreakdownV1 = Object.entries(facilityMap).map(([hoscode, fac]) => ({
     hoscode,

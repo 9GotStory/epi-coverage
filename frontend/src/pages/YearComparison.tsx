@@ -9,7 +9,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '../shared/components/u
 import { SubNav } from '../widgets/layout/SubNav';
 import { formatDateTimeStr, getCurrentFiscalYear } from '../shared/utils/dateUtils';
 import type { DashboardSummaryRow, FacilityBreakdownEntry, EpiTargetTable } from '../shared/types/dashboardSummary';
-import { buildAnnualComparisonModel, getComparisonFiscalYears, getDefaultComparisonYears } from './comparison/model';
+import { buildAnnualComparisonModel, getComparisonFiscalYears, getDefaultComparisonYears, type ComparisonView } from './comparison/model';
+import { formatUnjoinableVaccineNotice } from './comparison/unjoinableNotice';
 import { DeepDivePanel } from './comparison/DeepDivePanel';
 import { AnnualAgeGroupCharts } from './comparison/AnnualAgeGroupCharts';
 
@@ -347,13 +348,23 @@ export const YearComparisonDetail = ({
     { viewType: 2 as const, label: 'View 2 (Fully Immunized)', series: buildVaccineSeries(2) },
   ];
 
-  /** Selected FYs whose snapshot carries legacy (non-identity) vaccine entries — each gets a visible notice. */
-  const vaccineLegacyYears = selectedYears.filter(fiscalYear => {
+  /** #58 Phase 1 / #97: measured unjoinable counts per SELECTED age group + View + FY.
+   * Verdict buckets (category 'hdc_verdict') are not vaccines — keyless by design and
+   * never counted here; only real vaccines lacking a stored key raise a notice. */
+  interface VaccineKeyNotice { fiscalYear: number; viewType: ComparisonView; vaccineEntries: number; unjoinableEntries: number; }
+  const vaccineKeyNotices: VaccineKeyNotice[] = [];
+  for (const fiscalYear of selectedYears) {
     const summary = summaryForFiscalYear(fiscalYear);
-    if (!summary) return false;
-    return [...(summary.summaryData.view1Breakdown ?? []), ...(summary.summaryData.view2Breakdown ?? [])]
-      .some(entry => !validMetricKey(entry.metric_key));
-  });
+    if (!summary) continue;
+    for (const viewType of [1, 2] as ComparisonView[]) {
+      const entries = viewType === 1 ? summary.summaryData.view1Breakdown : summary.summaryData.view2Breakdown;
+      const vaccineEntries = (entries ?? []).filter(entry => entry.category !== 'hdc_verdict');
+      const unjoinableEntries = vaccineEntries.filter(entry => !validMetricKey(entry.metric_key)).length;
+      if (unjoinableEntries > 0) {
+        vaccineKeyNotices.push({ fiscalYear, viewType, vaccineEntries: vaccineEntries.length, unjoinableEntries });
+      }
+    }
+  }
 
   // FY chips render whenever the age group's usable years are known — independent of the
   // summary fetch lifecycle, so selection stays interactive while summaries load.
@@ -655,11 +666,11 @@ export const YearComparisonDetail = ({
               ) : null,
             )}
           </div>
-          {vaccineLegacyYears.length > 0 && (
+          {vaccineKeyNotices.length > 0 && (
             <div className="flex flex-col gap-y-1 mb-3">
-              {vaccineLegacyYears.map(fiscalYear => (
-                <p key={fiscalYear} className="text-xs text-amber-700" role="status">
-                  ปี {fiscalYear}: ไม่มีรหัสเชื่อมโยงวัคซีนสำหรับการเปรียบเทียบข้ามปี
+              {vaccineKeyNotices.map(({ fiscalYear, viewType, vaccineEntries, unjoinableEntries }) => (
+                <p key={`${fiscalYear}-${viewType}`} className="text-xs text-amber-700" role="status">
+                  {formatUnjoinableVaccineNotice({ fiscalYear, view: viewType, vaccineEntries, unjoinableEntries })}
                 </p>
               ))}
             </div>

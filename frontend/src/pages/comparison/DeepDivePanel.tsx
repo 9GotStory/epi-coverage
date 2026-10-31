@@ -9,6 +9,7 @@ import {
   buildDeepDiveModel, type DeepDiveKind, type DeepDiveOptions,
   type DeepDivePoint, type DeepDiveSeries,
 } from './deepDiveModel';
+import { formatUnjoinableVaccineNotice } from './unjoinableNotice';
 
 /**
  * The second Comparison card, not another year-level overview.
@@ -241,9 +242,9 @@ export function DeepDivePanel({ summaries, selectedYears, resolveTarget }: DeepD
           ปี {model.missingBreakdownYears.join(', ')}: ไม่มีข้อมูลรายละเอียด{kind === 'facility' ? 'รายหน่วยบริการ' : 'รายวัคซีน'}ในข้อมูลสรุปรุ่นนี้
         </p>
       )}
-      {model.legacyUnjoinableYears.map(fiscalYear => (
+      {model.legacyUnjoinableYears.map(({ fiscalYear, vaccineEntries, unjoinableEntries }) => (
         <p role="status" key={fiscalYear} className="rounded-lg border border-amber-100 bg-amber-50 p-3 text-xs text-amber-800">
-          ปี {fiscalYear}: ไม่มีรหัสเชื่อมโยงวัคซีนสำหรับการเปรียบเทียบข้ามปี
+          {formatUnjoinableVaccineNotice({ fiscalYear, view, vaccineEntries, unjoinableEntries })}
         </p>
       ))}
 

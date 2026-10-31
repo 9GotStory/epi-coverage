@@ -43,6 +43,17 @@ export interface DeepDiveSeries {
   points: DeepDivePoint[];
 }
 
+/** #58 Phase 1 / #97: measured metric_key availability of REAL vaccine entries for one
+ * selected age+view+FY. HDC-verdict buckets (category 'hdc_verdict') are not vaccines —
+ * keyless by design and excluded from both counts. */
+export interface DeepDiveUnjoinableYear {
+  fiscalYear: number;
+  /** vaccine entries stored in this FY's selected-view breakdown */
+  vaccineEntries: number;
+  /** of those, entries lacking a valid stored metric_key (legacy, unjoinable) */
+  unjoinableEntries: number;
+}
+
 export interface DeepDiveModel {
   ageGroup: EpiTargetTable;
   view: ComparisonView;
@@ -51,8 +62,8 @@ export interface DeepDiveModel {
   series: DeepDiveSeries[];
   /** View/kind breakdown field was entirely absent from a stored annual snapshot. */
   missingBreakdownYears: number[];
-  /** Legacy vaccine entries lack the stable metric_key needed for cross-year joins. */
-  legacyUnjoinableYears: number[];
+  /** Selected FYs whose stored breakdown holds vaccine entries without a valid metric_key. */
+  legacyUnjoinableYears: DeepDiveUnjoinableYear[];
 }
 
 export interface DeepDiveOptions {
@@ -148,7 +159,7 @@ export function buildDeepDiveModel({
   const entriesByIdentity = new Map<string, Map<number, EntityEntry>>();
   const displayNameByIdentity = new Map<string, string>();
   const missingBreakdownYears: number[] = [];
-  const legacyUnjoinableYears: number[] = [];
+  const legacyUnjoinableYears: DeepDiveUnjoinableYear[] = [];
 
   const add = (key: string, fiscalYear: number, entry: EntityEntry) => {
     let yearly = entriesByIdentity.get(key);
@@ -186,10 +197,16 @@ export function buildDeepDiveModel({
         missingBreakdownYears.push(fiscalYear);
         continue;
       }
-      let hasUnjoinable = false;
+      // Issue #97 (reader contract B): count only REAL vaccines. An entry marked
+      // category 'hdc_verdict' aggregates an HDC person-verdict — not a vaccine and
+      // keyless by design, so it neither becomes a series nor an unjoinable warning.
+      let vaccineEntries = 0;
+      let unjoinableEntries = 0;
       for (const entry of breakdown) {
+        if (entry.category === 'hdc_verdict') continue;
+        vaccineEntries++;
         if (!validIdentity(entry.metric_key)) {
-          hasUnjoinable = true;
+          unjoinableEntries++;
           continue;
         }
         add(entry.metric_key, fiscalYear, {
@@ -198,7 +215,9 @@ export function buildDeepDiveModel({
           vaccineGroup: entry.vaccine_group,
         });
       }
-      if (hasUnjoinable) legacyUnjoinableYears.push(fiscalYear);
+      if (unjoinableEntries > 0) {
+        legacyUnjoinableYears.push({ fiscalYear, vaccineEntries, unjoinableEntries });
+      }
     }
   }
 

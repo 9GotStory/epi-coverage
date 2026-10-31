@@ -58,6 +58,9 @@ const vent = (metric_key: string, vaccine_group: string, name: string, passed: n
   ({ metric_key, vaccine_group, name, passed, total, coverage });
 const lent = (name: string, passed: number, total: number, coverage: number): VaccineBreakdownEntry =>
   ({ name, passed, total, coverage });
+/** Issue #97 writer contract: HDC-verdict bucket — keyless by design, labelled by the writer. */
+const vbent = (passed: number, total: number): VaccineBreakdownEntry =>
+  ({ name: 'ไม่ผ่านเกณฑ์ HDC (ตรวจสอบรายละเอียดในระบบ)', passed, total, coverage: 0, category: 'hdc_verdict' });
 
 const UPDATED_AT: Record<number, string> = { 2568: '2026-06-01T09:00:00.000Z', 2569: '2026-09-01T10:00:00.000Z', 2570: '2026-09-20T14:30:00.000Z' };
 
@@ -205,7 +208,26 @@ describe('#26 — vaccine cross-year comparison (RED)', () => {
     // Decision E: the legacy entry is unavailable for vaccine-level identity — it may not
     // join the current series NOR surface as its own separate name-based vaccine row.
     expect(series).not.toContain('80.00');
-    expect(bodyText()).toContain('ปี 2568: ไม่มีรหัสเชื่อมโยงวัคซีนสำหรับการเปรียบเทียบข้ามปี');
+    // #58 Phase 1 copy (#97): measured counts for the selected age+view+FY — 1 entry, all unkeyed
+    expect(bodyText()).toContain('ปี 2568 · View 2: ข้อมูลสรุปมีวัคซีน 1 รายการ โดยทุกรายการยังไม่มีรหัสเชื่อมโยงสำหรับการเปรียบเทียบข้ามปี');
+  });
+
+  it('D4b: an HDC-verdict bucket owning no key by design is not a vaccine — never raises the join warning (#97)', async () => {
+    await renderComparison({
+      years: [2569, 2570],
+      byYear: {
+        2569: { v2: [vent('dtp-dose-1', 'DTP', 'DTP เข็ม 1', 80, 100, 80), vbent(1, 23)] },
+        2570: { v2: [vent('dtp-dose-1', 'DTP', 'DTP เข็ม 1', 92, 100, 92), vbent(0, 20)] },
+      },
+    });
+    // Every real vaccine carries a key → no join warning anywhere, and the keyed series joins.
+    expect(bodyText()).not.toContain('ยังไม่มีรหัสเชื่อมโยง');
+    expect(bodyText()).not.toContain('ไม่มีรหัสเชื่อมโยงวัคซีน');
+    const series = joinedText(['DTP เข็ม 1']);
+    expect(series).toContain('80.00');
+    expect(series).toContain('+12.00');
+    // The verdict bucket is not a vaccine series — it never renders as one.
+    expect(bodyText()).not.toContain('ไม่ผ่านเกณฑ์ HDC (ตรวจสอบรายละเอียดในระบบ)');
   });
 
   it('D5: an all-legacy selection renders the vaccine section with an explicit unavailable state — no fabricated rows', async () => {
