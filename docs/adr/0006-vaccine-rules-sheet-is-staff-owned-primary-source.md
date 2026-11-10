@@ -55,3 +55,4 @@ Until each implementation issue lands, the current behavior described in `docs/f
 * `../features.md` §3.1, §3.6
 * `../../CONTEXT.md` §12, §19–§26
 * Issues #100, #101, #102, #103, #104, #105
+* `../research/hdc-je-indicators-and-epi-schedule-2569.md`: MOPH EPI schedule 2569 and HDC JE/LAJE indicator definitions, a reference for staff configuring yearly rules
