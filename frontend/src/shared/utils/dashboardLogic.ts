@@ -161,6 +161,11 @@ export function calcGroupSummary(
           if (view2TargetDetails[vac] === undefined) view2TargetDetails[vac] = 0;
         }
       }
+      // Issue #103: เด็กที่ขาดจริงยังอยู่กลุ่มนี้แม้มีกฎประเมินไม่ได้ — กฎนั้นแสดงที่ total 0 ไม่นับตัวหารรายกฎ
+      for (const vac of v2.notEvaluableVaccines ?? []) {
+        if (view2Details[vac] === undefined) view2Details[vac] = 0;
+        if (view2TargetDetails[vac] === undefined) view2TargetDetails[vac] = 0;
+      }
 
       // Aggregate each group in View 2
       if (v2.passedVaccines) {

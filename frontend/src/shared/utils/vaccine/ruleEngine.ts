@@ -345,14 +345,14 @@ export const evaluateDynamicV2 = (record: EpiRecord, rules: VaccineRule[], evalu
         missingVaccines.push(HDC_VERDICT_BUCKETS.fail);
       }
     }
-  } else if (pendingVaccines.length === 0 && notEvaluableVaccines.length > 0) {
+  } else if (missingVaccines.length === 0 && pendingVaccines.length === 0 && notEvaluableVaccines.length > 0) {
     // ไม่มีคำตัดสิน HDC (ว่าง หรือค่าที่ระบบไม่รู้จัก เช่น '-') + มีกฎที่ประเมินไม่ได้
     // → ตัดสินรายคนไม่ได้ (Option A ระดับรายการ, Issue #89 ข้อ 1)
     // เด็กยังเล็กกว่าอายุเกณฑ์ (pending) คงสถานะ PENDING ตามสัญญา #23 — อายุถึงแล้วคอลัมน์ยังไม่ครบ
-    // จึงกลายเป็น NOT_EVALUABLE ไม่ใช่ขาดวัคซีน เด็กกลุ่มนี้ต้องตามหาไฟล์ใหม่ ไม่ใช่ตามฉีดวัคซีน (ข้อ 4)
+    // จึงกลายเป็น NOT_EVALUABLE เด็กกลุ่มนี้ต้องตามหาไฟล์ใหม่ ไม่ใช่ตามฉีดวัคซีน (ข้อ 4)
+    // Issue #103 (ADR-0006): ถ้ามีเข็มที่ขาดจริงแล้วยังคง FAIL — ตัดสินได้และต้องอยู่ในรายชื่อตามฉีด
     status = 'NOT_EVALUABLE';
     isFullyImmunized = false;
-    missingVaccines.length = 0;
   }
 
   return { isFullyImmunized, status, missingVaccines, pendingVaccines, passedVaccines, notEvaluableVaccines };

@@ -17,6 +17,9 @@
  *     ประเมินไม่ได้: excluded from the View 2 denominator, counted separately
  *     (`view2NotEvaluableCount`), never listed as missing (data-quality follow-up,
  *     not a vaccination chase list).
+ *   - Issue #103 (ADR-0006): except when another rule confirms a missing dose — that
+ *     child stays an applicable failure (chase list); the unevaluable rule is still
+ *     reported per rule at total 0.
  *   - Precedence: HDC verdict > local rules > not evaluable. `result = ผ่าน`
  *     stays PASS; `result = ไม่ผ่าน` stays FAIL; blank result + full columns
  *     keeps today's local evaluation.
@@ -132,6 +135,22 @@ describe('Issue #89 — View 2 denominator with a partial-column file', () => {
     expect(s.view2Passed).toBe(0);
     expect(s.view2Coverage).toBe(0); // ตัวหาร 1 จริง — ไม่ใช่ตัวหาร 0
     expect(s.view2ApplicableTotal + s.view2PendingCount + s.view2NotEvaluableCount).toBe(s.total);
+  });
+
+  it('a confirmed missing dose keeps the child an applicable failure in a partial file (Issue #103)', () => {
+    const s = summarize([
+      child('MISSING-BCG', { bcg_date: '', ...NO_MMR_COLUMNS }),
+      child('BLOCKED', { bcg_date: '2022-01-02', ...NO_MMR_COLUMNS }),
+    ]);
+
+    expect(s.view2ApplicableTotal).toBe(1);
+    expect(s.view2NotEvaluableCount).toBe(1);
+    expect(s.view2ApplicableTotal + s.view2PendingCount + s.view2NotEvaluableCount).toBe(s.total);
+    expect(s.view2Passed).toBe(0);
+    expect(s.facilityBreakdownV2[0]).toMatchObject({ hoscode: '00000', total: 1, passed: 0 });
+    expect(s.view2Breakdown.find(item => item.name === 'BCG 1 เข็ม')).toMatchObject({ passed: 0, total: 1 });
+    // กฎที่ประเมินไม่ได้ไม่เข้าตัวหารรายกฎ แต่ยังแสดงที่ total 0
+    expect(s.view2Breakdown.find(item => item.name === 'MMR เข็ม 1')).toMatchObject({ passed: 0, total: 0 });
   });
 
   it('persists the new field in the JSON contract and keeps it a safe zero for an empty cohort', () => {
