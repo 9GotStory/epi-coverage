@@ -376,9 +376,9 @@ describe('Issue #89 — View 2 source gate (ข้อมูลไม่ครบ
     expect(result.pendingVaccines).toEqual([]);
   });
 
-  it('keeps the child out of chase lists even when another evaluable rule is genuinely missing', () => {
-    // dtp... ใช้ mmr เป็นตัวอย่าง: ไฟล์ยืนยัน bcg_date (เซลล์ว่าง = ขาดจริง) แต่ไม่มีคอลัมน์ mmr1_date
-    // ตัดสินรายคนไม่ได้ (ข้อ 1: "can neither be certified nor declared failed")
+  it('keeps a confirmed missing dose FAIL even when another rule is not evaluable (Issue #103)', () => {
+    // ไฟล์ยืนยัน bcg_date (เซลล์ว่าง = ขาดจริง) แต่ไม่มีคอลัมน์ mmr1_date
+    // ADR-0006: ระบบติดตาม — เข็มที่ขาดจริงตัดสินได้แล้ว เด็กต้องอยู่ในรายชื่อตามฉีด
     const record = child({
       source_columns: JSON.stringify(['birth', 'bcg_date', 'mmr1_date', 'rv21_date', 'rv22_date', 'rv31_date', 'rv32_date', 'rv33_date']),
     });
@@ -388,9 +388,24 @@ describe('Issue #89 — View 2 source gate (ข้อมูลไม่ครบ
       source_columns: JSON.stringify(['birth', 'bcg_date', 'rv21_date', 'rv22_date', 'rv31_date', 'rv32_date', 'rv33_date']),
     });
     const blocked = evaluateDynamicV2(noMmrColumn, rules, evalDate);
-    expect(blocked.status).toBe('NOT_EVALUABLE');
-    expect(blocked.missingVaccines).toEqual([]); // ขาด BCG จริงก็ไม่เข้าลิสต์ตามฉีดจนกว่าจะประเมินได้
+    expect(blocked.status).toBe('FAIL');
+    expect(blocked.isFullyImmunized).toBe(false);
+    expect(blocked.missingVaccines).toContain('BCG 1 เข็ม');
+    // กฎที่ประเมินไม่ได้ยังรายงานแยกเป็นงานคุณภาพข้อมูล
     expect(blocked.notEvaluableVaccines).toEqual(['MMR เข็ม 1']);
+  });
+
+  it('gives the same FAIL whether or not another rule is pending (Issue #103)', () => {
+    // เด็กอายุ 7 เดือน: ขาด BCG จริง, MMR (9 เดือน) ยังไม่ถึงเกณฑ์, ไม่มีคอลัมน์ rv3*
+    const record = child({
+      birth: '2022-06-01',
+      source_columns: JSON.stringify(['birth', 'bcg_date', 'mmr1_date', 'rv21_date', 'rv22_date']),
+    });
+    const result = evaluateDynamicV2(record, rules, new Date('2023-01-01'));
+    expect(result.status).toBe('FAIL');
+    expect(result.missingVaccines).toContain('BCG 1 เข็ม');
+    expect(result.pendingVaccines).toEqual(['MMR เข็ม 1']);
+    expect(result.notEvaluableVaccines).toEqual(['Rota (ครบถ้วนตามเกณฑ์)']);
   });
 
   it('requires BOTH branches of a BRANCH rule (mirror of Issue #78 for View 2)', () => {
@@ -443,8 +458,9 @@ describe('Issue #89 — View 2 source gate (ข้อมูลไม่ครบ
   });
 
   it('treats an unrecognized non-empty result (e.g. "-") as no HDC verdict — NOT_EVALUABLE still applies', () => {
+    // Rota ครบชุด — ไม่มีเข็มที่ขาดจริง (Issue #103) จึงเหลือเฉพาะกฎ MMR ที่ประเมินไม่ได้
     const record = child({
-      bcg_date: '2022-01-01',
+      bcg_date: '2022-01-01', rv21_date: '2022-03-01', rv22_date: '2022-05-01',
       source_columns: JSON.stringify(['birth', 'bcg_date', 'rv21_date', 'rv22_date', 'rv31_date', 'rv32_date', 'rv33_date']),
       result: '-',
     });
