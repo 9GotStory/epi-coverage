@@ -119,7 +119,6 @@ epi-coverage/
 ├── DESIGN.md
 ├── CONTEXT.md
 ├── CLAUDE.md
-├── AGENTS.md
 └── README.md
 ```
 
@@ -324,7 +323,6 @@ EPI Coverage uses explicit documentation ownership to reduce duplicated or confl
 | Why was an architecture chosen?                | `docs/adr/`        |
 | How should the UI look?                        | `DESIGN.md`        |
 | How must coding agents work?                   | `CLAUDE.md`        |
-| How do other coding agents enter the workflow? | `AGENTS.md`        |
 
 Do not duplicate canonical rules into several documents.
 
@@ -352,10 +350,7 @@ See `docs/adr/README.md` for ADR policy and lifecycle.
 
 The repository supports AI-assisted engineering.
 
-Agent entry points:
-
-* `CLAUDE.md` — canonical project-wide agent operating contract
-* `AGENTS.md` — compatibility entry point for coding agents that support `AGENTS.md`
+Agent entry point: `CLAUDE.md`, the single project-wide agent operating contract. The development workflow is in `docs/agents/workflow.md`.
 
 Agents must also follow the canonical domain, architecture, data, design, and ADR documentation applicable to each change.
 
