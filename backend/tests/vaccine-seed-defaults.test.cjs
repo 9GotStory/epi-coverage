@@ -74,3 +74,30 @@ test('explicit seed target_age_months is kept (LAJE/JE 1 ปี = 12, not the co
     assert.equal(rule.target_age_months, 12);
   }
 });
+
+/**
+ * Issue #109 — seed defaults follow the MOPH EPI schedule 2569
+ * (docs/research/hdc-je-indicators-and-epi-schedule-2569.md §3–§4).
+ */
+function rulesContext() {
+  const context = vm.createContext({});
+  vm.runInContext(SHEETTEXT_SOURCE, context);
+  vm.runInContext(RULES_SOURCE, context);
+  return context;
+}
+
+test('LAJE1 (j11_date) default target age is 1 ปี = 12 months, not MMR1\'s 9', () => {
+  const { suggestions } = rulesContext().suggestRuleTargetAges([{ rule_id: 'laje1', required_fields: ['j11_date'] }]);
+  assert.equal(suggestions[0].target_age_months, 12);
+});
+
+test('seed HBV hdc_code follows the HDC 2569 code table (4 เดือน 092/D22/D52, 6 เดือน 043/093/D23/D53, no 044)', () => {
+  const read = seed(2570);
+  const hbv = ['1yr', '2yr', '3yr', '5yr'].flatMap(read).filter(r => r.vaccine_group === 'HBV');
+  const codeOf = field => [...new Set(hbv.filter(r => r.required_fields[0] === field).map(r => r.hdc_code))];
+  assert.deepEqual(codeOf('hbv1_date'), ['041']);
+  assert.deepEqual(codeOf('hbv2_date'), ['042']);
+  assert.deepEqual(codeOf('hbv4_date'), ['092/D22/D52']);
+  assert.deepEqual(codeOf('hbv3_date'), ['043/093/D23/D53']);
+  assert.equal(hbv.filter(r => r.required_fields[0] === 'hbv3_date').length, 5, 'every age/view that seeds HBV 6 เดือน is checked');
+});

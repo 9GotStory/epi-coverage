@@ -30,6 +30,8 @@ interface HdcMetricRuleMapping {
   fields: readonly string[];
   logic: 'ALL' | 'BRANCH';
   branch?: readonly string[];
+  // Codes older seeds wrote for the same field; already-configured years keep them.
+  legacyCodes?: readonly string[];
 }
 
 interface HdcAgeReport {
@@ -55,8 +57,10 @@ export const HDC_AGE_REPORTS: Record<HdcAgeGroup, HdcAgeReport> = {
       pair('hbv2','042','HBV','hbv2_date'),
       // HOSxP age-4mo/age-6mo physical column swap is verified in
       // docs/hdc-column-upgrade.md. These are DOSE labels, not field suffixes.
-      pair('hbv3','043','HBV','hbv4_date'),
-      pair('hbv4','044','HBV','hbv3_date'),
+      // Codes follow the HDC 2569 code table (Issue #109); seeds before it
+      // labelled the same fields 043/044.
+      {...pair('hbv3','092/D22/D52','HBV','hbv4_date'),legacyCodes:['043']},
+      {...pair('hbv4','043/093/D23/D53','HBV','hbv3_date'),legacyCodes:['044']},
       pair('dtp1','031','DTP','dtp1_date'),
       pair('dtp2','032','DTP','dtp2_date'),
       // HDC groups the third DTP-HB dose under dtp_hb3 (not dtp3).
@@ -192,7 +196,8 @@ export function findHdcAgeMetric(
   if(matches.length!==1)return null;
   const rule=matches[0];
   if((rule.metric_key||rule.rule_id)!==item.metric_key)return null;
-  const metric=report.mappings.filter(m=>m.code===rule.hdc_code &&
+  const metric=report.mappings.filter(m=>
+    (m.code===rule.hdc_code || (m.legacyCodes??[]).includes(rule.hdc_code)) &&
     m.vaccineGroup===rule.vaccine_group &&
     m.logic===rule.logic_type &&
     sameStrings(m.fields,rule.required_fields) &&

@@ -39,7 +39,7 @@
 - **แรกเกิด (0-1 เดือน):** BCG แรกเกิด (`bcg_date`), HBV แรกเกิด (`hbv1_date`)
 - **2 เดือน:** DTP 2 เดือน (`dtp1_date`), HBV 2 เดือน (`hbv2_date`), Hib 2 เดือน (`hib1_date`), IPV 2 เดือน (`ipv1_date`), Rota 2 เดือน (`rv21_date` หรือ `rv31_date`), PCV 2 เดือน (`pcv1_date`)
 - **4 เดือน:** DTP 4 เดือน (`dtp2_date`), HBV 4 เดือน (`hbv4_date`), Hib 4 เดือน (`hib2_date`), IPV 4 เดือน (`ipv2_date`), Rota เข็ม 2 (`rv22_date` หรือ `rv32_date`), PCV 4 เดือน (`pcv2_date`)
-- **6 เดือน:** DTP 6 เดือน (`dtp3_date`), HBV 6 เดือน (`hbv3_date`), Hib 6 เดือน (`hib3_date`), OPV 6 เดือน (`opv1_date`), Rota เข็ม 3 (`rv33_date` - ถ้ามี), PCV 6 เดือน (`pcv3_date`)
+- **6 เดือน:** DTP 6 เดือน (`dtp3_date`), HBV 6 เดือน (`hbv3_date`), Hib 6 เดือน (`hib3_date`), OPV 6 เดือน (`opv3_date`, รหัส HDC 083), Rota เข็ม 3 (`rv33_date` - ถ้ามี), PCV 6 เดือน (`pcv3_date`)
 
 *(หมายเหตุ: คอลัมน์ HBV เข็ม 4 และ 6 เดือนสลับกันตามโครงสร้าง HOSxP — `hbv4_date` = เข็ม 4 เดือน, `hbv3_date` = เข็ม 6 เดือน)*
 - **9 เดือน:** MMR 9 เดือน (`mmr1_date`)
@@ -53,7 +53,7 @@
 - **DTP:** 3 ครั้ง (เช็ค `dtp1_date` AND `dtp2_date` AND `dtp3_date` ต้องมีค่าครบทั้ง  3)
 - **Hib:** 3 ครั้ง (เช็ค `hib1_date` AND `hib2_date` AND `hib3_date` ต้องมีค่าครบทั้ง 3)
 - **IPV:** 2 ครั้ง (เช็ค `ipv1_date` AND `ipv2_date`)
-- **OPV:** 3 ครั้ง (เช็ค `opv1_date` (2 ด.), `opv2_date` (4 ด.), และ `opv3_date` (6 ด.) ตามลำดับแบบตรงไปตรงมา)
+- **OPV:** 1 ครั้ง (`opv3_date` — OPV 6 เดือน รหัส HDC 083) ตามสูตร 2 IPV + 3 OPV ที่ใช้ IPV แทน OPV ที่ 2/4 เดือนตั้งแต่ 1 ก.ค. 2566; seed มีกฎ `opv1_date`/`opv2_date` แบบปิดไว้ (`is_active: false`) สำหรับข้อมูลสูตรเดิม (ที่มา: [research §3, §3.1](research/hdc-je-indicators-and-epi-schedule-2569.md))
 - **MMR:** 1 ครั้ง (`mmr1_date`)
 - **Rota:** ครบถ้วนตามเกณฑ์ (มีข้อมูลครบ 2 เข็มใน `rv2` หรือครบ 3 เข็มใน `rv3`)
 *(หากได้รับครบตามรายการด้านบน จะถือว่าผ่านเกณฑ์ Fully Immunized และนำไปคิดเป็นร้อยละความครอบคลุมภาพรวมของ รพ.สต.)*
