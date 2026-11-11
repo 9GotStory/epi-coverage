@@ -20,7 +20,7 @@ export interface GroupSummary {
 
   /** Issue #23: records included in the View 2 coverage denominator for this snapshot (required on every newly generated summary). */
   view2ApplicableTotal: number;
-  /** Issue #23: records excluded from the View 2 denominator by current pending semantics — counted directly (required on every newly generated summary). */
+  /** Issue #23: View 2 Pending records (a Pending Rule and no Confirmed Missing Dose, #119), excluded from the View 2 denominator — counted directly (required on every newly generated summary). */
   view2PendingCount: number;
   /** Issue #89: records excluded from the View 2 denominator because a required V2 rule cannot be
    * evaluated from the source columns (ประเมินไม่ได้) — counted directly (required on every newly generated summary). */
@@ -79,7 +79,7 @@ export function calcGroupSummary(
   let view1TotalDoses = 0;
   let view2Passed = 0;
   let view2ApplicableTotal = 0; // Issue #23: the View 2 coverage denominator, counted directly
-  let view2PendingCount = 0;    // Issue #23: records excluded from that denominator by current pending semantics
+  let view2PendingCount = 0;    // Issue #23/#119: View 2 Pending records, excluded from that denominator
   let view2NotEvaluableCount = 0; // Issue #89: records excluded because a required V2 rule is not evaluable from the source columns
   
   const view1Details: Record<string, number> = {};
@@ -124,12 +124,12 @@ export function calcGroupSummary(
 
     const v2 = evalView2Fn(r);
 
-    // Issue #89: แบ่งกลุ่มต่อ record เป็น 3 ส่วนไม่ซ้ำกัน — pending (อายุยังไม่ถึงเกณฑ์ #23)
-    // → not evaluable (กฎ V2 ที่ไฟล์ยืนยันคอลัมน์ไม่ได้) → applicable (ตัวหาร coverage)
-    // เด็ก pending มีลำดับก่อน: ยังไม่ถึงอายุต้องประเมินอยู่แล้ว คอลัมน์ครบหรือไม่จะพิสูจน์ตอนอายุถึง
-    const v2Pending = !!(v2.pendingVaccines && v2.pendingVaccines.length > 0);
-
-    if (v2Pending) {
+    // Issue #89: แบ่งกลุ่มต่อ record เป็น 3 ส่วนไม่ซ้ำกัน — View 2 Pending (#23) / not evaluable
+    // (กฎ V2 ที่ไฟล์ยืนยันคอลัมน์ไม่ได้) / applicable (ตัวหาร coverage)
+    // Issue #119 (ADR-0006 §5): จัดกลุ่มจาก status ของ engine จุดเดียว — ลำดับ ขาดจริง > pending >
+    // ประเมินไม่ได้ (และคำตัดสิน HDC) ตัดสินใน evaluateDynamicV2 เด็กที่ขาดจริงแม้มีกฎยังไม่ถึงกำหนด
+    // จึงเป็น applicable ไม่ผ่าน ไม่ใช่ pending; status อื่นหรือไม่มี status (evaluator รุ่นเดิม) → applicable
+    if (v2.status === 'PENDING') {
       // Issue #23: count pending records directly in the loop — the loop itself creates the
       // exact partition (no post-loop derivation); the third bucket lives in the branch below.
       view2PendingCount++;

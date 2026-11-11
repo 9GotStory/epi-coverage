@@ -530,6 +530,7 @@ Preferred examples:
 - Vaccine Rule for one configurable evaluation rule
 - Vaccine Rules Engine for the rule subsystem
 - Full-File Sync only for the explicit synchronization behavior
+- View 2 Pending for the record-level not-yet-due state, never bare "pending" (which is an Approval Status)
 
 When a new domain concept appears repeatedly and cannot be expressed clearly using this vocabulary, update `CONTEXT.md` deliberately instead of inventing several competing names in code.
 
@@ -539,10 +540,45 @@ When a new domain concept appears repeatedly and cannot be expressed clearly usi
 
 **View 2 Applicable Total** is the number of Individual EPI Records included in the denominator of a stored View 2 (Fully Immunized) coverage summary for that snapshot.
 
-- Records whose View 2 evaluation is still pending are excluded from the applicable denominator and counted separately (`view2PendingCount`).
-- Records with a required View 2 rule that the source file cannot confirm columns for, and no confirmed missing dose, are "ประเมินไม่ได้" (not evaluable): also excluded and counted separately (`view2NotEvaluableCount`, Issue #89). They are a data-quality follow-up, never a vaccination chase list.
-- A record with a confirmed missing dose stays an applicable failure even when another required View 2 rule is not evaluable (Issue #103).
-- A newly generated summary partitions its cohort exactly into applicable + pending + not evaluable; coverage uses applicable as the denominator.
+- View 2 Pending records (§40) are excluded from the applicable denominator and counted separately (`view2PendingCount`).
+- Records with a required View 2 rule that the source file cannot confirm columns for, and no Confirmed Missing Dose, are "ประเมินไม่ได้" (not evaluable): also excluded and counted separately (`view2NotEvaluableCount`, Issue #89). They are a data-quality follow-up, never a vaccination chase list.
+- A record with a Confirmed Missing Dose (§38) stays an applicable failure even when another required View 2 rule is not evaluable (Issue #103) or is a Pending Rule (§39, Issue #119).
+- A newly generated summary partitions its cohort exactly into applicable + View 2 Pending + not evaluable; coverage uses applicable as the denominator.
 - Historical summary snapshots may predate this persisted contract and lack the fields; they remain valid without them.
 
 This is a summary-aggregation concept. It does not change per-record View 2 display authority (see §12) or the Vaccine Rules Engine (§26).
+
+---
+
+## 38. Confirmed Missing Dose
+
+A **Confirmed Missing Dose** is a Vaccine Rule that a child has not met, where:
+
+- the source file confirms the rule's Required Field columns, and
+- the child has reached the rule's Target Age.
+
+It is a vaccination gap, so the child needs follow-up.
+
+Do not confuse it with:
+
+- a rule that is not evaluable because its columns are absent, which is a data-quality problem;
+- a Pending Rule, which is not due yet;
+- a date-check warning (§23), which is a history-review problem.
+
+---
+
+## 39. Pending Rule
+
+A **Pending Rule** is a Vaccine Rule that a child has not met and whose Target Age the child has not reached yet.
+
+It is a rule-level concept: the dose is not due, so it is neither passed nor missing.
+
+---
+
+## 40. View 2 Pending
+
+**View 2 Pending** is the record-level View 2 state of a child who has at least one Pending Rule and no Confirmed Missing Dose.
+
+A Confirmed Missing Dose takes precedence: a child with both is a View 2 failure, not View 2 Pending.
+
+Use "View 2 Pending", not bare "pending", for this state.
