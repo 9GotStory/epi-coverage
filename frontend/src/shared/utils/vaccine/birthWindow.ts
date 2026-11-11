@@ -1,4 +1,4 @@
-import type { EpiRecord } from '../../types';
+import type { BirthWindowSide, EpiRecord, InapplicableRule } from '../../types';
 import { calendarDay } from './hdcData';
 
 /**
@@ -9,16 +9,6 @@ import { calendarDay } from './hdcData';
 export interface BirthWindow {
   born_on_or_after?: string;
   born_before?: string;
-}
-
-export type BirthWindowSide = 'born_on_or_after' | 'born_before';
-
-/** Inapplicable Rule (CONTEXT.md §42) ของเด็กหนึ่งคน พร้อมด้านของช่วงที่ตัดเด็กออก */
-export interface InapplicableRule {
-  rule_id: string;
-  display_name: string;
-  side: BirthWindowSide;
-  date: string;
 }
 
 export type RuleApplicability =
@@ -62,10 +52,6 @@ export function ruleApplicability(rule: BirthWindow, record: EpiRecord): RuleApp
   if (start && birth < start) return { kind: 'inapplicable', side: 'born_on_or_after', date: start };
   if (end && birth >= end) return { kind: 'inapplicable', side: 'born_before', date: end };
   return { kind: 'applies' };
-}
-
-export function isInapplicableRule(rule: BirthWindow, record: EpiRecord): boolean {
-  return ruleApplicability(rule, record).kind === 'inapplicable';
 }
 
 const THAI_MONTHS = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];

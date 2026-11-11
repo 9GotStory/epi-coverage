@@ -1,5 +1,3 @@
-import type { InapplicableRule } from '../utils/vaccine/birthWindow';
-
 export type UserRole = 'user' | 'admin' | 'superadmin';
 
 export type UserStatus = 'pending' | 'approved' | 'rejected';
@@ -121,4 +119,15 @@ export interface VaccineStatus {
   notEvaluableVaccines?: string[];
   /** Issue #121: กฎ V2 ที่ Birth Window ตัดเด็กออก (Inapplicable Rule) — ไม่นับในผลใด ใช้อธิบายในประวัติเท่านั้น */
   inapplicableRules?: InapplicableRule[];
+}
+
+/** Issue #121: ด้านของ Birth Window — born_on_or_after (เริ่ม รวม) / born_before (สิ้นสุด ไม่รวม) */
+export type BirthWindowSide = 'born_on_or_after' | 'born_before';
+
+/** Inapplicable Rule (CONTEXT.md §42) ของเด็กหนึ่งคน พร้อมด้านของช่วงที่ตัดเด็กออก */
+export interface InapplicableRule {
+  rule_id: string;
+  display_name: string;
+  side: BirthWindowSide;
+  date: string;
 }

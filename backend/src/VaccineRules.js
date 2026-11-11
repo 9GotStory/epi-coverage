@@ -79,10 +79,17 @@ function spreadsheetTimeZoneOnce_() {
   let timeZone;
   return () => timeZone || (timeZone = getSpreadsheet().getSpreadsheetTimeZone());
 }
-// The value to persist for one side: an omitted side keeps the stored cell, null/'' clears it.
-function birthWindowCellForSave_(rule, side, storedValue, timeZoneOf) {
-  if (rule[side] === undefined) return normalizeBirthWindowCell_(storedValue, timeZoneOf);
-  return rule[side] || '';
+// The window to persist, validated: an omitted side keeps the stored cell, null/'' clears it.
+// Throws like validateBirthWindow_; storedRow/headers are the snapshot before any write.
+function resolveBirthWindowForSave_(rule, storedRow, headers, timeZoneOf) {
+  const window = {};
+  for (const side of BIRTH_WINDOW_COLUMNS_) {
+    window[side] = rule[side] === undefined
+      ? normalizeBirthWindowCell_(storedRow[headers.indexOf(side)], timeZoneOf)
+      : rule[side] || '';
+  }
+  validateBirthWindow_(window);
+  return window;
 }
 
 /**
@@ -490,13 +497,10 @@ function saveVaccineRule(rule, adminEmail) {
 
     // Issue #121: a side omitted by an older client keeps its stored value — validate the
     // window as it will be stored, still before any row write
-    const timeZoneOf = spreadsheetTimeZoneOnce_();
-    const storedRow = existingRowIndex > 0 ? data[existingRowIndex - 1] : [];
-    const birthWindow = {};
-    for (const side of BIRTH_WINDOW_COLUMNS_) {
-      birthWindow[side] = birthWindowCellForSave_(rule, side, storedRow[headers.indexOf(side)], timeZoneOf);
-    }
-    try { validateBirthWindow_(birthWindow); } catch (error) { return { success: false, error: error.message }; }
+    let birthWindow;
+    try {
+      birthWindow = resolveBirthWindowForSave_(rule, existingRowIndex > 0 ? data[existingRowIndex - 1] : [], headers, spreadsheetTimeZoneOnce_());
+    } catch (error) { return { success: false, error: error.message }; }
     // every rejection above leaves the sheet untouched; only now append the missing columns
     // (existing column indices are unchanged, so the snapshot rows still line up)
     ensureBirthWindowColumns_(sheet);
@@ -616,12 +620,9 @@ function batchSaveRules(fiscalYear, ageGroup, rules, adminEmail) {
     const resolvedBirthWindows = new Map();
     for (const rule of rules) {
       const storedRow = snapshot.slice(1).find(row => row[idColIndex] === rule.rule_id) || [];
-      const birthWindow = {};
-      for (const side of BIRTH_WINDOW_COLUMNS_) {
-        birthWindow[side] = birthWindowCellForSave_(rule, side, storedRow[snapshotHeaders.indexOf(side)], timeZoneOf);
-      }
-      try { validateBirthWindow_(birthWindow); } catch (error) { return { success: false, error: `rule ${rule.rule_id}: ${error.message}` }; }
-      resolvedBirthWindows.set(rule.rule_id, birthWindow);
+      try {
+        resolvedBirthWindows.set(rule.rule_id, resolveBirthWindowForSave_(rule, storedRow, snapshotHeaders, timeZoneOf));
+      } catch (error) { return { success: false, error: `rule ${rule.rule_id}: ${error.message}` }; }
     }
 
     // every rejection above leaves the sheet untouched; only now append the missing Birth Window

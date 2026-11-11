@@ -4,9 +4,9 @@ import type { VaccineDateChecks } from '../../types/vaccineDateChecks';
 import { dateKey, getRuleDateWarnings } from './dateWarnings';
 import { calendarDay } from './hdcData';
 import { ruleApplicability } from './birthWindow';
-import type { InapplicableRule } from './birthWindow';
+import type { BirthWindow } from './birthWindow';
 import { differenceInMonths, isValid } from 'date-fns';
-import type { EpiRecord, VaccineStatus } from '../../types';
+import type { BirthWindowSide, EpiRecord, InapplicableRule, VaccineStatus } from '../../types';
 export interface View1Evaluation {
   unknownVaccines?: string[];
   unknownRuleNames?: string[];
@@ -32,7 +32,8 @@ export const getAgeInMonths = (birthDateStr: string | Date | undefined, evaluati
   return Math.max(0, months);
 };
 
-export interface VaccineRule {
+/** Issue #121 (ADR-0008): born_on_or_after/born_before จาก BirthWindow — วันปฏิทิน ค.ศ. `yyyy-MM-dd` หรือว่าง (ไม่จำกัด) */
+export interface VaccineRule extends BirthWindow {
   source_aware?: boolean;
   display_only?: boolean;
   unavailable_reason?: string;
@@ -54,11 +55,10 @@ export interface VaccineRule {
   /** Issue #26 (Decision E): forward cross-FY logical identity. Absent/empty on rules
    * that predate the contract — the effective key is then this rule's own rule_id. */
   metric_key?: string;
-  /** Issue #121 (ADR-0008): Birth Window — วันปฏิทิน ค.ศ. `yyyy-MM-dd` หรือว่าง (ไม่จำกัด)
-   * เริ่มรวม (born_on_or_after) สิ้นสุดไม่รวม (born_before) */
-  born_on_or_after?: string;
-  born_before?: string;
 }
+
+const inapplicableEntry = (rule: VaccineRule, excludedBy: { side: BirthWindowSide; date: string }): InapplicableRule =>
+  ({ rule_id: rule.rule_id, display_name: rule.display_name, side: excludedBy.side, date: excludedBy.date });
 
 /**
  * ตรวจวันที่ผิดปกติ: ก่อนวันเกิด หรือตรงวันเกิดทั้งที่ rule ไม่อนุญาต
@@ -206,7 +206,7 @@ export const evaluateDynamicV1 = (record: EpiRecord, rules: VaccineRule[], evalu
     // Issue #121: Birth Window ตัดสินก่อนคอลัมน์ วันที่ และ Target Age — Inapplicable Rule ไม่นับเลย
     const applicability = ruleApplicability(rule, record);
     if (applicability.kind === 'inapplicable') {
-      inapplicableRules.push({ rule_id: rule.rule_id, display_name: rule.display_name, side: applicability.side, date: applicability.date });
+      inapplicableRules.push(inapplicableEntry(rule, applicability));
       continue;
     }
     if (applicability.kind === 'not_evaluable') {
@@ -292,7 +292,7 @@ export const evaluateDynamicV2 = (record: EpiRecord, rules: VaccineRule[], evalu
     // ไม่มีวันเกิดที่ถูกต้อง → ประเมินไม่ได้ (ถัง #89) ลำดับ #103 คงเดิม: ขาดจริงจากกฎอื่นยังเป็น FAIL
     const applicability = ruleApplicability(rule, record);
     if (applicability.kind === 'inapplicable') {
-      inapplicableRules.push({ rule_id: rule.rule_id, display_name: rule.display_name, side: applicability.side, date: applicability.date });
+      inapplicableRules.push(inapplicableEntry(rule, applicability));
       continue;
     }
     if (applicability.kind === 'not_evaluable') {
