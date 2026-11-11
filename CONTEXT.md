@@ -199,11 +199,11 @@ See `docs/features.md` for current behavior.
 
 **View 2** is the individual Fully Immunized reporting view.
 
-For the current implementation, imported HDC `result` is authoritative for the displayed pass/fail result for supported age-group records.
+The configured View 2 Vaccine Rules (§19) are authoritative for each child's View 2 result, both per record and in the summary (Issue #101, ADR-0006).
 
-The application must not silently replace that result by recalculating Fully Immunized status from local vaccine rules unless the canonical business behavior is explicitly changed.
+The imported HDC `result` (§17) is shown alongside as supporting information. It never changes the rule result, and a disagreement between the two is flagged as an HDC Result Mismatch (§43) for staff review.
 
-The historical vaccine criteria documented in the repository remain useful domain/reference material but must not be confused with the current displayed-result authority.
+See `docs/features.md` §3.1 for the precedence between Confirmed Missing Dose, Pending Rule and not evaluable.
 
 ---
 
@@ -211,7 +211,7 @@ The historical vaccine criteria documented in the repository remain useful domai
 
 **Fully Immunized** is the domain concept representing completion of the required immunization criteria for a defined reporting context.
 
-In current View 2 display behavior, the imported HDC result is authoritative.
+In View 2 it is decided by the configured View 2 Vaccine Rules (§12); the imported HDC result is supporting information.
 
 Do not use "Fully Immunized" as a synonym for:
 
@@ -272,7 +272,7 @@ The meaning depends on context.
 
 For aggregate OpenData reporting, it commonly represents the numerator count.
 
-For imported HDC individual data used by current View 2 behavior, `result` can represent the source's Fully Immunized outcome.
+For imported HDC individual data, `result` can represent the source's Fully Immunized outcome. View 2 shows it alongside the rule result and does not use it to decide that result (§12).
 
 Do not assume all fields named `result` have identical representation or granularity.
 
@@ -532,6 +532,7 @@ Preferred examples:
 - Full-File Sync only for the explicit synchronization behavior
 - View 2 Pending for the record-level not-yet-due state, never bare "pending" (which is an Approval Status)
 - Inapplicable Rule for a rule outside the child's Birth Window, never "not applicable" for a rule that is pending or not evaluable
+- HDC Result Mismatch for a disagreement between the rule result and the HDC `result`, never "HDC override"
 
 When a new domain concept appears repeatedly and cannot be expressed clearly using this vocabulary, update `CONTEXT.md` deliberately instead of inventing several competing names in code.
 
@@ -606,3 +607,14 @@ Do not confuse it with:
 
 - a Pending Rule, which will become due as the child grows; an Inapplicable Rule never applies to this child;
 - a not-evaluable rule, which is a data-quality problem. A child whose birth date is unknown cannot be placed against a Birth Window, so the rule is not evaluable for them, not inapplicable.
+
+---
+
+## 43. HDC Result Mismatch
+
+An **HDC Result Mismatch** is a View 2 record where the configured rules and the imported HDC `result` both give a pass/fail verdict and the verdicts disagree (Issue #101). Thai UI wording: "ผลไม่ตรงกับ HDC".
+
+- Rules ไม่ผ่าน and HDC `ผ่าน`, or rules ผ่าน and HDC `ไม่ผ่าน`, is a mismatch.
+- View 2 Pending (§40) and "ประเมินไม่ได้" (not evaluable) are not verdicts, so they are never a mismatch. Neither is a blank or unrecognized `result`.
+
+The flag asks staff to review the record. It does not change the rule result.

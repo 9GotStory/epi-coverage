@@ -141,22 +141,6 @@ const resolveMissingRuleNames = (rule: VaccineRule, currentAgeMonths: number): {
 };
 
 /**
- * Issue #97: bucket คำตัดสิน HDC ที่ engine ปล่อยเข้า missingVaccines — เป็นการรวมคำตัดสิน
- * รายคนของ HDC ไม่ใช่วัคซีน จึงไม่มี metric_key โดยการออกแบบ summary writer ใช้ชื่อจากที่นี่
- * ติดป้าย `category: 'hdc_verdict'` ใน breakdown (writer contract #97) — reader ห้ามเดาจากชื่อ display
- * ถ้ามี bucket คำตัดสินชนิดอื่นในอนาคต (ผ่าน/ประเมินไม่ได้) ให้เพิ่มเข้ามาใน registry นี้เท่านั้น
- */
-export const HDC_VERDICT_BUCKETS = {
-  /** result = ไม่ผ่าน โดยกฎในระบบไม่มีรายการขาด (ลำดับความสำคัญ #89) */
-  fail: 'ไม่ผ่านเกณฑ์ HDC (ตรวจสอบรายละเอียดในระบบ)',
-} as const;
-
-const HDC_VERDICT_BUCKET_NAMES: ReadonlySet<string> = new Set(Object.values(HDC_VERDICT_BUCKETS));
-
-/** ชื่อนี้เป็น bucket คำตัดสิน HDC (ไม่ใช่วัคซีน) หรือไม่ — ใช้ฝั่ง writer เท่านั้น */
-export const isHdcVerdictBucketName = (name: string): boolean => HDC_VERDICT_BUCKET_NAMES.has(name);
-
-/**
  * เตรียม rules ที่ดึงจากฐานข้อมูล (แหล่งเดียวคือ vaccine_rules) ก่อนใช้งาน:
  * - ติดป้าย source_aware (ค่าเริ่มต้น true) เพื่อเปิดการตรวจ
  *   "ไฟล์ไม่มีคอลัมน์ที่จำเป็น → ข้อมูลไม่พอประเมิน" ใน evaluateDynamicV1
@@ -264,6 +248,13 @@ export const evaluateDynamicV1 = (record: EpiRecord, rules: VaccineRule[], evalu
   return { missingVaccines, pendingVaccines, pendingRuleNames, unknownVaccines, unknownRuleNames, passedCount, results, inapplicableRules };
 };
 
+/** คำตัดสินจาก `result` ของ HDC — ค่าว่างหรือค่าที่ระบบไม่รู้จัก (เช่น '-') คือไม่มีคำตัดสิน */
+const readHdcVerdict = (result: unknown): 'PASS' | 'FAIL' | null => {
+  const text = typeof result === 'string' ? result : '';
+  if (text.includes('ไม่ผ่าน')) return 'FAIL';
+  return text.includes('ผ่าน') ? 'PASS' : null;
+};
+
 /**
  * Evaluate Dynamic View 2 (Fully Immunized)
  * Return structure ให้เข้ากันกับ VaccineStatus
@@ -272,9 +263,8 @@ export const evaluateDynamicV1 = (record: EpiRecord, rules: VaccineRule[], evalu
  * เป็น "ประเมินไม่ได้" (notEvaluableVaccines) ไม่นับเป็นขาด — เด็กที่มีกฎลักษณะนี้แม้ข้อเดียว
  * ตัดสินรายคนไม่ได้ (status NOT_EVALUABLE) และออกจากตัวหาร coverage (แบบเดียวกับ pending)
  *
- * ลำดับความสำคัญ (ข้อ 2 จากเจ้าของข้อมูล): คำตัดสิน HDC > กฎในระบบ > ประเมินไม่ได้ —
- * `result = ผ่าน` → PASS (backfill เหมือนเดิม), `result = ไม่ผ่าน` → FAIL (เป็นคำตัดสินของ HDC
- * ไม่ใช่ช่องว่างข้อมูลของเรา), `result` ว่าง + คอลัมน์ไม่พอ → NOT_EVALUABLE, ว่าง + ครบ → กฎในระบบ
+ * Issue #101 (ADR-0006): กฎในระบบตัดสิน status เท่านั้น — `result` ของ HDC คืนเป็น hdcVerdict
+ * ประกอบ พร้อม hdcMismatch เมื่อคำตัดสินสองฝ่ายขัดกัน (CONTEXT.md §43)
  */
 export const evaluateDynamicV2 = (record: EpiRecord, rules: VaccineRule[], evaluationDate: Date = new Date()): VaccineStatus => {
   const missingVaccines: string[] = [];
@@ -288,7 +278,7 @@ export const evaluateDynamicV2 = (record: EpiRecord, rules: VaccineRule[], evalu
   const v2Rules = rules.filter(r => r.view_type === 2 && r.is_active);
 
   for (const rule of v2Rules) {
-    // Issue #121: Inapplicable Rule ไม่เข้ารายการใดเลย จึงไม่ถูก backfill ด้วย HDC `ผ่าน` และไม่อยู่ในตัวหารรายกฎ
+    // Issue #121: Inapplicable Rule ไม่เข้ารายการใดเลย จึงไม่อยู่ในตัวหารรายกฎ
     // ไม่มีวันเกิดที่ถูกต้อง → ประเมินไม่ได้ (ถัง #89) ลำดับ #103 คงเดิม: ขาดจริงจากกฎอื่นยังเป็น FAIL
     const applicability = ruleApplicability(rule, record);
     if (applicability.kind === 'inapplicable') {
@@ -339,54 +329,18 @@ export const evaluateDynamicV2 = (record: EpiRecord, rules: VaccineRule[], evalu
     }
   }
 
-  let status: 'PASS' | 'FAIL' | 'PENDING' | 'NOT_EVALUABLE' = 'PASS';
-  let isFullyImmunized = true;
+  // ลำดับ Confirmed Missing Dose > Pending Rule > ประเมินไม่ได้ (#103, #119) — เด็กยังเล็กกว่าอายุเกณฑ์
+  // คงสถานะ PENDING ตามสัญญา #23 อายุถึงแล้วคอลัมน์ยังไม่ครบจึงเป็น NOT_EVALUABLE (งานตามหาไฟล์ใหม่ #89)
+  const status: 'PASS' | 'FAIL' | 'PENDING' | 'NOT_EVALUABLE' =
+    missingVaccines.length > 0 ? 'FAIL'
+      : pendingVaccines.length > 0 ? 'PENDING'
+        : notEvaluableVaccines.length > 0 ? 'NOT_EVALUABLE'
+          : 'PASS';
 
-  if (missingVaccines.length > 0) {
-    status = 'FAIL';
-    isFullyImmunized = false;
-  } else if (pendingVaccines.length > 0) {
-    status = 'PENDING';
-    isFullyImmunized = false;
-  }
+  // Issue #101 (ADR-0006): ผลจากกฎเป็นหลัก `result` ของ HDC แสดงประกอบเท่านั้น ไม่เปลี่ยน status
+  // ขัดกัน = ทั้งสองฝ่ายตัดสินผ่าน/ไม่ผ่านแล้วไม่ตรงกัน — View 2 Pending/ประเมินไม่ได้ไม่ใช่คำตัดสิน จึงไม่ติดป้าย
+  const hdcVerdict = readHdcVerdict(record.result);
+  const hdcMismatch = (hdcVerdict === 'PASS' && status === 'FAIL') || (hdcVerdict === 'FAIL' && status === 'PASS');
 
-  // Safety Net จาก HDC (Master Source of Truth) - ย้ายมาไว้ด้านล่างเพื่อให้ passedVaccines เก็บรายการย่อยไว้ทำ Breakdown
-  const hdcResult = typeof record.result === 'string' ? record.result : '';
-  const hdcPassed = hdcResult.includes('ผ่าน') && !hdcResult.includes('ไม่ผ่าน');
-  const hdcFailed = !hdcPassed && hdcResult.includes('ไม่ผ่าน');
-
-  if (hdcPassed) {
-    // HDC ถือว่าครบทุกเกณฑ์ → กลุ่มที่ local ยังไม่ผ่าน/ยังไม่ถึงกำหนด/ประเมินไม่ได้ ให้ย้ายเข้า passedVaccines
-    // เพื่อให้ผลรวม Breakdown สอดคล้องกับ headline coverage (ดู calcGroupSummary)
-    for (const v of [...missingVaccines, ...pendingVaccines, ...notEvaluableVaccines]) {
-      if (!passedVaccines.includes(v)) passedVaccines.push(v);
-    }
-    isFullyImmunized = true;
-    status = 'PASS';
-    missingVaccines.length = 0;
-    pendingVaccines.length = 0;
-    notEvaluableVaccines.length = 0;
-  } else if (hdcFailed) {
-    isFullyImmunized = false;
-
-    // If local logic says PENDING, keep it as PENDING (because HDC doesn't have PENDING state in export).
-    // กรณีอื่น (รวม NOT_EVALUABLE) ให้เป็น FAIL — คำตัดสิน "ไม่ผ่าน" ของ HDC เป็นคำตัดสินเชิงบวก
-    // ไม่ใช่ช่องว่างข้อมูลของเรา (Issue #89 ข้อ 2)
-    if (status !== 'PENDING') {
-      status = 'FAIL';
-      if (missingVaccines.length === 0 && pendingVaccines.length === 0) {
-        missingVaccines.push(HDC_VERDICT_BUCKETS.fail);
-      }
-    }
-  } else if (missingVaccines.length === 0 && pendingVaccines.length === 0 && notEvaluableVaccines.length > 0) {
-    // ไม่มีคำตัดสิน HDC (ว่าง หรือค่าที่ระบบไม่รู้จัก เช่น '-') + มีกฎที่ประเมินไม่ได้
-    // → ตัดสินรายคนไม่ได้ (Option A ระดับรายการ, Issue #89 ข้อ 1)
-    // เด็กยังเล็กกว่าอายุเกณฑ์ (pending) คงสถานะ PENDING ตามสัญญา #23 — อายุถึงแล้วคอลัมน์ยังไม่ครบ
-    // จึงกลายเป็น NOT_EVALUABLE เด็กกลุ่มนี้ต้องตามหาไฟล์ใหม่ ไม่ใช่ตามฉีดวัคซีน (ข้อ 4)
-    // Issue #103 (ADR-0006): ถ้ามีเข็มที่ขาดจริงแล้วยังคง FAIL — ตัดสินได้และต้องอยู่ในรายชื่อตามฉีด
-    status = 'NOT_EVALUABLE';
-    isFullyImmunized = false;
-  }
-
-  return { isFullyImmunized, status, missingVaccines, pendingVaccines, passedVaccines, notEvaluableVaccines, inapplicableRules };
+  return { isFullyImmunized: status === 'PASS', status, missingVaccines, pendingVaccines, passedVaccines, notEvaluableVaccines, inapplicableRules, hdcVerdict, hdcMismatch };
 };

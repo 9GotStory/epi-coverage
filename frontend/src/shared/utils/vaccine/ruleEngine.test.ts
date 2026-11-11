@@ -183,22 +183,31 @@ describe('ruleEngine', () => {
       expect(result.pendingRuleNames).toContain('MMR1');
     });
 
-    it('HDC Override - result = "ผ่าน" clears missing and backfills passedVaccines', () => {
-      const overrideRecord = { ...mockRecord, dtp3_date: '-', result: 'ผ่าน' };
-      const result = evaluateDynamicV2(overrideRecord, rules);
-      expect(result.isFullyImmunized).toBe(true);
-      expect(result.status).toBe('PASS');
-      expect(result.missingVaccines).toEqual([]);
-      // กลุ่มที่ local ไม่ผ่านถูกย้ายเข้า passedVaccines เพื่อให้ breakdown รวมเท่า headline
-      expect(result.passedVaccines).toContain('DTP ครบ 3 เข็ม');
+    it('Issue #101: HDC "ผ่าน" does not override a missing dose — FAIL, flagged as a mismatch', () => {
+      const record = { ...mockRecord, dtp3_date: '-', result: 'ผ่าน' };
+      const result = evaluateDynamicV2(record, rules);
+      expect(result.status).toBe('FAIL');
+      expect(result.isFullyImmunized).toBe(false);
+      expect(result.missingVaccines).toEqual(['DTP ครบ 3 เข็ม']);
+      expect(result.passedVaccines).not.toContain('DTP ครบ 3 เข็ม');
+      expect(result.hdcVerdict).toBe('PASS');
+      expect(result.hdcMismatch).toBe(true);
     });
 
-    it('HDC Override - result = "ไม่ผ่าน"', () => {
-      const overrideRecord = { ...mockRecord, result: 'ไม่ผ่าน' };
-      const result = evaluateDynamicV2(overrideRecord, rules);
-      expect(result.isFullyImmunized).toBe(false);
-      expect(result.status).toBe('FAIL');
-      expect(result.missingVaccines).toContain('ไม่ผ่านเกณฑ์ HDC (ตรวจสอบรายละเอียดในระบบ)');
+    it('Issue #101: HDC "ไม่ผ่าน" does not override passing rules — PASS, flagged as a mismatch', () => {
+      const record = { ...mockRecord, result: 'ไม่ผ่าน' };
+      const result = evaluateDynamicV2(record, rules);
+      expect(result.status).toBe('PASS');
+      expect(result.isFullyImmunized).toBe(true);
+      expect(result.missingVaccines).toEqual([]);
+      expect(result.hdcVerdict).toBe('FAIL');
+      expect(result.hdcMismatch).toBe(true);
+    });
+
+    it('Issue #101: no mismatch when HDC and the rules agree', () => {
+      expect(evaluateDynamicV2({ ...mockRecord, result: 'ผ่าน' }, rules)).toMatchObject({ status: 'PASS', hdcVerdict: 'PASS', hdcMismatch: false });
+      expect(evaluateDynamicV2({ ...mockRecord, dtp3_date: '-', result: 'ไม่ผ่าน' }, rules)).toMatchObject({ status: 'FAIL', hdcVerdict: 'FAIL', hdcMismatch: false });
+      expect(evaluateDynamicV2({ ...mockRecord, result: '' }, rules)).toMatchObject({ status: 'PASS', hdcVerdict: null, hdcMismatch: false });
     });
   });
 });
@@ -431,30 +440,32 @@ describe('Issue #89 — View 2 source gate (ข้อมูลไม่ครบ
     expect(incomplete.missingVaccines).toEqual(expect.arrayContaining(['MMR เข็ม 1', 'Rota (ครบถ้วนตามเกณฑ์)']));
   });
 
-  it('HDC "ผ่าน" still wins over the source gate — PASS with the blocked rule backfilled (ข้อ 2)', () => {
+  it('Issue #101: HDC "ผ่าน" does not resolve a not-evaluable rule — NOT_EVALUABLE, no mismatch flag', () => {
     const record = child({
-      bcg_date: '2022-01-01',
+      bcg_date: '2022-01-01', rv21_date: '2022-03-01', rv22_date: '2022-05-01',
       source_columns: JSON.stringify(['birth', 'bcg_date', 'rv21_date', 'rv22_date', 'rv31_date', 'rv32_date', 'rv33_date']),
       result: 'ผ่าน',
     });
     const result = evaluateDynamicV2(record, rules, evalDate);
-    expect(result.status).toBe('PASS');
-    expect(result.isFullyImmunized).toBe(true);
-    expect(result.notEvaluableVaccines).toEqual([]);
-    // กฎที่ประเมินไม่ได้ถูกย้ายเข้า passedVaccines ให้ breakdown สอดคล้องกับ headline (เหมือน backfill เดิม)
-    expect(result.passedVaccines).toContain('MMR เข็ม 1');
+    expect(result.status).toBe('NOT_EVALUABLE');
+    expect(result.isFullyImmunized).toBe(false);
+    expect(result.notEvaluableVaccines).toEqual(['MMR เข็ม 1']);
+    expect(result.passedVaccines).not.toContain('MMR เข็ม 1');
+    expect(result.hdcVerdict).toBe('PASS');
+    expect(result.hdcMismatch).toBe(false);
   });
 
-  it('HDC "ไม่ผ่าน" stays FAIL even when some rules are not evaluable (ข้อ 2)', () => {
+  it('Issue #101: HDC "ไม่ผ่าน" does not turn a not-evaluable child into FAIL — no verdict bucket, no mismatch flag', () => {
     const record = child({
       bcg_date: '2022-01-01', mmr1_date: '2022-10-01',
       source_columns: JSON.stringify(['birth', 'bcg_date', 'mmr1_date']), // ไม่มี rv* เลย
       result: 'ไม่ผ่าน',
     });
     const result = evaluateDynamicV2(record, rules, evalDate);
-    expect(result.status).toBe('FAIL');
-    expect(result.isFullyImmunized).toBe(false);
-    expect(result.missingVaccines).toContain('ไม่ผ่านเกณฑ์ HDC (ตรวจสอบรายละเอียดในระบบ)');
+    expect(result.status).toBe('NOT_EVALUABLE');
+    expect(result.missingVaccines).toEqual([]);
+    expect(result.hdcVerdict).toBe('FAIL');
+    expect(result.hdcMismatch).toBe(false);
   });
 
   it('treats an unrecognized non-empty result (e.g. "-") as no HDC verdict — NOT_EVALUABLE still applies', () => {
@@ -533,7 +544,8 @@ describe('date configuration drives evaluation', () => {
     expect(evaluateDynamicV1(record, [rule]).results.HBV).toBe(true);
     const configured = { ...rule, date_checks: { ...rule.date_checks!, same_day_pairs: [{ field: 'hbv1_date', other_field: 'dtp1_date' }] } };
     expect(evaluateDynamicV1(record, [configured]).results.HBV).toBe(false);
-    expect(evaluateDynamicV2({ ...record, result: 'ผ่าน' }, [{ ...configured, view_type: 2 }]).status).toBe('PASS');
+    // Issue #101: กฎวันที่ตัดสิน View 2 — `result` ของ HDC ยังคงแสดงประกอบตามเดิม ไม่ถูกแก้
+    expect(evaluateDynamicV2({ ...record, result: 'ผ่าน' }, [{ ...configured, view_type: 2 }])).toMatchObject({ status: 'FAIL', hdcVerdict: 'PASS' });
   });
   it('does not compare Rota alternatives as if they were separate doses', () => {
     const rota = { ...rule, vaccine_group: 'Rota', display_name: 'Rota เข็ม 1', required_fields: ['rv21_date'], branch_alt_fields: ['rv31_date'], logic_type: 'BRANCH' as const, date_checks: undefined };

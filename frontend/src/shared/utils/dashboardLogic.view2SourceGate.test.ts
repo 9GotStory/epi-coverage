@@ -20,9 +20,8 @@
  *   - Issue #103 (ADR-0006): except when another rule confirms a missing dose — that
  *     child stays an applicable failure (chase list); the unevaluable rule is still
  *     reported per rule at total 0.
- *   - Precedence: HDC verdict > local rules > not evaluable. `result = ผ่าน`
- *     stays PASS; `result = ไม่ผ่าน` stays FAIL; blank result + full columns
- *     keeps today's local evaluation.
+ *   - Issue #101 (ADR-0006): local rules decide; the HDC `result` is shown alongside
+ *     and never moves a child between applicable / pending / not evaluable.
  *   - Exact partition: applicable + pending + notEvaluable === total.
  *
  * All fixtures are synthetic. No real health data, CID, identifiers, or secrets.
@@ -104,7 +103,7 @@ describe('Issue #89 — View 2 denominator with a partial-column file', () => {
     expect(mmr).toMatchObject({ passed: 1, total: 2, coverage: 50 });
   });
 
-  it('mixed cohort: honest denominator counts only decidable children (ผ่าน override included)', () => {
+  it('mixed cohort: honest denominator counts only decidable children, whatever HDC says (Issue #101)', () => {
     // เด็ก 4 คน: 2 คนไฟล์ครบ (1 ผ่าน 1 ขาดจริง), 1 คนไฟล์ไม่ครบแต่ HDC ตัดสิน ผ่าน, 1 คนไฟล์ไม่ครบและ result ว่าง
     const s = summarize([
       child('LOCAL-PASS', { bcg_date: '2022-01-02', mmr1_date: '2022-10-05', ...FULL_COLUMNS }),
@@ -113,27 +112,25 @@ describe('Issue #89 — View 2 denominator with a partial-column file', () => {
       child('BLOCKED', { bcg_date: '2022-01-02', ...NO_MMR_COLUMNS }),
     ]);
 
-    // ตัวหาร = 3 (LOCAL-PASS, LOCAL-FAIL, HDC-PASS) — เด็ก BLOCKED ออกและถูกนับแยก
-    expect(s.view2ApplicableTotal).toBe(3);
+    // ตัวหาร = 2 (LOCAL-PASS, LOCAL-FAIL) — HDC-PASS และ BLOCKED ประเมินไม่ได้ตามกฎ นับแยก
+    expect(s.view2ApplicableTotal).toBe(2);
     expect(s.view2PendingCount).toBe(0);
-    expect(s.view2NotEvaluableCount).toBe(1);
+    expect(s.view2NotEvaluableCount).toBe(2);
     expect(s.view2ApplicableTotal + s.view2PendingCount + s.view2NotEvaluableCount).toBe(s.total);
-    expect(s.view2Passed).toBe(2); // LOCAL-PASS + HDC override
-    expect(s.view2Coverage).toBeCloseTo((2 / 3) * 100, 5);
-    // HDC ผ่านยังชนะประตูคอลัมน์ (ข้อ 2) — กฎที่ block ถูก backfill เข้า passed ให้ breakdown สอดคล้อง headline
+    expect(s.view2Passed).toBe(1);
+    expect(s.view2Coverage).toBe(50);
     const mmr = s.view2Breakdown.find(item => item.name === 'MMR เข็ม 1');
-    expect(mmr).toMatchObject({ passed: 2, total: 3 });
+    expect(mmr).toMatchObject({ passed: 1, total: 2 });
   });
 
-  it('HDC "ไม่ผ่าน" children stay applicable failures even from a partial file', () => {
+  it('HDC "ไม่ผ่าน" does not make a partial-file child an applicable failure (Issue #101)', () => {
     const s = summarize([
       child('HDC-FAIL', { bcg_date: '2022-01-02', result: 'ไม่ผ่าน', ...NO_MMR_COLUMNS }),
     ]);
 
-    expect(s.view2NotEvaluableCount).toBe(0);
-    expect(s.view2ApplicableTotal).toBe(1);
+    expect(s.view2NotEvaluableCount).toBe(1);
+    expect(s.view2ApplicableTotal).toBe(0);
     expect(s.view2Passed).toBe(0);
-    expect(s.view2Coverage).toBe(0); // ตัวหาร 1 จริง — ไม่ใช่ตัวหาร 0
     expect(s.view2ApplicableTotal + s.view2PendingCount + s.view2NotEvaluableCount).toBe(s.total);
   });
 

@@ -124,14 +124,15 @@ describe('Issue #119 — Confirmed Missing Dose over Pending Rule in the View 2 
     expect(s.view2ApplicableTotal).toBe(0);
   });
 
-  it('lets HDC "ผ่าน" still move a missing-plus-pending child into applicable passed (unchanged until #101)', () => {
+  it('counts a missing-plus-pending child under HDC "ผ่าน" as an applicable failure (Issue #101)', () => {
     const s = summarize([child('HDC-PASS', YOUNG_BIRTH, { bcg_date: '', mmr1_date: '', result: 'ผ่าน' })]);
 
     expect(s.view2ApplicableTotal).toBe(1);
     expect(s.view2PendingCount).toBe(0);
-    expect(s.view2Passed).toBe(1);
-    // ข้อยกเว้นเดิม: HDC ผ่าน backfill Pending Rule เข้ากลุ่มผ่าน จึงเข้าตัวหารรายกฎ
-    expect(breakdown(s, 'MMR เข็ม 1')).toMatchObject({ passed: 1, total: 1 });
+    expect(s.view2Passed).toBe(0);
+    expect(breakdown(s, 'BCG 1 เข็ม')).toMatchObject({ passed: 0, total: 1 });
+    // Pending Rule ไม่ถูก backfill เข้ากลุ่มผ่านอีกต่อไป จึงไม่เข้าตัวหารรายกฎ
+    expect(breakdown(s, 'MMR เข็ม 1')).toBeUndefined();
   });
 
   it('counts a child with a Confirmed Missing Dose and a Pending Rule under HDC "ไม่ผ่าน" as an applicable failure', () => {
@@ -162,11 +163,11 @@ describe('Issue #119 — Confirmed Missing Dose over Pending Rule in the View 2 
     expect(s.view2ApplicableTotal).toBe(5);
     expect(s.view2PendingCount).toBe(2);
     expect(s.view2NotEvaluableCount).toBe(1);
-    expect(s.view2Passed).toBe(2); // HDC-PASS + OLDER-COMPLETE
-    expect(s.view2Coverage).toBe(40);
+    expect(s.view2Passed).toBe(1); // OLDER-COMPLETE เท่านั้น — HDC-PASS ขาด BCG ตามกฎ (Issue #101)
+    expect(s.view2Coverage).toBe(20);
     expect(s.view2ApplicableTotal + s.view2PendingCount + s.view2NotEvaluableCount).toBe(s.total);
     expect(s.view2Passed).toBeLessThanOrEqual(s.view2ApplicableTotal);
     expect(s.view2ApplicableTotal).toBeLessThanOrEqual(s.total);
-    expect(s.facilityBreakdownV2[0]).toMatchObject({ hoscode: '00000', total: 5, passed: 2 });
+    expect(s.facilityBreakdownV2[0]).toMatchObject({ hoscode: '00000', total: 5, passed: 1 });
   });
 });

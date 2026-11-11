@@ -122,10 +122,11 @@ describe('Issue #121 — Birth Window in the shared rule engine and the summary'
     expect(v2Entry(s, 'IPV เข็ม 1')).toMatchObject({ passed: 0, total: 0 });
   });
 
-  it('does not backfill an Inapplicable Rule into passed on HDC "ผ่าน"', () => {
+  it('keeps an Inapplicable Rule out of every list under HDC "ผ่าน" (Issue #101: no backfill)', () => {
     const v2 = evalV2(child('PRE-HDC-PASS', PRE_SWITCH, { result: 'ผ่าน' }));
-    expect(v2.status).toBe('PASS');
-    expect(v2.passedVaccines).toEqual(['BCG 1 เข็ม', 'โปลิโอ เข็ม 1 (สูตรเดิม)', 'โปลิโอ เข็ม 2 (สูตรเดิม)']);
+    expect(v2.status).toBe('FAIL');
+    expect(v2.passedVaccines).toEqual([]);
+    expect(v2.missingVaccines).toEqual(['BCG 1 เข็ม', 'โปลิโอ เข็ม 1 (สูตรเดิม)', 'โปลิโอ เข็ม 2 (สูตรเดิม)']);
 
     const s = summarize([child('PRE-HDC-PASS', PRE_SWITCH, { result: 'ผ่าน' })]);
     expect(v2Entry(s, 'IPV เข็ม 1')).toBeUndefined();
