@@ -119,6 +119,23 @@ describe('mapping source is vaccine_rules and is evidence-gated',()=>{
     expect(findHdcAgeMetric(item(third),[{...third,required_fields:['hbv3_date']}],2569,'1yr')).toBeNull();
   });
 
+  it.each([
+    ['HDC 2569 code table (Issue #109)','092/D22/D52','043/093/D23/D53'],
+    ['legacy seed codes in already-configured years','043','044'],
+  ])('maps HBV 4/6-month rules labelled with the %s',(_,fourMonth,sixMonth)=>{
+    const third=rule('1yr','hbv3',{hdc_code:fourMonth});
+    const fourth=rule('1yr','hbv4',{hdc_code:sixMonth});
+    expect(findHdcAgeMetric(item(third),[third],2569,'1yr')).toBe('hbv3');
+    expect(findHdcAgeMetric(item(fourth),[fourth],2569,'1yr')).toBe('hbv4');
+  });
+
+  it('does not map an HBV code onto the other dose\'s field',()=>{
+    const third=rule('1yr','hbv3',{hdc_code:'043/093/D23/D53'});
+    const fourth=rule('1yr','hbv4',{hdc_code:'092/D22/D52'});
+    expect(findHdcAgeMetric(item(third),[third],2569,'1yr')).toBeNull();
+    expect(findHdcAgeMetric(item(fourth),[fourth],2569,'1yr')).toBeNull();
+  });
+
   it('matches single active rule by fiscal year, age, code, group, branch, and persisted metric key',()=>{
     const r=rule('2yr','je2');
     expect(findHdcAgeMetric(item(r),[r],2569,'2yr')).toBe('je2');

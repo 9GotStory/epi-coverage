@@ -35,7 +35,7 @@
 | `dtp1_date` ... `dtp3_date` | Date | วันที่ฉีด DTP 1-3 |
 | `hib1_date` ... `hib3_date` | Date | วันที่ฉีด Hib 1-3 |
 | `ipv1_date`, `ipv2_date` | Date | วันที่ฉีด IPV 1-2 |
-| `opv1_date` ... `opv3_date` | Date | วันที่หยอด OPV ต้นทาง; mapping OPV 6 เดือนยังรอยืนยัน ดูเอกสาร upgrade |
+| `opv1_date` ... `opv3_date` | Date | วันที่หยอด OPV ต้นทาง; OPV 6 เดือน (รหัส HDC 083) = `opv3_date` ส่วน `opv1_date`/`opv2_date` เป็นของสูตรเดิม (2/4 เดือน) ดู [research §3.1](research/hdc-je-indicators-and-epi-schedule-2569.md) |
 | `mmr1_date` | Date | วันที่ฉีด MMR 1 |
 | `rv21_date` ... `rv33_date` | Date | วันที่ฉีด Rota (`rv21, rv22` = ชนิด 2 เข็ม หรือ `rv31, rv32, rv33` = ชนิด 3 เข็ม) |
 | `pcv1_date` ... `pcv3_date` | Date | วันที่ฉีด PCV 1-3 |

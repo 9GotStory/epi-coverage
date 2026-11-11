@@ -82,9 +82,9 @@ var TARGET_AGE_MONTHS_BY_FIELD = {
   // แรกเกิด (0 เดือน)
   bcg_date: 0, hbv1_date: 0,
   // 2 เดือน
-  // หมายเหตุ OPV: ปฏิทิน 2569 ให้ IPV ที่ 2, 4 เดือน และ OPV เพียงเข็มเดียวที่ 6 เดือน
-  // opv1/opv2 เหมาะกับรุ่นเก่า (หยอด 2/4/6 เดือน) — รอยืนยันรหัส HDC ของโดส 6 เดือนรุ่นใหม่ (081 หรือ 083)
-  // ก่อนปรับ rules ของปีงบประมาณที่เด็กเกิดตามปฏิทินใหม่ (ตัดสินใจ ส.ค. 2569: รอตรวจสอบกับ HDC/สสอ.)
+  // หมายเหตุ OPV: ตั้งแต่ 1 ก.ค. 2566 ให้ IPV ที่ 2, 4 เดือน และ OPV เข็มแรกที่ 6 เดือน (สูตร 2 IPV + 3 OPV)
+  // opv1/opv2 เป็นของสูตรเดิม (หยอด 2/4/6 เดือน) — OPV 6 เดือนยืนยันแล้วว่ารหัส HDC 083 → opv3_date
+  // (docs/research/hdc-je-indicators-and-epi-schedule-2569.md §3.1)
   hbv2_date: 2, dtp1_date: 2, opv1_date: 2, ipv1_date: 2, hib1_date: 2,
   rv21_date: 2, rv31_date: 2, pcv1_date: 2,
   // 4 เดือน
@@ -95,9 +95,13 @@ var TARGET_AGE_MONTHS_BY_FIELD = {
   // 6 เดือน
   hbv3_date: 6, dtp3_date: 6, opv3_date: 6, hib3_date: 6,
   rv33_date: 6, pcv3_date: 6,
-  // 9 เดือน (ขอบล่างของช่วงแนะนำ 9-12 เดือน — สอดคล้องกับ MMR1)
-  mmr1_date: 9, j11_date: 9,
-  // 12-13 เดือน
+  // 9 เดือน
+  mmr1_date: 9,
+  // 1 ปี (12 เดือน) — LAJE1 ตามกำหนดการ 2569 (docs/research/hdc-je-indicators-and-epi-schedule-2569.md §3)
+  j11_date: 12,
+  // JE เชื้อตาย: ยังไม่ยืนยันอายุรายเข็ม — กำหนดการ 2569 ไม่มี JE เชื้อตาย และแหล่งปฐมภูมิระบุเพียงว่า
+  // 051+052 อยู่ใต้ "LAJE/JE 1 ปี" โดย 052 ห่างจาก 051 อย่างน้อย 7 วัน (research §3, §4 ข้อ 2)
+  // 13 เดือนของ je2 เป็นค่าตั้งต้นของ repo เพื่อเรียง je1 ก่อน je2 ใน date_checks
   je1_date: 12, je2_date: 13,
   // 1 ปีครึ่ง (18 เดือน)
   dtp4_date: 18, opv4_date: 18, mmr2_date: 18,
@@ -723,10 +727,11 @@ function seedVaccineRulesLocked_(fiscalYear, adminEmail, force) {
     { age_group: '1yr', view_type: 1, vaccine_group: 'BCG', display_name: 'BCG', hdc_code: '010', required_fields: ['bcg_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 0 },
     
     // ── HBV (เรียงตามอายุ แต่สลับฟิลด์ตามโครงสร้าง HOSxP) ──
+    // hdc_code ตามตารางรหัส template HDC 2569 (docs/research/hdc-je-indicators-and-epi-schedule-2569.md §3)
     { age_group: '1yr', view_type: 1, vaccine_group: 'HBV', display_name: 'HBV เข็ม 1 (0 เดือน)', hdc_code: '041', required_fields: ['hbv1_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 0 },
     { age_group: '1yr', view_type: 1, vaccine_group: 'HBV', display_name: 'HBV เข็ม 2 (2 เดือน)', hdc_code: '042', required_fields: ['hbv2_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 2 },
-    { age_group: '1yr', view_type: 1, vaccine_group: 'HBV', display_name: 'HBV เข็ม 3 (4 เดือน)', hdc_code: '043', required_fields: ['hbv4_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 4 },
-    { age_group: '1yr', view_type: 1, vaccine_group: 'HBV', display_name: 'HBV เข็ม 4 (6 เดือน)', hdc_code: '044', required_fields: ['hbv3_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 6 },
+    { age_group: '1yr', view_type: 1, vaccine_group: 'HBV', display_name: 'HBV เข็ม 3 (4 เดือน)', hdc_code: '092/D22/D52', required_fields: ['hbv4_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 4 },
+    { age_group: '1yr', view_type: 1, vaccine_group: 'HBV', display_name: 'HBV เข็ม 4 (6 เดือน)', hdc_code: '043/093/D23/D53', required_fields: ['hbv3_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 6 },
     
     // ── DTP ──
     { age_group: '1yr', view_type: 1, vaccine_group: 'DTP', display_name: 'DTP เข็ม 1', hdc_code: '031', required_fields: ['dtp1_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 2 },
@@ -764,8 +769,8 @@ function seedVaccineRulesLocked_(fiscalYear, adminEmail, force) {
     // ── HBV (เรียงตามอายุ แต่สลับฟิลด์ตามโครงสร้าง HOSxP) ──
     { age_group: '1yr', view_type: 2, vaccine_group: 'HBV', display_name: 'HBV เข็ม 1 (0 เดือน)', hdc_code: '041', required_fields: ['hbv1_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 0 },
     { age_group: '1yr', view_type: 2, vaccine_group: 'HBV', display_name: 'HBV เข็ม 2 (2 เดือน)', hdc_code: '042', required_fields: ['hbv2_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 2 },
-    { age_group: '1yr', view_type: 2, vaccine_group: 'HBV', display_name: 'HBV เข็ม 3 (4 เดือน)', hdc_code: '043', required_fields: ['hbv4_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 4 },
-    { age_group: '1yr', view_type: 2, vaccine_group: 'HBV', display_name: 'HBV เข็ม 4 (6 เดือน)', hdc_code: '044', required_fields: ['hbv3_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 6 },
+    { age_group: '1yr', view_type: 2, vaccine_group: 'HBV', display_name: 'HBV เข็ม 3 (4 เดือน)', hdc_code: '092/D22/D52', required_fields: ['hbv4_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 4 },
+    { age_group: '1yr', view_type: 2, vaccine_group: 'HBV', display_name: 'HBV เข็ม 4 (6 เดือน)', hdc_code: '043/093/D23/D53', required_fields: ['hbv3_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 6 },
     { age_group: '1yr', view_type: 2, vaccine_group: 'DTP', display_name: 'DTP เข็ม 1', hdc_code: '031', required_fields: ['dtp1_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 2 },
     { age_group: '1yr', view_type: 2, vaccine_group: 'DTP', display_name: 'DTP เข็ม 2', hdc_code: '032', required_fields: ['dtp2_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 4 },
     { age_group: '1yr', view_type: 2, vaccine_group: 'DTP', display_name: 'DTP เข็ม 3', hdc_code: '033', required_fields: ['dtp3_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 6 },
@@ -802,8 +807,8 @@ function seedVaccineRulesLocked_(fiscalYear, adminEmail, force) {
     // ── HBV (เรียงตามอายุ แต่สลับฟิลด์ตามโครงสร้าง HOSxP) ──
     { age_group: '2yr', view_type: 2, vaccine_group: 'HBV', display_name: 'HBV เข็ม 1 (0 เดือน)', hdc_code: '041', required_fields: ['hbv1_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 0 },
     { age_group: '2yr', view_type: 2, vaccine_group: 'HBV', display_name: 'HBV เข็ม 2 (2 เดือน)', hdc_code: '042', required_fields: ['hbv2_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 2 },
-    { age_group: '2yr', view_type: 2, vaccine_group: 'HBV', display_name: 'HBV เข็ม 3 (4 เดือน)', hdc_code: '043', required_fields: ['hbv4_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 4 },
-    { age_group: '2yr', view_type: 2, vaccine_group: 'HBV', display_name: 'HBV เข็ม 4 (6 เดือน)', hdc_code: '044', required_fields: ['hbv3_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 6 },
+    { age_group: '2yr', view_type: 2, vaccine_group: 'HBV', display_name: 'HBV เข็ม 3 (4 เดือน)', hdc_code: '092/D22/D52', required_fields: ['hbv4_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 4 },
+    { age_group: '2yr', view_type: 2, vaccine_group: 'HBV', display_name: 'HBV เข็ม 4 (6 เดือน)', hdc_code: '043/093/D23/D53', required_fields: ['hbv3_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 6 },
 
     // ── DTP (เช็ค 4 เข็ม: 2, 4, 6, 18 เดือน) ──
     { age_group: '2yr', view_type: 2, vaccine_group: 'DTP', display_name: 'DTP เข็ม 1', hdc_code: '031', required_fields: ['dtp1_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 2 },
@@ -848,8 +853,8 @@ function seedVaccineRulesLocked_(fiscalYear, adminEmail, force) {
     // ── HBV (เรียงตามอายุ แต่สลับฟิลด์ตามโครงสร้าง HOSxP) ──
     { age_group: '3yr', view_type: 2, vaccine_group: 'HBV', display_name: 'HBV เข็ม 1 (0 เดือน)', hdc_code: '041', required_fields: ['hbv1_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 0 },
     { age_group: '3yr', view_type: 2, vaccine_group: 'HBV', display_name: 'HBV เข็ม 2 (2 เดือน)', hdc_code: '042', required_fields: ['hbv2_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 2 },
-    { age_group: '3yr', view_type: 2, vaccine_group: 'HBV', display_name: 'HBV เข็ม 3 (4 เดือน)', hdc_code: '043', required_fields: ['hbv4_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 4 },
-    { age_group: '3yr', view_type: 2, vaccine_group: 'HBV', display_name: 'HBV เข็ม 4 (6 เดือน)', hdc_code: '044', required_fields: ['hbv3_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 6 },
+    { age_group: '3yr', view_type: 2, vaccine_group: 'HBV', display_name: 'HBV เข็ม 3 (4 เดือน)', hdc_code: '092/D22/D52', required_fields: ['hbv4_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 4 },
+    { age_group: '3yr', view_type: 2, vaccine_group: 'HBV', display_name: 'HBV เข็ม 4 (6 เดือน)', hdc_code: '043/093/D23/D53', required_fields: ['hbv3_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 6 },
 
     // ── DTP (เช็ค 4 เข็ม) ──
     { age_group: '3yr', view_type: 2, vaccine_group: 'DTP', display_name: 'DTP เข็ม 1', hdc_code: '031', required_fields: ['dtp1_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 2 },
@@ -894,8 +899,8 @@ function seedVaccineRulesLocked_(fiscalYear, adminEmail, force) {
     // ── HBV (เรียงตามอายุ แต่สลับฟิลด์ตามโครงสร้าง HOSxP) ──
     { age_group: '5yr', view_type: 2, vaccine_group: 'HBV', display_name: 'HBV เข็ม 1 (0 เดือน)', hdc_code: '041', required_fields: ['hbv1_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 0 },
     { age_group: '5yr', view_type: 2, vaccine_group: 'HBV', display_name: 'HBV เข็ม 2 (2 เดือน)', hdc_code: '042', required_fields: ['hbv2_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 2 },
-    { age_group: '5yr', view_type: 2, vaccine_group: 'HBV', display_name: 'HBV เข็ม 3 (4 เดือน)', hdc_code: '043', required_fields: ['hbv4_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 4 },
-    { age_group: '5yr', view_type: 2, vaccine_group: 'HBV', display_name: 'HBV เข็ม 4 (6 เดือน)', hdc_code: '044', required_fields: ['hbv3_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 6 },
+    { age_group: '5yr', view_type: 2, vaccine_group: 'HBV', display_name: 'HBV เข็ม 3 (4 เดือน)', hdc_code: '092/D22/D52', required_fields: ['hbv4_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 4 },
+    { age_group: '5yr', view_type: 2, vaccine_group: 'HBV', display_name: 'HBV เข็ม 4 (6 เดือน)', hdc_code: '043/093/D23/D53', required_fields: ['hbv3_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 6 },
 
     // ── DTP (เช็ค 5 เข็ม: 2, 4, 6, 18 เดือน, 4 ปี) ──
     { age_group: '5yr', view_type: 2, vaccine_group: 'DTP', display_name: 'DTP เข็ม 1', hdc_code: '031', required_fields: ['dtp1_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 2 },
