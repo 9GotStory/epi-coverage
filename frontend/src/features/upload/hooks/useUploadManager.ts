@@ -1,5 +1,5 @@
 import type { EpiAge } from '../../../shared/types/hdc';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { parseHdcFile } from '../utils/parseHdcFile';
 import { v4 as uuidv4 } from 'uuid';
@@ -19,7 +19,30 @@ async function saveSummary(payload: Record<string, unknown>) {
 }
 
 export type TargetTable = 'Epi_1_Year' | 'Epi_2_Year' | 'Epi_3_Year' | 'Epi_5_Year';
-export type UploadStatus = 'idle' | 'parsing' | 'uploading' | 'cleaning' | 'generating_summary' | 'success' | 'error';
+export type UploadStatus = 'idle' | 'parsing' | 'preflighting' | 'confirming' | 'uploading' | 'cleaning' | 'generating_summary' | 'success' | 'error';
+
+/** Issue #111: server-side preview of an import — counts and facility codes only, never identities. */
+export interface ImportPreflight {
+  batchId: string;
+  targetTable: TargetTable;
+  fiscalYear: string;
+  mode: 'merge' | 'sync';
+  matched: number;
+  newRows: number;
+  wouldDeactivate: number;
+  activeBefore: number;
+  byHoscode: Array<{ hoscode: string; activeBefore: number; matched: number; newRows: number; wouldDeactivate: number }>;
+  risk: { zeroMatchHoscodes: string[]; shrinkOverThreshold: boolean };
+  /** The number the admin must type before the server accepts any write; null when the import is safe. */
+  requiredConfirmation: number | null;
+  /** The sync shrink ratio the server applied (single source: backend EPI_SYNC_SHRINK_THRESHOLD). */
+  shrinkThreshold: number;
+}
+
+/** Record Identity (CONTEXT.md §3): the only fields sent to preflight. */
+const RECORD_IDENTITY_FIELDS = ['hoscode', 'pid', 'cid', 'sex', 'birth', 'check_vhid'] as const;
+const recordIdentityOf = (row: Record<string, unknown>) =>
+  Object.fromEntries(RECORD_IDENTITY_FIELDS.filter(field => row[field] !== undefined).map(field => [field, row[field]]));
 
 export function useUploadManager() {
   const queryClient = useQueryClient();
@@ -39,6 +62,9 @@ export function useUploadManager() {
   const [errorMsg, setErrorMsg] = useState('');
   const [results, setResults] = useState<{inserted: number, updated: number, deactivated: number}>({inserted: 0, updated: 0, deactivated: 0});
   const [isSyncing, setIsSyncing] = useState(false);
+  const [preflight, setPreflight] = useState<ImportPreflight | null>(null);
+  // The parsed rows and the scope they were preflighted for; the import uses exactly these.
+  const pendingRef = useRef<{ batchId: string; rows: any[]; fiscalYear: string; targetTable: TargetTable; importMode: 'merge' | 'sync' } | null>(null);
 
   const handleDrop = useCallback(async (acceptedFiles: File[]) => {
     if (acceptedFiles.length === 0 || isUploading) return;
@@ -64,17 +90,65 @@ export function useUploadManager() {
     }
   }, [targetTable, isUploading]);
 
+  /** Phase 1 (Issue #111): read-only server preflight. Nothing is written until confirmUpload(). */
   const handleUpload = useCallback(async () => {
-    if (!file || isUploading || status === 'parsing') return;
+    if (!file || isUploading || status === 'parsing' || status === 'confirming') return;
     setIsUploading(true);
-    setStatus('uploading');
-    setProgress(0);
+    setStatus('preflighting');
     setErrorMsg('');
-    setResults({inserted: 0, updated: 0, deactivated: 0});
 
     try {
-      const { rows: allRows } = await parseHdcFile(file, getAgeFromTable(targetTable) as EpiAge);
+      const { rows } = await parseHdcFile(file, getAgeFromTable(targetTable) as EpiAge);
       const batchId = uuidv4();
+      const keyChunks = [];
+      for (let i = 0; i < rows.length; i += CHUNK_SIZE) keyChunks.push(rows.slice(i, i + CHUNK_SIZE).map(recordIdentityOf));
+      const res = await fetchApi('preflightEpiImport', { keyChunks, batchId, fiscalYear, targetTable, mode: importMode });
+      const payload = res.data;
+      if (!payload || payload.error || payload.success === false) throw new Error(payload?.error || 'ตรวจสอบไฟล์ก่อนนำเข้าไม่สำเร็จ');
+      pendingRef.current = { batchId, rows, fiscalYear, targetTable, importMode };
+      setPreflight(payload as ImportPreflight);
+      setStatus('confirming');
+    } catch (err: any) {
+      console.error(err);
+      setStatus('error');
+      setErrorMsg(err.message || 'ตรวจสอบไฟล์ก่อนนำเข้าไม่สำเร็จ');
+    } finally {
+      setIsUploading(false);
+    }
+  }, [file, fiscalYear, targetTable, importMode, isUploading, status]);
+
+  const cancelPreflight = useCallback(() => {
+    pendingRef.current = null;
+    setPreflight(null);
+    setErrorMsg('');
+    setStatus('idle');
+  }, []);
+
+  /** Phase 2: typed confirmation (server-checked) when the preflight requires it, then the import itself. */
+  const confirmUpload = useCallback(async (typedNumber?: string) => {
+    const pending = pendingRef.current;
+    if (!pending || !preflight || isUploading) return;
+    setIsUploading(true);
+    setErrorMsg('');
+    if (preflight.requiredConfirmation != null) {
+      try {
+        const res = await fetchApi('confirmEpiImport', { batchId: pending.batchId, typedNumber });
+        if (res.data?.error || res.data?.success === false) throw new Error(res.data?.error || 'ยืนยันไม่สำเร็จ');
+      } catch (err: any) {
+        console.error(err);
+        setErrorMsg(err.message === 'Typed number does not match.'
+          ? 'ตัวเลขยืนยันไม่ตรงกับจำนวนที่ระบบคำนวณ กรุณาตรวจสอบแล้วพิมพ์ใหม่'
+          : `ยืนยันไม่สำเร็จ: ${err.message || 'เกิดข้อผิดพลาด'}`);
+        setIsUploading(false);
+        return;
+      }
+    }
+    setStatus('uploading');
+    setProgress(0);
+    setResults({inserted: 0, updated: 0, deactivated: 0});
+    const { batchId, rows: allRows, fiscalYear, targetTable, importMode } = pending;
+
+    try {
       const touchedHoscodes = Array.from(new Set(allRows.map(r => r.hoscode).filter(Boolean))) as string[];
       
       let inserted = 0;
@@ -159,11 +233,15 @@ export function useUploadManager() {
       setErrorMsg(err.message || 'เกิดข้อผิดพลาดระหว่างการนำเข้าข้อมูล');
     } finally {
       queryClient.invalidateQueries({ queryKey: ['epiData'] });
+      pendingRef.current = null;
+      setPreflight(null);
       setIsUploading(false);
     }
-  }, [file, fiscalYear, targetTable, queryClient, importMode, isUploading, status]);
+  }, [preflight, queryClient, isUploading]);
 
   const handleReset = useCallback(() => {
+    pendingRef.current = null;
+    setPreflight(null);
     setFile(null);
     setPreviewData([]);
     setSourceColumns([]);
@@ -245,6 +323,9 @@ export function useUploadManager() {
     isSyncing,
     handleDrop,
     handleUpload,
+    preflight,
+    confirmUpload,
+    cancelPreflight,
     handleReset,
     handleSyncAll,
   };

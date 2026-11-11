@@ -59,7 +59,7 @@ function handleRequest(method, e) {
     // 6. Admin Actions (ต้องเป็น Admin เท่านั้น)
     const adminActions = [
       'setup', 'getAllUsers', 'updateUserStatus', 'updateUserFacility',
-      'upsertFacility', 'upsertEpiData', 'cleanupEpiData', 'getAuditLogs',
+      'upsertFacility', 'preflightEpiImport', 'confirmEpiImport', 'upsertEpiData', 'cleanupEpiData', 'getAuditLogs',
       'saveDashboardSummary', 'forceSyncOpenData', 'setupOpenDataTrigger',
       'seedVaccineRules', 'saveVaccineRule', 'cloneVaccineRules', 'batchSaveRules', 'suggestRuleTargetAges', 'suggestRuleDateChecks',
       'migrateVaccineMetricKeys'
@@ -77,6 +77,9 @@ function handleRequest(method, e) {
       // read or forwarded.
       case 'forceSyncOpenData': return responseJson(syncOpenData('manual'));
       case 'setupOpenDataTrigger': return responseJson(setupOpenDataTrigger());
+      // Issue #111: mandatory read-only preflight + server-checked typed confirmation before any EPI write
+      case 'preflightEpiImport': return responseJson(preflightEpiImport(body.keyChunks, body.batchId, authResult, body.fiscalYear, body.targetTable, body.mode));
+      case 'confirmEpiImport': return responseJson(confirmEpiImport(body.batchId, body.typedNumber, authResult));
       case 'upsertEpiData': return responseJson(upsertEpiData(body.chunk, body.batchId, authResult, body.fiscalYear, body.targetTable, body.options));
       case 'cleanupEpiData': return responseJson(cleanupEpiData(body.batchId, body.touchedHoscodes, authResult.email, body.fiscalYear, body.targetTable));
 

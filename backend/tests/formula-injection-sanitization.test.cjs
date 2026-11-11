@@ -89,7 +89,13 @@ function uploadHarness() {
 }
 
 const person = (overrides = {}) => ({ hoscode: '00588', hosname: 'ทดสอบ', pid: '0001', cid: '0000000000001', name: 'ข้อมูล', lname: 'จำลอง', birth: '2025-01-01', bcg_date: '2025-01-01', ...overrides });
-const upload = (c, rows, batch, year = 2569, table = 'Epi_1_Year', options = {}) => c.upsertEpiData(rows, batch, { userId: 'u1', email: 'importer@example.test' }, year, table, options);
+const importer = { userId: 'u1', email: 'importer@example.test' };
+const keysOf = rows => rows.map(row => Object.fromEntries(['hoscode', 'pid', 'cid', 'sex', 'birth', 'check_vhid'].filter(field => field in row).map(field => [field, row[field]])));
+// Issue #111: every import runs the (mandatory) preflight first; these fixtures never need a typed confirmation.
+const upload = (c, rows, batch, year = 2569, table = 'Epi_1_Year', options = {}) => {
+  c.preflightEpiImport([keysOf(rows)], batch, importer, year, table, options.mode || 'merge');
+  return c.upsertEpiData(rows, batch, importer, year, table, options);
+};
 
 test('#77a imports escape every formula trigger prefix in free-text EPI fields', () => {
   for (const trigger of TRIGGERS) {
