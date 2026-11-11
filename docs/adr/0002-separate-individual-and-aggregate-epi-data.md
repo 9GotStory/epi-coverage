@@ -4,7 +4,7 @@
 * Date: 2026-09-11
 * Recorded retrospectively: yes
 * Supersedes: none
-* Superseded by: none
+* Superseded by: ADR-0006 (section "View 2 Boundary" only)
 
 ## Context
 
