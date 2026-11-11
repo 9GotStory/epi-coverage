@@ -46,7 +46,8 @@ function seed(fiscalYear) {
   return ageGroup => JSON.parse(JSON.stringify(context.getVaccineRules(fiscalYear, ageGroup)));
 }
 
-const usesJe = rule => [...rule.required_fields, ...rule.branch_alt_fields].some(f => /^(j1|je)\d_date$/.test(f));
+const fieldsOf = rule => [...rule.required_fields, ...rule.branch_alt_fields];
+const usesJe = rule => fieldsOf(rule).some(f => /^(j1|je)\d_date$/.test(f));
 
 test('3yr View 2 seeds JE/LAJE as one LAJE-only rule: LAJE 2 เข็ม = ALL j11 + j12', () => {
   const je = seed(2570)('3yr').filter(r => r.view_type === 2 && usesJe(r));
@@ -62,8 +63,9 @@ test('3yr View 2 seeds JE/LAJE as one LAJE-only rule: LAJE 2 เข็ม = ALL 
 test('3yr View 1 and 5yr View 2 seed LAJE เข็ม 2 as ALL j12 (the 3yr one is matched by the HDC s_epi3 crosswalk)', () => {
   const read = seed(2570);
   for (const [ageGroup, view] of [['3yr', 1], ['5yr', 2]]) {
-    const rule = read(ageGroup).find(r => r.view_type === view && r.required_fields.includes('j12_date'));
-    assert.ok(rule, `${ageGroup} View ${view} has a j12_date rule`);
+    const j12 = read(ageGroup).filter(r => r.view_type === view && fieldsOf(r).includes('j12_date'));
+    assert.equal(j12.length, 1, `${ageGroup} View ${view} has exactly one j12_date rule`);
+    const [rule] = j12;
     assert.equal(rule.display_name, 'LAJE เข็ม 2');
     assert.equal(rule.logic_type, 'ALL');
     assert.deepEqual(rule.required_fields, ['j12_date']);
@@ -76,12 +78,12 @@ test('3yr View 1 and 5yr View 2 seed LAJE เข็ม 2 as ALL j12 (the 3yr one
 test('no seed default rule refers to je3_date', () => {
   const read = seed(2570);
   const je3 = ['1yr', '2yr', '3yr', '5yr'].flatMap(read)
-    .filter(r => [...r.required_fields, ...r.branch_alt_fields].includes('je3_date'))
+    .filter(r => fieldsOf(r).includes('je3_date'))
     .map(r => `${r.age_group} View ${r.view_type} ${r.display_name}`);
   assert.deepEqual(je3, []);
 });
 
-test('LAJE/JE 1 ปี keeps LAJE dose 1 or two inactivated JE doses in every age group', () => {
+test('LAJE/JE 1 ปี keeps LAJE dose 1 or two inactivated JE doses (2yr View 1/2, 5yr View 2)', () => {
   const read = seed(2570);
   for (const [ageGroup, view] of [['2yr', 1], ['2yr', 2], ['5yr', 2]]) {
     const rule = read(ageGroup).find(r => r.view_type === view && r.display_name === 'LAJE/JE 1 ปี');

@@ -97,8 +97,7 @@ export const HDC_AGE_REPORTS: Record<HdcAgeGroup, HdcAgeReport> = {
   '3yr': {
     table:'s_epi3',reportId:'267ce09f2a704eb7783997e25d1f18ba',
     mappings:[
-      // Issue #127: LAJE-only (HDC files never export je3_date). Seeds before
-      // it wrote BRANCH j12_date | je3_date, J12/053.
+      // LAJE-only since Issue #127; seeds before it wrote BRANCH j12_date | je3_date, J12/053.
       {...pair('je3','J12','JE','j12_date'),
         legacyShapes:[{code:'J12/053',vaccineGroup:'JE',fields:['j12_date'],logic:'BRANCH',branch:['je3_date']}]},
     ],
