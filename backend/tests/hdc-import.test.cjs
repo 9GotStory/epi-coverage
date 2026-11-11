@@ -5,7 +5,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const crypto = require('node:crypto');
 
-function setup() {
+function setup({ autoPreflight = true } = {}) {
   const sheets = new Map();
   const numberFormats = [];
   let locked = false;
@@ -55,11 +55,33 @@ function setup() {
   });
   for (const file of ['SheetText.js', 'Setup.js', 'Upload.js', 'Data.js']) vm.runInContext(fs.readFileSync(path.join(__dirname, '../src', file), 'utf8'), context);
   context.logAction = () => {};
+  if (autoPreflight) {
+    // Issue #111 makes preflight mandatory. Single-chunk uploads in pre-#111 tests run the real
+    // preflight (+ typed confirmation when required) first; multi-chunk tests call prepare() explicitly.
+    const rawUpsert = context.upsertEpiData;
+    context.upsertEpiData = (chunk, batch, auth, year, table = 'Epi_1_Year', options = {}) => {
+      const known = sheets.get('epi_import_batches')?.cells.some((row, i) => i > 0 && row[0] === batch);
+      if (!known && Number(options.totalChunks || 1) === 1 && Array.isArray(chunk)) {
+        prepare(context, [chunk], batch, { year, table, mode: options.mode || 'merge', auth });
+      }
+      return rawUpsert(chunk, batch, auth, year, table, options);
+    };
+  }
   const read = (table = 'Epi_1_Year') => {
     const values = sheets.get(table).getDataRange().getValues();
     return values.slice(1).map(row => Object.fromEntries(values[0].map((field, index) => [field, row[index]])));
   };
   return { context, sheets, createSheet, read, isLocked: () => locked, numberFormats };
+}
+const RECORD_IDENTITY_FIELDS = ['hoscode', 'pid', 'cid', 'sex', 'birth', 'check_vhid'];
+const keysOf = rows => rows.map(row => Object.fromEntries(RECORD_IDENTITY_FIELDS.filter(field => row && field in row).map(field => [field, row[field]])));
+const preflight = (c, chunks, batch, { year = 2569, table = 'Epi_1_Year', mode = 'merge', auth = 'admin' } = {}) =>
+  c.preflightEpiImport(chunks.map(keysOf), batch, auth, year, table, mode);
+/** Preflight, then type the required number when the preflight asks for it (the normal admin path). */
+function prepare(c, chunks, batch, options = {}) {
+  const result = preflight(c, chunks, batch, options);
+  if (result.success && result.requiredConfirmation != null) c.confirmEpiImport(batch, String(result.requiredConfirmation), options.auth || 'admin');
+  return result;
 }
 const person = (overrides = {}) => ({ hoscode: '00588', hosname: 'ทดสอบ', pid: '0001', cid: '0000000000001', name: 'ข้อมูล', lname: 'จำลอง', birth: '2025-01-01', bcg_date: '2025-01-01', ...(overrides.cid ? { pid: String(Number(overrides.cid) || 1) } : {}), ...overrides });
 const upload = (c, rows, batch, year = 2569, table = 'Epi_1_Year', options = {}) => c.upsertEpiData(rows, batch, 'admin', year, table, options);
@@ -121,6 +143,7 @@ test('incomplete batch cannot cleanup; complete sync uses validated facility sco
   const { context: c, read } = setup();
   upload(c, [person(), person({ cid: '0000000000002' }), person({ hoscode: '99999' })], 'old');
   upload(c, [person()], 'other-year', 2570);
+  prepare(c, [[person()], [person({ cid: '0000000000003' })]], 'sync', { mode: 'sync' });
   upload(c, [person()], 'sync', 2569, 'Epi_1_Year', { mode: 'sync', chunkIndex: 0, totalChunks: 2 });
   assert.equal(finish(c, 'sync').success, false);
   assert.equal(read().every(row => row.is_active), true);
@@ -141,6 +164,7 @@ test('merge finalization never deactivates missing people', () => {
 
 test('older overlapping batches cannot overwrite or deactivate newer imports', () => {
   const { context: c } = setup();
+  prepare(c, [[person()], [person()]], 'old', { mode: 'sync' });
   upload(c, [person()], 'old', 2569, 'Epi_1_Year', { mode: 'sync', totalChunks: 2 });
   upload(c, [person()], 'new');
   assert.equal(upload(c, [person()], 'old', 2569, 'Epi_1_Year', { mode: 'sync', totalChunks: 2, chunkIndex: 1 }).success, false);
@@ -149,9 +173,14 @@ test('older overlapping batches cannot overwrite or deactivate newer imports', (
 
 test('invalid records and non-EPI tables are rejected before a sheet write', () => {
   for (const change of [{ bcg_input_hosp: 588 }, { birth: '2025-02-30' }, { ai_analysis: 'injected' }, { extra_column: 'lost' }]) {
-    const { context: c, sheets } = setup();
-    assert.equal(upload(c, [person(change)], 'invalid').success, false);
-    assert.equal(sheets.size, 0);
+    // Issue #111: preflight (key fields only) may legitimately create the receipts sheet; the record
+    // validation must still reject before the gate and before any EPI sheet exists.
+    const { context: c, sheets } = setup({ autoPreflight: false });
+    prepare(c, [[person(change)]], 'invalid');
+    const result = upload(c, [person(change)], 'invalid');
+    assert.equal(result.success, false);
+    assert.notEqual(result.error, 'Run the import preflight first.');
+    assert.deepEqual([...sheets.keys()].filter(name => name !== 'epi_import_batches'), []);
   }
   const { context: c, sheets } = setup();
   assert.equal(upload(c, [person()], 'invalid', 2569, 'Users').success, false);
@@ -527,6 +556,7 @@ test('an overlap-refused chunk creates no upload_excel audit event', () => {
   auditSheet(createSheet);
   const audit = [];
   c.logAction = (...entry) => audit.push(entry);
+  prepare(c, [[person()], [person()]], 'older', { mode: 'sync', auth: importer });
   assert.equal(c.upsertEpiData([person()], 'older', importer, 2569, 'Epi_1_Year', { mode: 'sync', totalChunks: 2 }).success, true); // incomplete accepted chunk
   assert.equal(c.upsertEpiData([person()], 'newer', importer, 2569).success, true);                                                 // overlapping newer import
   const uploads = () => audit.filter(entry => entry[2] === 'upload_excel').length;
@@ -562,4 +592,213 @@ test('import writes apply plain-text formatting to every canonical identifier co
       assert.ok(covering, `${table}: identifier column '${field}' lacks '@' formatting covering the full written range`);
     }
   }
+});
+
+/* ─────────────── Issue #111: import preflight guard ─────────────── */
+const cohort = (count, hoscode = '00588', from = 1) =>
+  Array.from({ length: count }, (_, i) => person({ hoscode, cid: String(from + i).padStart(13, '0') }));
+
+test('preflight reports the incident shape (sync file matching no existing child) without writing any EPI sheet', () => {
+  const { context: c, read } = setup();
+  upload(c, cohort(5), 'existing');
+  const before = JSON.stringify(read());
+  const result = JSON.parse(JSON.stringify(preflight(c, [cohort(4, '00588', 100)], 'wrong-file', { mode: 'sync' }))); // plain objects across the vm realm
+  assert.equal(result.success, true);
+  assert.deepEqual([result.matched, result.newRows, result.wouldDeactivate, result.activeBefore], [0, 4, 5, 5]);
+  assert.deepEqual(result.risk, { zeroMatchHoscodes: ['00588'], shrinkOverThreshold: true });
+  assert.equal(result.requiredConfirmation, 5); // sync: the number of children that would be deactivated
+  assert.deepEqual(result.byHoscode, [{ hoscode: '00588', activeBefore: 5, matched: 0, newRows: 4, wouldDeactivate: 5 }]);
+  assert.equal(JSON.stringify(read()), before); // read-only for EPI data
+  // Response is counts and facility codes only — never identities.
+  assert.equal(/\d{13}/.test(JSON.stringify(result)), false);
+});
+
+test('upsert refuses a batch that never ran preflight, before any EPI sheet write', () => {
+  const { context: c, sheets } = setup({ autoPreflight: false });
+  const result = c.upsertEpiData([person()], 'no-preflight', importer, 2569);
+  assert.deepEqual([result.success, result.error], [false, 'Run the import preflight first.']);
+  assert.equal(sheets.has('Epi_1_Year'), false);
+});
+
+test('a risky preflight blocks the upload until the exact typed number is confirmed server-side', () => {
+  const { context: c, read } = setup();
+  upload(c, cohort(5), 'existing');
+  const audit = [];
+  c.logAction = (...entry) => audit.push(entry);
+  const wrong = [cohort(4, '00588', 100)];
+  assert.equal(preflight(c, wrong, 'wrong-file', { mode: 'sync', auth: importer }).requiredConfirmation, 5);
+  const blocked = c.upsertEpiData(wrong[0], 'wrong-file', importer, 2569, 'Epi_1_Year', { mode: 'sync' });
+  assert.deepEqual([blocked.success, blocked.error], [false, 'Typed confirmation required.']);
+  assert.equal(c.confirmEpiImport('wrong-file', '4', importer).success, false); // a guess is not a confirmation
+  assert.equal(read().length, 5);
+  assert.equal(audit.length, 0); // nothing confirmed, nothing written
+  assert.equal(c.confirmEpiImport('wrong-file', '5', importer).success, true);
+  assert.equal(c.upsertEpiData(wrong[0], 'wrong-file', importer, 2569, 'Epi_1_Year', { mode: 'sync' }).success, true);
+  const confirmed = audit.filter(entry => entry[2] === 'confirm_epi_import');
+  assert.equal(confirmed.length, 1);
+  assert.deepEqual([confirmed[0][0], confirmed[0][1]], ['u1', 'importer@example.test']); // server-derived actor
+  const details = confirmed[0][3];
+  for (const fact of ['wrong-file', 'sync', 'matched 0', 'new 4', 'would deactivate 5', 'typed 5', '00588']) assert.ok(details.includes(fact), details);
+  assert.equal(/\d{13}/.test(details), false); // counts and facility codes only
+});
+
+test('a safe preflight needs no typed confirmation', () => {
+  const { context: c } = setup();
+  upload(c, cohort(5), 'existing');
+  const result = preflight(c, [cohort(5)], 'same-cohort', { mode: 'sync' });
+  assert.deepEqual([result.matched, result.newRows, result.wouldDeactivate, result.requiredConfirmation], [5, 0, 0, null]);
+  assert.equal(c.upsertEpiData(cohort(5), 'same-cohort', importer, 2569, 'Epi_1_Year', { mode: 'sync' }).success, true);
+});
+
+test('one facility with zero matches is flagged even when the aggregate shrink stays under 20%', () => {
+  const { context: c } = setup();
+  upload(c, [...cohort(20, '00588'), ...cohort(2, '00002', 500)], 'existing');
+  // 00588 re-uploaded intact; 00002's rows no longer match anyone (key format broke for that unit only).
+  const result = preflight(c, [[...cohort(20, '00588'), ...cohort(2, '00002', 900)]], 'one-unit-broken', { mode: 'sync' });
+  assert.equal(result.wouldDeactivate, 2); // 2 of 22 active = 9% — under the aggregate threshold
+  assert.equal(result.risk.shrinkOverThreshold, false);
+  assert.deepEqual([...result.risk.zeroMatchHoscodes], ['00002']);
+  assert.equal(result.requiredConfirmation, 2);
+});
+
+test('sync shrink just over 20% needs confirmation; exactly 20% does not', () => {
+  const { context: c } = setup();
+  upload(c, cohort(10), 'existing');
+  assert.equal(preflight(c, [cohort(8)], 'drop-2', { mode: 'sync' }).requiredConfirmation, null); // 2/10 = 20%
+  assert.equal(preflight(c, [cohort(7)], 'drop-3', { mode: 'sync' }).requiredConfirmation, 3);    // 3/10 = 30%
+});
+
+test('merge with zero matches asks for the number of new rows; merge never reports deactivations', () => {
+  const { context: c } = setup();
+  upload(c, cohort(5), 'existing');
+  const result = preflight(c, [cohort(3, '00588', 100)], 'merge-dupes', { mode: 'merge' });
+  assert.deepEqual([result.matched, result.newRows, result.wouldDeactivate], [0, 3, 0]);
+  assert.equal(result.risk.shrinkOverThreshold, false);
+  assert.equal(result.requiredConfirmation, 3);
+  // First import into an empty table has nothing to protect.
+  const { context: fresh } = setup();
+  assert.equal(preflight(fresh, [cohort(3)], 'first-import').requiredConfirmation, null);
+});
+
+test('a chunk whose keys differ from the preflighted file is refused', () => {
+  const { context: c, read } = setup();
+  upload(c, cohort(5), 'existing');
+  preflight(c, [cohort(5)], 'swap', { mode: 'sync' });
+  const swapped = c.upsertEpiData(cohort(5, '00588', 100), 'swap', importer, 2569, 'Epi_1_Year', { mode: 'sync' });
+  assert.deepEqual([swapped.success, swapped.error], [false, 'Chunk does not match the preflighted file.']);
+  assert.equal(read().length, 5);
+});
+
+test('a preflight goes stale when an overlapping import progresses after it', () => {
+  const { context: c, read } = setup();
+  upload(c, cohort(5), 'existing');
+  preflight(c, [cohort(5)], 'slow', { mode: 'sync' });
+  prepare(c, [cohort(5)], 'newer'); // receipt created after 'slow' and written first — the overlap guard catches it
+  assert.equal(c.upsertEpiData(cohort(5), 'newer', importer, 2569).success, true);
+  assert.equal(c.upsertEpiData(cohort(5), 'slow', importer, 2569, 'Epi_1_Year', { mode: 'sync' }).error,
+    'A newer import overlaps this batch. Start a new import.');
+  // An import preflighted BEFORE 'late' that writes AFTER it makes 'late' stale.
+  preflight(c, [cohort(5)], 'first-in-line');
+  preflight(c, [cohort(5)], 'late', { mode: 'sync' });
+  assert.equal(c.upsertEpiData(cohort(5), 'first-in-line', importer, 2569).success, true);
+  const stale = c.upsertEpiData(cohort(5), 'late', importer, 2569, 'Epi_1_Year', { mode: 'sync' });
+  assert.deepEqual([stale.success, stale.error], [false, 'Data changed since preflight. Start a new import.']);
+  assert.equal(read().length, 5);
+});
+
+test('an abandoned preflight changes no EPI data and does not block the next import', () => {
+  const { context: c, read } = setup();
+  upload(c, cohort(5), 'existing');
+  const before = JSON.stringify(read());
+  preflight(c, [cohort(4, '00588', 100)], 'abandoned', { mode: 'sync' }); // user cancels at the typed-confirmation step
+  assert.equal(JSON.stringify(read()), before);
+  prepare(c, [cohort(5)], 'next', { mode: 'sync' });
+  assert.equal(c.upsertEpiData(cohort(5), 'next', importer, 2569, 'Epi_1_Year', { mode: 'sync' }).success, true);
+  assert.equal(c.cleanupEpiData('next', [], 'admin', 2569).success, true);
+  assert.equal(read().filter(row => row.is_active === true || row.is_active === 'TRUE').length, 5);
+});
+
+test('preflight and confirmation are admin-only routes', () => {
+  const { context: c } = setup();
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/Router.js'), 'utf8'), c);
+  c.responseJson = (data, status = 200) => ({ data, status });
+  for (const role of ['user', 'admin']) {
+    c.validateTokenAndGetRole = () => ({ valid: true, role, userId: 'u1', email: 'importer@example.test', hoscode: '00588' });
+    for (const action of ['preflightEpiImport', 'confirmEpiImport']) {
+      const body = JSON.stringify({ action, keyChunks: [keysOf(cohort(1))], batchId: `${role}-${action}`, fiscalYear: 2569, targetTable: 'Epi_1_Year', mode: 'merge', typedNumber: '1' });
+      const response = c.handleRequest('POST', { postData: { contents: body }, parameter: {} });
+      if (role === 'user') assert.equal(response.status, 403, action);
+      else assert.notEqual(response.status, 403, action);
+    }
+  }
+});
+
+/* ── Issue #111 review fixes ── */
+test('a file that matches only previously deactivated children is still flagged as zero-match', () => {
+  const { context: c } = setup();
+  upload(c, cohort(8), 'all-eight');
+  prepare(c, [cohort(5)], 'drop-three', { mode: 'sync' });
+  c.upsertEpiData(cohort(5), 'drop-three', 'admin', 2569, 'Epi_1_Year', { mode: 'sync' });
+  assert.equal(c.cleanupEpiData('drop-three', [], 'admin', 2569).deactivated, 3);
+  const result = preflight(c, [cohort(3, '00588', 6)], 'only-inactive', { mode: 'merge' }); // would silently reactivate 3
+  assert.equal(result.matched, 3);
+  assert.deepEqual([...result.risk.zeroMatchHoscodes], ['00588']);
+  assert.equal(result.requiredConfirmation, 3); // merge: file rows not matching an ACTIVE child (here: 3 reactivations)
+});
+
+test('progress by another batch after this import started never strands it half-written', () => {
+  const { context: c, read } = setup();
+  prepare(c, [cohort(2)], 'earlier-merge');
+  c.upsertEpiData(cohort(2), 'earlier-merge', 'admin', 2569); // complete, not yet finalized
+  prepare(c, [cohort(2), cohort(2, '00588', 3)], 'two-chunks');
+  assert.equal(c.upsertEpiData(cohort(2), 'two-chunks', 'admin', 2569, 'Epi_1_Year', { totalChunks: 2 }).success, true);
+  const tick = Date.now(); while (Date.now() === tick) { /* make the finalize timestamp observably newer */ }
+  assert.equal(c.cleanupEpiData('earlier-merge', [], 'admin', 2569).success, true);
+  assert.equal(c.upsertEpiData(cohort(2, '00588', 3), 'two-chunks', 'admin', 2569, 'Epi_1_Year', { totalChunks: 2, chunkIndex: 1 }).success, true);
+  assert.equal(read().length, 4);
+});
+
+test('a legacy receipt without preflight cannot be finalized into a sync deactivation', () => {
+  const { context: c, createSheet, read } = setup();
+  createSheet('epi_import_batches', [ // pre-#111 sheet shape: no 'preflight' column
+    ['batch_id', 'target_table', 'fiscal_year', 'mode', 'total_chunks', 'completed_chunks', 'hoscodes', 'status', 'updated_at'],
+    ['legacy-sync', 'Epi_1_Year', '2569', 'sync', 1, JSON.stringify([{ index: 0, fingerprint: 'AAAA' }]), '["00588"]', 'uploading', '2026-01-01T00:00:00Z'],
+  ]);
+  upload(c, cohort(3), 'existing');
+  const result = c.cleanupEpiData('legacy-sync', [], 'admin', 2569);
+  assert.deepEqual([result.success, result.error], [false, 'Run the import preflight first.']);
+  assert.equal(read().filter(row => row.is_active === true).length, 3);
+});
+
+test('only the admin who ran the preflight can type the confirmation', () => {
+  const { context: c } = setup();
+  upload(c, cohort(5), 'existing');
+  preflight(c, [cohort(4, '00588', 100)], 'wrong-file', { mode: 'sync', auth: importer });
+  const other = c.confirmEpiImport('wrong-file', '5', { userId: 'u2', email: 'other@example.test' });
+  assert.deepEqual([other.success, other.error], [false, 'Only the admin who ran the preflight can confirm.']);
+  assert.equal(c.confirmEpiImport('wrong-file', '5', importer).success, true);
+});
+
+test('every import audits its preflight counts on the first chunk, risky or not, without identities', () => {
+  const { context: c } = setup();
+  upload(c, cohort(5), 'existing');
+  const audit = [];
+  c.logAction = (...entry) => audit.push(entry);
+  prepare(c, [cohort(5)], 'safe', { mode: 'sync', auth: importer });
+  c.upsertEpiData(cohort(5), 'safe', importer, 2569, 'Epi_1_Year', { mode: 'sync' });
+  const [first] = audit.filter(entry => entry[2] === 'upload_excel');
+  for (const fact of ['preflight', 'matched 5', 'new 0', 'would deactivate 0 of 5', 'confirmation not required']) assert.ok(first[3].includes(fact), first[3]);
+  assert.equal(/\d{13}/.test(first[3]), false);
+});
+
+test('preflight rejects an impossible birth date exactly like the import does', () => {
+  const { context: c, sheets } = setup();
+  const result = preflight(c, [[person({ birth: '2025-02-30' })]], 'bad-birth');
+  assert.equal(result.success, false);
+  assert.equal(sheets.size, 0);
+});
+
+test('preflight reports the shrink threshold it applied', () => {
+  const { context: c } = setup();
+  assert.equal(preflight(c, [cohort(1)], 'threshold').shrinkThreshold, 0.2);
 });

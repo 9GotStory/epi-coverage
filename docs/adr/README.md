@@ -198,3 +198,4 @@ Creating an ADR documents an architectural decision. It does not authorize expan
 - [ADR-0004](0004-rate-limit-safe-moph-opendata-sync.md) — Use paced, bounded retries for MOPH OpenData synchronization. **Accepted**
 - [ADR-0005](0005-route-opendata-through-external-relay.md) — Route OpenData acquisition through an external fetch relay. **Accepted**
 - [ADR-0006](0006-vaccine-rules-sheet-is-staff-owned-primary-source.md) — The staff-configured `vaccine_rules` sheet is the primary source for follow-up; rule evaluation is authoritative for View 2. **Accepted** (supersedes ADR-0003 "Relationship to View 2")
+- [ADR-0007](0007-mandatory-import-preflight.md) — Every EPI import runs a read-only, server-enforced preflight; risky imports need a typed confirmation. **Accepted**

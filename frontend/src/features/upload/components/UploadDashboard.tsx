@@ -7,6 +7,7 @@ import { SubNav } from '../../../widgets/layout/SubNav';
 import { ConfirmModal } from '../../../shared/components/ui/confirm-modal';
 import { getAgeString } from '../utils/uploadHelpers';
 import { useUploadManager } from '../hooks/useUploadManager';
+import { ImportPreflightPanel } from './ImportPreflightPanel';
 
 export function UploadDashboard() {
   const {
@@ -26,6 +27,9 @@ export function UploadDashboard() {
     isSyncing,
     handleDrop,
     handleUpload,
+    preflight,
+    confirmUpload,
+    cancelPreflight,
     handleReset,
     handleSyncAll,
   } = useUploadManager();
@@ -131,7 +135,7 @@ export function UploadDashboard() {
 
         <div className="space-y-2">
           <label htmlFor="import-mode" className="font-semibold">วิธีปรับปรุงข้อมูล</label>
-          <select id="import-mode" value={importMode} disabled={isUploading || status === 'success'} onChange={event => setImportMode(event.target.value as 'merge' | 'sync')} className="block w-full border rounded-md p-3">
+          <select id="import-mode" value={importMode} disabled={isUploading || status === 'success' || status === 'confirming'} onChange={event => setImportMode(event.target.value as 'merge' | 'sync')} className="block w-full border rounded-md p-3">
             <option value="merge">เติม / อัปเดตข้อมูล — คงรายชื่อที่ไม่ได้ส่งมา</option>
             <option value="sync">ซิงค์ไฟล์เต็ม — ปิดสถานะรายชื่อที่หายจากไฟล์ในหน่วยบริการและปีนี้</option>
           </select>
@@ -225,11 +229,14 @@ export function UploadDashboard() {
           </div>
 
           <div className="p-8 space-y-8">
-            {isUploading ? (
+            {status === 'confirming' && preflight ? (
+              <ImportPreflightPanel preflight={preflight} isBusy={isUploading} errorMsg={errorMsg} onConfirm={confirmUpload} onCancel={cancelPreflight} />
+            ) : isUploading ? (
               <div className="space-y-4 max-w-3xl mx-auto">
                 <div className="flex justify-between text-[14px] font-medium tracking-[-0.224px]">
                   <span className="text-[#7a7a7a]">
-                    {status === 'cleaning' ? 'กำลังจัดระเบียบและตรวจสอบข้อมูลเก่า...' : 
+                    {status === 'preflighting' ? 'กำลังตรวจสอบไฟล์กับข้อมูลเดิม...' :
+                     status === 'cleaning' ? 'กำลังจัดระเบียบและตรวจสอบข้อมูลเก่า...' : 
                      status === 'generating_summary' ? 'กำลังประมวลผลข้อมูลภาพรวม Dashboard...' : 'กำลังนำเข้าข้อมูล...'}
                   </span>
                   <span className="text-[#0066cc] font-semibold">{progress}%</span>
@@ -289,17 +296,11 @@ export function UploadDashboard() {
                 </div>
                 
                 <div className="mt-6 flex justify-end">
-                  <ConfirmModal
-                    title="ยืนยันการนำเข้าข้อมูล"
-                    description={`คุณกำลังจะนำเข้าข้อมูลจำนวน ${totalRows.toLocaleString()} รายการ ${importMode === 'sync' ? 'ไฟล์นี้ต้องมีรายชื่อครบทุกคนของหน่วยบริการที่ส่งมา รายชื่อที่หายไปจะถูกปิดสถานะในปีนี้' : 'อัปเดตเฉพาะรายชื่อที่ส่งมาและคงรายชื่ออื่นไว้'} คอลัมน์ที่ส่งค่าว่างจะล้างค่าเดิม ต้องการดำเนินการต่อหรือไม่?`}
-                    onConfirm={handleUpload}
-                    confirmText="เริ่มนำเข้า"
-                  >
-                    <Button size="lg" className="w-full sm:w-auto shadow-sm" disabled={!fiscalYear}>
-                      <UploadCloud className="mr-2 h-5 w-5" />
-                      เริ่มนำเข้า {totalRows.toLocaleString()} รายการ
-                    </Button>
-                  </ConfirmModal>
+                  {/* Issue #111: this only previews; nothing is written until the preflight summary is confirmed. */}
+                  <Button size="lg" className="w-full sm:w-auto shadow-sm" disabled={!fiscalYear} onClick={handleUpload}>
+                    <UploadCloud className="mr-2 h-5 w-5" />
+                    ตรวจสอบก่อนนำเข้า {totalRows.toLocaleString()} รายการ
+                  </Button>
                 </div>
               </div>
             )}
