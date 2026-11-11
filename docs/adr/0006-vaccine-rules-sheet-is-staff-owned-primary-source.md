@@ -3,7 +3,7 @@
 * Status: Accepted
 * Date: 2026-11-10
 * Recorded retrospectively: no
-* Supersedes: ADR-0003, section "Relationship to View 2" only (the rest of ADR-0003 stays in force)
+* Supersedes: ADR-0003, section "Relationship to View 2" only (the rest of ADR-0003 stays in force); ADR-0002, section "View 2 Boundary" only (the rest of ADR-0002 stays in force)
 * Superseded by: none
 
 ## Context

@@ -1,6 +1,5 @@
 import type { EpiRecord, VaccineStatus } from '../types';
 import type { VaccineBreakdownEntry } from '../types/dashboardSummary';
-import { isHdcVerdictBucketName } from './vaccine/ruleEngine';
 import type { View1Evaluation, VaccineRule } from './vaccine/ruleEngine';
 // We can define the return type for better type safety
 export interface GroupSummary {
@@ -127,7 +126,7 @@ export function calcGroupSummary(
     // Issue #89: แบ่งกลุ่มต่อ record เป็น 3 ส่วนไม่ซ้ำกัน — View 2 Pending (#23) / not evaluable
     // (กฎ V2 ที่ไฟล์ยืนยันคอลัมน์ไม่ได้) / applicable (ตัวหาร coverage)
     // Issue #119 (design #117, ADR-0006): จัดกลุ่มจาก status ของ engine จุดเดียว — ลำดับ
-    // Confirmed Missing Dose > Pending Rule > ประเมินไม่ได้ (และคำตัดสิน HDC) ตัดสินใน evaluateDynamicV2
+    // Confirmed Missing Dose > Pending Rule > ประเมินไม่ได้ ตัดสินใน evaluateDynamicV2 (`result` ของ HDC ไม่มีผล, #101)
     // เด็กที่ขาดจริงแม้มี Pending Rule จึงเป็น applicable ไม่ผ่าน ไม่ใช่ View 2 Pending;
     // status อื่นหรือไม่มี status (evaluator รุ่นเดิม) → applicable
     if (v2.status === 'PENDING') {
@@ -201,23 +200,18 @@ export function calcGroupSummary(
     return matches.length === 1 ? matches[0] : undefined;
   };
 
-  // Issue #97 (writer contract A): bucket คำตัดสิน HDC ไม่ใช่วัคซีน — ติดป้าย category จาก
-  // ชื่อที่ engine ปล่อย (registry เดียวกับต้นทาง) และไม่มี metric_key/vaccine_group โดยการออกแบบ
-  // แม้จะมี rule ที่ตั้ง display_name ชนิดเดียวกันก็ต้องไม่ยกให้เป็น identity ข้ามปี (fail closed)
+  // Issue #101: ผลจากกฎเป็นหลัก engine จึงไม่ปล่อย bucket คำตัดสิน HDC (#97) อีก — ทุกรายการคือกฎวัคซีน
+  // reader ยังข้าม `category: 'hdc_verdict'` ใน summary ที่บันทึกไว้ก่อน #101
   const breakdownEntry = (
     name: string, passed: number, targetTotal: number, rule: VaccineRule | undefined,
-  ) => {
-    const isVerdictBucket = isHdcVerdictBucketName(name);
-    return {
-      name,
-      passed,
-      total: targetTotal,
-      coverage: targetTotal > 0 ? (passed / targetTotal) * 100 : 0,
-      metric_key: isVerdictBucket ? undefined : (rule ? (validKey(rule.metric_key) ?? rule.rule_id) : undefined),
-      vaccine_group: isVerdictBucket ? undefined : rule?.vaccine_group,
-      category: isVerdictBucket ? ('hdc_verdict' as const) : undefined,
-    };
-  };
+  ): VaccineBreakdownEntry => ({
+    name,
+    passed,
+    total: targetTotal,
+    coverage: targetTotal > 0 ? (passed / targetTotal) * 100 : 0,
+    metric_key: rule ? (validKey(rule.metric_key) ?? rule.rule_id) : undefined,
+    vaccine_group: rule?.vaccine_group,
+  });
 
   const view1Breakdown = Object.entries(view1Details).map(([name, passed]) =>
     breakdownEntry(name, passed, view1TargetDetails[name] || 0, rules ? rulesByNameAndView(1, name) : undefined),

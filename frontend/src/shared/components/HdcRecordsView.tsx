@@ -3,7 +3,7 @@ import { getRecordDateWarnings } from '../utils/vaccine/dateWarnings';
 import { evaluateDynamicV2 } from '../utils/vaccine/ruleEngine';
 import { useMemo, useState } from 'react';
 import type { ColumnDef } from '@tanstack/react-table';
-import type { EpiRecord } from '../types';
+import type { EpiRecord, VaccineStatus } from '../types';
 import { EpiDataTable } from './EpiDataTable';
 import { VaccineHistoryModal } from './VaccineHistoryModal';
 import { VaccineRulesGuide } from './VaccineRulesGuide';
@@ -22,10 +22,25 @@ interface HdcRecordsViewProps {
   asOfDate: string | null;
 }
 
+// Issue #101 (ADR-0006): ผลตามกฎในระบบเป็นหลัก `result` ของ HDC แสดงประกอบ
+const RULE_STATUS_LABELS: Record<NonNullable<VaccineStatus['status']>, string> = {
+  PASS: 'ผ่าน',
+  FAIL: 'ไม่ผ่าน',
+  PENDING: 'ยังไม่ถึงเกณฑ์',
+  NOT_EVALUABLE: 'ประเมินไม่ได้',
+};
+const RULE_STATUS_CLASSES: Record<string, string> = {
+  [RULE_STATUS_LABELS.PASS]: 'bg-emerald-100 text-emerald-800',
+  [RULE_STATUS_LABELS.FAIL]: 'bg-red-100 text-red-700',
+};
+const MISMATCH_LABEL = 'ผลไม่ตรงกับ HDC';
+
 export function HdcRecordsView({ age, fiscalYear, quarter, data, isLoading, error, asOfDate }: HdcRecordsViewProps) {
   const { rules, isLoading: rulesLoading, error: rulesError } = useVaccineRules(fiscalYear, `${age}yr`);
   const [facility, setFacility] = useState('');
+  const [ruleStatus, setRuleStatus] = useState('');
   const [result, setResult] = useState('');
+  const [mismatchOnly, setMismatchOnly] = useState(false);
   const [search, setSearch] = useState('');
   const [selectedPatient, setSelectedPatient] = useState<EpiRecord | null>(null);
   const cohort = useMemo(() => {
@@ -35,36 +50,79 @@ export function HdcRecordsView({ age, fiscalYear, quarter, data, isLoading, erro
       return birth >= start && birth <= end;
     });
   }, [data, fiscalYear, quarter, age]);
+  // ไม่มีกฎ View 2 = ตัดสินไม่ได้ ต้องไม่แสดงว่าทุกคนผ่าน (fail closed)
+  const rulesUnavailableLabel = rulesLoading ? 'กำลังโหลดเกณฑ์...'
+    : rulesError ? 'โหลดเกณฑ์ไม่สำเร็จ'
+      : !rules.some(rule => rule.view_type === 2 && rule.is_active) ? 'ยังไม่มีเกณฑ์'
+        : null;
+  const processed = useMemo(() => cohort.map(record => {
+    if (rulesUnavailableLabel) return { ...record, ruleStatus: rulesUnavailableLabel, ruleDetails: '', hdcMismatch: false };
+    const evaluation = evaluateDynamicV2(record, rules);
+    const details = [
+      evaluation.missingVaccines.length ? `ขาด: ${evaluation.missingVaccines.join(', ')}` : '',
+      evaluation.pendingVaccines?.length ? `ยังไม่ถึงเกณฑ์: ${evaluation.pendingVaccines.join(', ')}` : '',
+      evaluation.notEvaluableVaccines?.length ? `ประเมินไม่ได้: ${evaluation.notEvaluableVaccines.join(', ')}` : '',
+    ].filter(Boolean).join(' · ');
+    return { ...record, ruleStatus: RULE_STATUS_LABELS[evaluation.status ?? 'NOT_EVALUABLE'], ruleDetails: details, hdcMismatch: !!evaluation.hdcMismatch };
+  }), [cohort, rules, rulesUnavailableLabel]);
   const facilities = useMemo(() => [...new Map(cohort.map(record => [record.hoscode, record.hosname])).entries()].sort(), [cohort]);
   const results = useMemo(() => [...new Set(cohort.map(record => hdcValue(record.result)))].sort(), [cohort]);
   const filtered = useMemo(() => {
     const query = search.trim().toLocaleLowerCase();
-    return cohort.filter(record =>
+    return processed.filter(record =>
       (!facility || record.hoscode === facility) &&
+      (!ruleStatus || record.ruleStatus === ruleStatus) &&
       (!result || hdcValue(record.result) === result) &&
+      (!mismatchOnly || record.hdcMismatch) &&
       (!query || `${record.cid} ${record.pid} ${record.name} ${record.lname}`.toLocaleLowerCase().includes(query)),
     );
-  }, [cohort, facility, result, search]);
-  const columns = useMemo<ColumnDef<EpiRecord>[]>(() => [
+  }, [processed, facility, ruleStatus, result, mismatchOnly, search]);
+  type Row = (typeof processed)[number];
+  const columns = useMemo<ColumnDef<Row>[]>(() => [
     { header: 'สถานบริการ', accessorKey: 'hoscode', cell: ({ row }) => <div><div>{row.original.hoscode}</div><div className="text-xs text-zinc-500">{row.original.hosname}</div></div> },
     { header: 'CID', accessorKey: 'cid' },
     { header: 'ที่อยู่', accessorFn: record => hdcValue(record.addr) },
     { header: 'ประเภทพื้นที่', accessorFn: record => hdcValue(record.check_typearea) },
     { header: 'ชื่อ-สกุล', accessorFn: record => `${record.name} ${record.lname}` },
     { header: 'วันเกิด', accessorKey: 'birth', cell: ({ row }) => <div>{formatDateStr(row.original.birth)}<div className="text-xs text-zinc-500">(อายุ {formatAgeStr(row.original.birth)})</div></div> },
-    { header: 'ผลจาก HDC', accessorFn: record => hdcValue(record.result), cell: info => <span className="whitespace-pre-wrap">{info.getValue<string>()}</span> },
+    {
+      header: 'ผลตามกฎ',
+      accessorKey: 'ruleStatus',
+      cell: ({ row }) => (
+        <div>
+          <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${RULE_STATUS_CLASSES[row.original.ruleStatus] ?? 'bg-zinc-100 text-zinc-700'}`}>{row.original.ruleStatus}</span>
+          {row.original.ruleDetails && <div className="text-xs text-zinc-500 mt-1">{row.original.ruleDetails}</div>}
+        </div>
+      ),
+    },
+    {
+      header: 'ผลจาก HDC (ประกอบ)',
+      accessorFn: record => hdcValue(record.result),
+      cell: ({ row, getValue }) => (
+        <div>
+          <span className="whitespace-pre-wrap">{getValue<string>()}</span>
+          {row.original.hdcMismatch && <div><span className="inline-block rounded-full px-2.5 py-0.5 text-xs font-medium bg-amber-100 text-amber-800 mt-1">{MISMATCH_LABEL}</span></div>}
+        </div>
+      ),
+    },
     { header: 'ประวัติวัคซีน', id: 'history', cell: ({ row }) => <Button variant="outline" size="sm" onClick={() => setSelectedPatient(row.original)}>ดูประวัติ</Button> },
   ], []);
 
   if (isLoading) return <p role="status" className="py-12 text-center">กำลังโหลดข้อมูล HDC...</p>;
   if (error) return <p role="alert" className="py-12 text-center text-red-700">{error}</p>;
   const filename = `HDC_${age}yr_${fiscalYear}_${quarter}`;
+  const exportRows = () => getHdcExportRows(filtered).map((row, index) => ({
+    ...row,
+    'ผลตามกฎ': filtered[index].ruleStatus,
+    'รายละเอียดผลตามกฎ': filtered[index].ruleDetails,
+    [MISMATCH_LABEL]: filtered[index].hdcMismatch ? 'ใช่' : '',
+  }));
 
   return (
     <div className="space-y-5">
       <div>
         <h2 className="text-lg font-semibold">รายชื่อเด็กอายุครบ {age} ปี</h2>
-        <p className="text-sm text-zinc-500">แสดงผลจาก HDC ที่นำเข้า เปิดประวัติเพื่อดูวันที่วัคซีนแต่ละเข็ม</p>
+        <p className="text-sm text-zinc-500">ผลตามกฎวัคซีนที่ตั้งค่าไว้ แสดงผลจาก HDC ประกอบ เปิดประวัติเพื่อดูวันที่วัคซีนแต่ละเข็ม</p>
         {asOfDate && <p className="text-xs text-zinc-500 mt-1">ข้อมูล ณ วันที่ {formatDateTimeStr(asOfDate)}</p>}
       </div>
       <VaccineRulesGuide rules={rules} viewType={2} isLoading={rulesLoading} error={rulesError} />
@@ -74,11 +132,19 @@ export function HdcRecordsView({ age, fiscalYear, quarter, data, isLoading, erro
           <option value="">ทุกสถานบริการ</option>
           {facilities.map(([code, name]) => <option key={code} value={code}>{code} — {name}</option>)}
         </select>
+        <select aria-label="ผลตามกฎ" value={ruleStatus} onChange={event => setRuleStatus(event.target.value)} className="border rounded-lg px-3 py-2 text-sm max-w-full">
+          <option value="">ผลตามกฎทั้งหมด</option>
+          {Object.values(RULE_STATUS_LABELS).map(label => <option key={label} value={label}>{label}</option>)}
+        </select>
         <select aria-label="ผลจาก HDC" value={result} onChange={event => setResult(event.target.value)} className="border rounded-lg px-3 py-2 text-sm max-w-full">
           <option value="">ผลจาก HDC ทั้งหมด</option>
           {results.map(value => <option key={value} value={value}>{value}</option>)}
         </select>
-        <Button variant="outline" onClick={() => exportToExcel(getHdcExportRows(filtered), filename, 'HDC')}>Excel พร้อมข้อมูลวัคซีน</Button>
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={mismatchOnly} onChange={event => setMismatchOnly(event.target.checked)} />
+          เฉพาะที่{MISMATCH_LABEL}
+        </label>
+        <Button variant="outline" onClick={() => exportToExcel(exportRows(), filename, 'HDC')}>Excel พร้อมข้อมูลวัคซีน</Button>
         <Button variant="outline" onClick={() => exportToPdf(filtered.map(record => ({
           'สถานบริการ': `${record.hoscode} ${record.hosname}`,
           'CID': record.cid,
@@ -86,8 +152,10 @@ export function HdcRecordsView({ age, fiscalYear, quarter, data, isLoading, erro
           'ประเภทพื้นที่': hdcValue(record.check_typearea),
           'ชื่อ-สกุล': `${record.name} ${record.lname}`,
           'วันเกิด': formatDateStr(record.birth),
+          'ผลตามกฎ': record.ruleStatus,
           'ผลจาก HDC': hdcValue(record.result),
-        })), filename, `รายชื่อเด็กอายุครบ ${age} ปี — ข้อมูลจาก HDC`)}>PDF รายชื่อ</Button>
+          [MISMATCH_LABEL]: record.hdcMismatch ? 'ใช่' : '',
+        })), filename, `รายชื่อเด็กอายุครบ ${age} ปี — ผลตามกฎและผลจาก HDC`)}>PDF รายชื่อ</Button>
       </div>
       <p className="text-sm text-zinc-500">แสดง {filtered.length.toLocaleString()} จาก {cohort.length.toLocaleString()} คน</p>
       <EpiDataTable data={filtered} columns={columns} />

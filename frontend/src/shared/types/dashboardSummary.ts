@@ -25,7 +25,8 @@ export interface VaccineBreakdownEntry {
   /** Issue #97 writer contract: `'hdc_verdict'` marks a NON-vaccine bucket that aggregates
    * an HDC person-verdict (e.g. ไม่ผ่านเกณฑ์ HDC) — keyless by design, never joinable by
    * metric_key and never counted as a vaccine by readers. Absent = ordinary vaccine-rule
-   * aggregate; legacy snapshots predate the field and stay valid without it. */
+   * aggregate; legacy snapshots predate the field and stay valid without it.
+   * Issue #101: no longer written (rules decide View 2) — only summaries stored before #101 carry it. */
   category?: 'hdc_verdict';
 }
 

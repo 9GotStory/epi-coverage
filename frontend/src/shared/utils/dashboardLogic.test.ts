@@ -12,15 +12,14 @@
  * `view2Failed` is derived at consumption time only and must NOT be persisted.
  *
  * Boundaries protected by these tests:
- *   - `evaluateDynamicV2()` and `VaccineStatus` are NOT changed by #23 — HDC
- *     override semantics are exercised through the REAL engine with minimal
- *     synthetic fixtures (the existing ruleEngine.test.ts already covers the
- *     `ผ่าน` clearing override; this file does not re-specify the engine).
+ *   - `evaluateDynamicV2()` and `VaccineStatus` are NOT changed by #23 — the HDC
+ *     `result` boundary (Issue #101: shown alongside, never decides) is exercised
+ *     through the REAL engine with minimal synthetic fixtures.
  *   - No historical migration/backfill is expected; nothing here touches
  *     persisted rows.
  *
  * Partition model (approved invariant, verified against the current loop): every
- * cohort record is exactly one of {applicable, pending} after the HDC override.
+ * cohort record is exactly one of {applicable, pending}.
  * Issue #89 extends the partition with a third exclusion bucket — {applicable,
  * pending, notEvaluable} — for records whose required V2 rule cannot be evaluated
  * from the source columns; these fixtures never produce that state (view
@@ -182,7 +181,7 @@ describe('Issue #23 — Group E: empty cohort', () => {
   });
 });
 
-// --- Group F: HDC override preservation through the REAL engine ---------------
+// --- Group F: HDC result boundary through the REAL engine (Issue #101) --------
 
 // One synthetic view-2 rule with an unreachable target age, so a child without
 // the dose is locally PENDING regardless of when the test runs.
@@ -194,21 +193,19 @@ const pendingRule: VaccineRule = {
 
 const locallyPendingChild = (): EpiRecord => ({ ...rec('R0'), result: undefined });
 
-describe('Issue #23 — Group F: HDC override boundary (real evaluateDynamicV2, unchanged)', () => {
-  it('F1: HDC "ผ่าน" clears local pending — the record becomes applicable and passed (engine preservation + summary RED)', () => {
+describe('Issue #23 — Group F: HDC result boundary (real evaluateDynamicV2)', () => {
+  it('F1: HDC "ผ่าน" does not clear a local Pending Rule — the record stays View 2 Pending (Issue #101)', () => {
     const record = { ...locallyPendingChild(), result: 'ผ่าน' };
     const engine = evaluateDynamicV2(record, [pendingRule]);
 
-    // Engine preservation (passes today; existing ruleEngine.test.ts also covers the override).
-    expect(engine.status).toBe('PASS');
-    expect(engine.pendingVaccines).toEqual([]);
+    expect(engine.status).toBe('PENDING');
+    expect(engine.pendingVaccines).toEqual(['HBV']);
 
-    // Summary must count it in the applicable denominator, not pending.
     const s = summarize([record], v1Eval, () => engine);
     expect(s.total).toBe(1);
-    expect(s.view2Passed).toBe(1);
-    expect(s.view2ApplicableTotal).toBe(1);
-    expect(s.view2PendingCount).toBe(0);
+    expect(s.view2Passed).toBe(0);
+    expect(s.view2ApplicableTotal).toBe(0);
+    expect(s.view2PendingCount).toBe(1);
   });
 
   it('F2: HDC "ไม่ผ่าน" with local PENDING stays pending — excluded from the applicable denominator', () => {

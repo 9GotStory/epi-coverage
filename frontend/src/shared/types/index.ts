@@ -119,6 +119,10 @@ export interface VaccineStatus {
   notEvaluableVaccines?: string[];
   /** Issue #121: กฎ V2 ที่ Birth Window ตัดเด็กออก (Inapplicable Rule) — ไม่นับในผลใด ใช้อธิบายในประวัติเท่านั้น */
   inapplicableRules?: InapplicableRule[];
+  /** Issue #101: คำตัดสินจาก `result` ของ HDC แสดงประกอบ ไม่เปลี่ยน status — null เมื่อว่างหรือเป็นค่าที่ระบบไม่รู้จัก */
+  hdcVerdict?: 'PASS' | 'FAIL' | null;
+  /** Issue #101 (HDC Result Mismatch): ทั้งกฎและ HDC ตัดสินผ่าน/ไม่ผ่านและขัดกัน — ให้เจ้าหน้าที่ตรวจ */
+  hdcMismatch?: boolean;
 }
 
 /** Issue #121: ด้านของ Birth Window — born_on_or_after (เริ่ม รวม) / born_before (สิ้นสุด ไม่รวม) */
