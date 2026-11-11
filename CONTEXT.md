@@ -579,6 +579,4 @@ It is a rule-level concept: the dose is not due, so it is neither passed nor mis
 
 **View 2 Pending** is the record-level View 2 state of a child who has at least one Pending Rule and no Confirmed Missing Dose.
 
-A Confirmed Missing Dose takes precedence: a child with both is a View 2 failure, not View 2 Pending.
-
 Use "View 2 Pending", not bare "pending", for this state.

@@ -126,11 +126,12 @@ export function calcGroupSummary(
 
     // Issue #89: แบ่งกลุ่มต่อ record เป็น 3 ส่วนไม่ซ้ำกัน — View 2 Pending (#23) / not evaluable
     // (กฎ V2 ที่ไฟล์ยืนยันคอลัมน์ไม่ได้) / applicable (ตัวหาร coverage)
-    // Issue #119 (ADR-0006 §5): จัดกลุ่มจาก status ของ engine จุดเดียว — ลำดับ ขาดจริง > pending >
-    // ประเมินไม่ได้ (และคำตัดสิน HDC) ตัดสินใน evaluateDynamicV2 เด็กที่ขาดจริงแม้มีกฎยังไม่ถึงกำหนด
-    // จึงเป็น applicable ไม่ผ่าน ไม่ใช่ pending; status อื่นหรือไม่มี status (evaluator รุ่นเดิม) → applicable
+    // Issue #119 (design #117, ADR-0006): จัดกลุ่มจาก status ของ engine จุดเดียว — ลำดับ
+    // Confirmed Missing Dose > Pending Rule > ประเมินไม่ได้ (และคำตัดสิน HDC) ตัดสินใน evaluateDynamicV2
+    // เด็กที่ขาดจริงแม้มี Pending Rule จึงเป็น applicable ไม่ผ่าน ไม่ใช่ View 2 Pending;
+    // status อื่นหรือไม่มี status (evaluator รุ่นเดิม) → applicable
     if (v2.status === 'PENDING') {
-      // Issue #23: count pending records directly in the loop — the loop itself creates the
+      // Issue #23: count View 2 Pending records directly in the loop — the loop itself creates the
       // exact partition (no post-loop derivation); the third bucket lives in the branch below.
       view2PendingCount++;
     } else if (v2.status === 'NOT_EVALUABLE') {
