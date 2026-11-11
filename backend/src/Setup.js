@@ -175,7 +175,8 @@ function setupDatabase() {
       'rule_id', 'fiscal_year', 'age_group', 'view_type',
       'vaccine_group', 'display_name', 'hdc_code',
       'required_fields', 'logic_type', 'branch_alt_fields',
-      'is_required_for_v2', 'is_active', 'target_age_months', 'note', 'updated_at', 'updated_by', 'date_checks', 'metric_key'
+      'is_required_for_v2', 'is_active', 'target_age_months', 'note', 'updated_at', 'updated_by', 'date_checks', 'metric_key',
+      'born_on_or_after', 'born_before'
     ]
   };
 

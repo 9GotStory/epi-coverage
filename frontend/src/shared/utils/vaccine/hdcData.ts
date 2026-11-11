@@ -61,8 +61,8 @@ export function getHdcVaccineRows(record: EpiRecord, rules?: VaccineRule[]) {
   const values = Object.fromEntries(Object.entries(record));
   const rows = rules ? rules.flatMap(rule => {
     const fields = [...new Set([...(rule.required_fields || []), ...(rule.branch_alt_fields || [])])];
-    return fields.map(field => ({ field, name: rule.display_name || field, note: rule.note, id: `${rule.rule_id}-${field}` }));
-  }) : Object.keys(record).filter(field => field.endsWith('_date')).map(field => ({ field, name: vaccineFieldLabel(field), note: undefined, id: field }));
+    return fields.map(field => ({ field, name: rule.display_name || field, note: rule.note, id: `${rule.rule_id}-${field}`, ruleId: rule.rule_id as string | undefined }));
+  }) : Object.keys(record).filter(field => field.endsWith('_date')).map(field => ({ field, name: vaccineFieldLabel(field), note: undefined, id: field, ruleId: undefined }));
   return rows.map(row => ({
     ...row,
     date: row.field && hasSourceColumn(record, row.field) ? hdcValue(values[row.field]) : 'ไฟล์ไม่มีคอลัมน์ / ยังไม่มีข้อมูลต้นทาง',

@@ -117,4 +117,17 @@ export interface VaccineStatus {
   passedVaccines: string[];
   /** Issue #89: display_name ของกฎ V2 ที่ไฟล์/`source_columns` ยืนยันคอลัมน์ไม่ได้ (เหตุของ status NOT_EVALUABLE) */
   notEvaluableVaccines?: string[];
+  /** Issue #121: กฎ V2 ที่ Birth Window ตัดเด็กออก (Inapplicable Rule) — ไม่นับในผลใด ใช้อธิบายในประวัติเท่านั้น */
+  inapplicableRules?: InapplicableRule[];
+}
+
+/** Issue #121: ด้านของ Birth Window — born_on_or_after (เริ่ม รวม) / born_before (สิ้นสุด ไม่รวม) */
+export type BirthWindowSide = 'born_on_or_after' | 'born_before';
+
+/** Inapplicable Rule (CONTEXT.md §42) ของเด็กหนึ่งคน พร้อมด้านของช่วงที่ตัดเด็กออก */
+export interface InapplicableRule {
+  rule_id: string;
+  display_name: string;
+  side: BirthWindowSide;
+  date: string;
 }
