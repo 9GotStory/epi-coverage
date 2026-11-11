@@ -2,7 +2,7 @@
 
 This file is the canonical operating contract for AI coding agents working in this repository.
 
-Claude Code reads this file directly. Other coding agents should enter through `AGENTS.md`, which delegates to this contract.
+Every coding agent enters through this file; it is the single agent entry point.
 
 The project contains public-health business rules and potentially sensitive health-related data. Correctness, data integrity, security, and traceability take priority over implementation speed.
 
@@ -401,6 +401,10 @@ Prefer simple, explicit designs that fit the current scale and architecture of E
 ---
 
 ## Agent skills
+
+### Workflow
+
+Every change runs the mattpocock-skills pipeline: design → spec → tickets → implement → PR → release. Before starting work or recommending a next step, read `docs/agents/workflow.md`. It names the stage skill to use, and the stages only the user can invoke.
 
 ### Issue tracker
 
