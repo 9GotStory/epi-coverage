@@ -166,6 +166,31 @@ describe('mapping source is vaccine_rules and is evidence-gated',()=>{
     expect(findHdcAgeMetric(item(opv3),[{...opv3,required_fields:['opv1_date']}],2569,'1yr')).toBeNull();
   });
 
+  // Issue #127: staff edit the 3yr View 1 JE rule in place to LAJE-only; years not
+  // yet edited keep the old BRANCH j12 | je3 shape. Both resolve to s_epi3 `je3`.
+  const lajeDose2:Partial<VaccineRule>={display_name:'LAJE เข็ม 2',vaccine_group:'JE',
+    hdc_code:'J12',logic_type:'ALL',required_fields:['j12_date'],branch_alt_fields:[]};
+  it('maps the LAJE-only 3yr View 1 rule (ALL j12_date, J12) to s_epi3 je3',()=>{
+    const r=rule('3yr','je3',lajeDose2);
+    expect(findHdcAgeMetric(item(r),[r],2569,'3yr')).toBe('je3');
+  });
+
+  it('still maps a year whose 3yr View 1 rule keeps the old BRANCH j12_date | je3_date, J12/053',()=>{
+    const r=rule('3yr','je3',{display_name:'LAJE เข็ม 2 / JE เข็ม 3',vaccine_group:'JE',
+      hdc_code:'J12/053',logic_type:'BRANCH',required_fields:['j12_date'],branch_alt_fields:['je3_date']});
+    expect(findHdcAgeMetric(item(r),[r],2569,'3yr')).toBe('je3');
+  });
+
+  it.each([
+    ['ALL with an extra field',{required_fields:['j11_date','j12_date']}],
+    ['the wrong code',{hdc_code:'J11'}],
+    ['the old code on the new shape',{hdc_code:'J12/053'}],
+    ['the new code on the old shape',{logic_type:'BRANCH',branch_alt_fields:['je3_date']}],
+  ] as [string,Partial<VaccineRule>][])('does not guess a 3yr JE metric for a near miss: %s',(_,miss)=>{
+    const r=rule('3yr','je3',{...lajeDose2,...miss});
+    expect(findHdcAgeMetric(item(r),[r],2569,'3yr')).toBeNull();
+  });
+
   it('allows future fiscal years only when they own an explicitly matching active rule',()=>{
     const r=rule('5yr','opv5',{fiscal_year:2570,rule_id:'new-year-id'});
     expect(findHdcAgeMetric(item(r),[r],2570,'5yr')).toBe('opv5');
