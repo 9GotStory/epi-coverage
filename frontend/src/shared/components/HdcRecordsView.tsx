@@ -1,5 +1,6 @@
 import { useVaccineRules } from '../hooks/useVaccineRules';
 import { getRecordDateWarnings } from '../utils/vaccine/dateWarnings';
+import { evaluateDynamicV2 } from '../utils/vaccine/ruleEngine';
 import { useMemo, useState } from 'react';
 import type { ColumnDef } from '@tanstack/react-table';
 import type { EpiRecord } from '../types';
@@ -90,7 +91,7 @@ export function HdcRecordsView({ age, fiscalYear, quarter, data, isLoading, erro
       </div>
       <p className="text-sm text-zinc-500">แสดง {filtered.length.toLocaleString()} จาก {cohort.length.toLocaleString()} คน</p>
       <EpiDataTable data={filtered} columns={columns} />
-      <VaccineHistoryModal warnings={selectedPatient ? getRecordDateWarnings(selectedPatient, rules) : []} warningsStatus={rulesLoading ? 'กำลังโหลดเกณฑ์ตรวจวันที่...' : rulesError ? 'โหลดเกณฑ์ตรวจวันที่ไม่สำเร็จ' : rules.length === 0 ? 'ยังไม่มีเกณฑ์ตรวจวันที่สำหรับปีและกลุ่มอายุนี้' : undefined} isOpen={!!selectedPatient} record={selectedPatient} onClose={() => setSelectedPatient(null)} />
+      <VaccineHistoryModal warnings={selectedPatient ? getRecordDateWarnings(selectedPatient, rules) : []} warningsStatus={rulesLoading ? 'กำลังโหลดเกณฑ์ตรวจวันที่...' : rulesError ? 'โหลดเกณฑ์ตรวจวันที่ไม่สำเร็จ' : rules.length === 0 ? 'ยังไม่มีเกณฑ์ตรวจวันที่สำหรับปีและกลุ่มอายุนี้' : undefined} inapplicableRules={selectedPatient ? evaluateDynamicV2(selectedPatient, rules).inapplicableRules : []} isOpen={!!selectedPatient} record={selectedPatient} onClose={() => setSelectedPatient(null)} />
     </div>
   );
 }

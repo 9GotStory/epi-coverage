@@ -297,6 +297,9 @@ const RULES_HEADERS = [
   'rule_id', 'fiscal_year', 'age_group', 'view_type', 'vaccine_group', 'display_name',
   'hdc_code', 'required_fields', 'logic_type', 'branch_alt_fields', 'is_required_for_v2',
   'is_active', 'target_age_months', 'note', 'metric_key', 'date_checks', 'updated_at', 'updated_by',
+  // Issue #121: a sheet created by the current setup schema already has the Birth Window columns
+  // (this fixed-width harness cannot model an additive column append)
+  'born_on_or_after', 'born_before',
 ];
 
 function rulesHarness() {

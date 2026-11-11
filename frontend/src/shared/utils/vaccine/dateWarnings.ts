@@ -3,6 +3,7 @@ import type { VaccineDateChecks, VaccineDatePair } from '../../types/vaccineDate
 import type { VaccineRule } from './ruleEngine';
 import { buildFieldLabelMap } from './rulePresentation';
 import { calendarDay, vaccineFieldLabel } from './hdcData';
+import { isInapplicableRule } from './birthWindow';
 
 /** คีย์วันที่สำหรับการประเมิน — timestamp ที่มี timezone แปลงตามเขตเวลาท้องถิ่น (กันวันเลื่อนหลัง 1 วัน) */
 export function dateKey(value: unknown): string | null {
@@ -43,7 +44,8 @@ export function getRuleDateChecks(rule: VaccineRule, allRules: VaccineRule[]): V
 }
 
 export function getRuleDateWarnings(record: EpiRecord, rule: VaccineRule, allRules: VaccineRule[]): string[] {
-  if (!rule.is_active) return [];
+  // Issue #121: Inapplicable Rule ไม่ใช้กับเด็กรายนี้ จึงไม่มีข้อสังเกตวันที่ของตัวเอง
+  if (!rule.is_active || isInapplicableRule(rule, record)) return [];
   const config = getRuleDateChecks(rule, allRules);
   // ป้ายชื่อเข็มมาจาก vaccine_rules (display_name ของ rule ที่ใช้ field นั้น) โดย fallback ที่ vaccineFieldLabel
   const labels = buildFieldLabelMap(allRules);

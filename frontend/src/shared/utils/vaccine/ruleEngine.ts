@@ -3,6 +3,8 @@ import { isOutPlanRule } from './rulePresentation';
 import type { VaccineDateChecks } from '../../types/vaccineDateChecks';
 import { dateKey, getRuleDateWarnings } from './dateWarnings';
 import { calendarDay } from './hdcData';
+import { ruleApplicability } from './birthWindow';
+import type { InapplicableRule } from './birthWindow';
 import { differenceInMonths, isValid } from 'date-fns';
 import type { EpiRecord, VaccineStatus } from '../../types';
 export interface View1Evaluation {
@@ -14,6 +16,8 @@ export interface View1Evaluation {
   /** display_name ของ rule ที่อยู่ในสถานะ pending (ใช้ตัดออกจากตัวหาร coverage รายวัคซีน) */
   pendingRuleNames?: string[];
   results: Record<string, boolean>;
+  /** Issue #121: กฎที่ Birth Window ตัดเด็กออก — ไม่อยู่ใน results/รายการใด ใช้อธิบายในประวัติเท่านั้น */
+  inapplicableRules?: InapplicableRule[];
 }
 
 export const getAgeInMonths = (birthDateStr: string | Date | undefined, evaluationDate: Date = new Date()): number => {
@@ -50,6 +54,10 @@ export interface VaccineRule {
   /** Issue #26 (Decision E): forward cross-FY logical identity. Absent/empty on rules
    * that predate the contract — the effective key is then this rule's own rule_id. */
   metric_key?: string;
+  /** Issue #121 (ADR-0008): Birth Window — วันปฏิทิน ค.ศ. `yyyy-MM-dd` หรือว่าง (ไม่จำกัด)
+   * เริ่มรวม (born_on_or_after) สิ้นสุดไม่รวม (born_before) */
+  born_on_or_after?: string;
+  born_before?: string;
 }
 
 /**
@@ -191,9 +199,22 @@ export const evaluateDynamicV1 = (record: EpiRecord, rules: VaccineRule[], evalu
   const v1Rules = rules.filter(rule => rule.view_type === 1 && rule.is_active && !(rule.display_only || isOutPlanRule(rule)));
   const unknownVaccines: string[] = [];
   const unknownRuleNames: string[] = [];
+  const inapplicableRules: InapplicableRule[] = [];
   let passedCount = 0;
 
   for (const rule of v1Rules) {
+    // Issue #121: Birth Window ตัดสินก่อนคอลัมน์ วันที่ และ Target Age — Inapplicable Rule ไม่นับเลย
+    const applicability = ruleApplicability(rule, record);
+    if (applicability.kind === 'inapplicable') {
+      inapplicableRules.push({ rule_id: rule.rule_id, display_name: rule.display_name, side: applicability.side, date: applicability.date });
+      continue;
+    }
+    if (applicability.kind === 'not_evaluable') {
+      results[rule.display_name] = false;
+      unknownRuleNames.push(rule.display_name);
+      unknownVaccines.push(`${rule.display_name}: ${applicability.reason}`);
+      continue;
+    }
     if (rule.unavailable_reason || (rule.source_aware && !ruleSourceDecidable(rule, record))) {
       results[rule.display_name] = false;
       unknownRuleNames.push(rule.display_name);
@@ -240,7 +261,7 @@ export const evaluateDynamicV1 = (record: EpiRecord, rules: VaccineRule[], evalu
     }
   }
 
-  return { missingVaccines, pendingVaccines, pendingRuleNames, unknownVaccines, unknownRuleNames, passedCount, results };
+  return { missingVaccines, pendingVaccines, pendingRuleNames, unknownVaccines, unknownRuleNames, passedCount, results, inapplicableRules };
 };
 
 /**
@@ -260,12 +281,24 @@ export const evaluateDynamicV2 = (record: EpiRecord, rules: VaccineRule[], evalu
   const pendingVaccines: string[] = [];
   const passedVaccines: string[] = [];
   const notEvaluableVaccines: string[] = [];
+  const inapplicableRules: InapplicableRule[] = [];
 
   const currentAgeMonths = getAgeInMonths(record.birth, evaluationDate);
 
   const v2Rules = rules.filter(r => r.view_type === 2 && r.is_active);
 
   for (const rule of v2Rules) {
+    // Issue #121: Inapplicable Rule ไม่เข้ารายการใดเลย จึงไม่ถูก backfill ด้วย HDC `ผ่าน` และไม่อยู่ในตัวหารรายกฎ
+    // ไม่มีวันเกิดที่ถูกต้อง → ประเมินไม่ได้ (ถัง #89) ลำดับ #103 คงเดิม: ขาดจริงจากกฎอื่นยังเป็น FAIL
+    const applicability = ruleApplicability(rule, record);
+    if (applicability.kind === 'inapplicable') {
+      inapplicableRules.push({ rule_id: rule.rule_id, display_name: rule.display_name, side: applicability.side, date: applicability.date });
+      continue;
+    }
+    if (applicability.kind === 'not_evaluable') {
+      notEvaluableVaccines.push(rule.display_name);
+      continue;
+    }
     // Issue #89: ประตูตรวจคอลัมน์รายกฎเดียวกับ View 1 — กฎที่ตัดสินไม่ได้ไม่ถูกนับเป็นขาด
     if (rule.unavailable_reason || (rule.source_aware && !ruleSourceDecidable(rule, record))) {
       notEvaluableVaccines.push(rule.display_name);
@@ -355,5 +388,5 @@ export const evaluateDynamicV2 = (record: EpiRecord, rules: VaccineRule[], evalu
     isFullyImmunized = false;
   }
 
-  return { isFullyImmunized, status, missingVaccines, pendingVaccines, passedVaccines, notEvaluableVaccines };
+  return { isFullyImmunized, status, missingVaccines, pendingVaccines, passedVaccines, notEvaluableVaccines, inapplicableRules };
 };

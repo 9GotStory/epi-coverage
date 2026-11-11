@@ -1,6 +1,7 @@
 import { getRuleDateChecks } from '../../../shared/utils/vaccine/dateWarnings';
 import { buildFieldLabelMap } from '../../../shared/utils/vaccine/rulePresentation';
 import { vaccineFieldLabel } from '../../../shared/utils/vaccine/hdcData';
+import { beInputToIso, isoToBeInput } from '../../../shared/utils/vaccine/birthWindow';
 import { fetchApi } from '../../../shared/lib/api';
 import { useAuth } from '../../../shared/contexts/AuthContext';
 import { useEffect, useState } from "react";
@@ -59,6 +60,15 @@ const ruleSchema = z.object({
   is_required_for_v2: z.boolean(),
   target_age_months: z.number().nullable().optional(),
   note: z.string().optional(),
+  // Issue #121: Birth Window กรอกเป็น พ.ศ. วว/ดด/ปปปป ว่าง = ไม่จำกัด (backend ตรวจซ้ำและเป็นผู้ตัดสิน)
+  born_on_or_after: z.string(),
+  born_before: z.string(),
+}).superRefine((data, ctx) => {
+  const start = beInputToIso(data.born_on_or_after);
+  const end = beInputToIso(data.born_before);
+  if (start === null) ctx.addIssue({ code: 'custom', path: ['born_on_or_after'], message: 'กรุณากรอกวันที่จริงในรูป วว/ดด/ปปปป (พ.ศ.) หรือเว้นว่าง' });
+  if (end === null) ctx.addIssue({ code: 'custom', path: ['born_before'], message: 'กรุณากรอกวันที่จริงในรูป วว/ดด/ปปปป (พ.ศ.) หรือเว้นว่าง' });
+  if (start && end && start >= end) ctx.addIssue({ code: 'custom', path: ['born_before'], message: '"เกิดก่อน" ต้องอยู่หลัง "เกิดตั้งแต่"' });
 }).refine(
   (data) => {
     if (data.logic_type === "BRANCH") {
@@ -101,6 +111,8 @@ export function RuleEditModal({ rule, allRules, isOpen, onClose, onSave, fiscalY
       is_required_for_v2: true,
       target_age_months: null,
       note: "",
+      born_on_or_after: "",
+      born_before: "",
     },
   });
 
@@ -186,6 +198,8 @@ export function RuleEditModal({ rule, allRules, isOpen, onClose, onSave, fiscalY
           is_required_for_v2: rule.is_required_for_v2 ?? true,
           target_age_months: rule.target_age_months ?? null,
           note: rule.note || "",
+          born_on_or_after: isoToBeInput(rule.born_on_or_after),
+          born_before: isoToBeInput(rule.born_before),
         });
       } else {
         form.reset({
@@ -200,6 +214,8 @@ export function RuleEditModal({ rule, allRules, isOpen, onClose, onSave, fiscalY
           is_active: true,
           is_required_for_v2: true,
           note: "",
+          born_on_or_after: "",
+          born_before: "",
         });
       }
     }
@@ -282,6 +298,9 @@ export function RuleEditModal({ rule, allRules, isOpen, onClose, onSave, fiscalY
       is_required_for_v2: data.is_required_for_v2,
       target_age_months: data.target_age_months ?? undefined,
       note: data.note,
+      // ผ่าน schema แล้วจึงไม่เป็น null — เก็บเป็น ค.ศ. yyyy-MM-dd หรือว่าง
+      born_on_or_after: beInputToIso(data.born_on_or_after) ?? '',
+      born_before: beInputToIso(data.born_before) ?? '',
     };
 
     onSave(updatedRule);
@@ -568,6 +587,26 @@ export function RuleEditModal({ rule, allRules, isOpen, onClose, onSave, fiscalY
                 )}
               </div>
             )}
+
+            <section className="border rounded-lg p-4 space-y-4">
+              <h3 className="font-semibold">ช่วงวันเกิดที่ใช้เกณฑ์นี้ (Birth Window)</h3>
+              <p className="text-sm text-zinc-500">เว้นว่างได้ทั้งสองช่อง (ใช้กับเด็กทุกคนในกลุ่มอายุ) เด็กที่เกิดนอกช่วงจะไม่นับเกณฑ์นี้เลย และแสดงในประวัติว่า "ไม่ใช้กับเด็กรายนี้" ใช้แยกสูตรวัคซีนเมื่อกลุ่มอายุหนึ่งคร่อมวันเปลี่ยนสูตร โดยให้สองเกณฑ์ใช้วันตัดเดียวกัน</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {([
+                  { name: 'born_on_or_after', label: 'เกิดตั้งแต่ (รวมวันนี้)' },
+                  { name: 'born_before', label: 'เกิดก่อน (ไม่รวมวันนี้)' },
+                ] as const).map(({ name, label }) => <FormField key={name} control={form.control} name={name} render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{label}</FormLabel>
+                    <FormControl>
+                      <Input placeholder="วว/ดด/ปปปป เช่น 1/5/2566" inputMode="numeric" className="bg-white" {...field} />
+                    </FormControl>
+                    <FormDescription>พ.ศ. · เว้นว่าง = ไม่จำกัด</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )} />)}
+              </div>
+            </section>
 
             <section className="border rounded-lg p-4 space-y-4">
               <div className="flex items-center justify-between gap-2">

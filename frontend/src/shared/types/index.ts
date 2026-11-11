@@ -1,3 +1,5 @@
+import type { InapplicableRule } from '../utils/vaccine/birthWindow';
+
 export type UserRole = 'user' | 'admin' | 'superadmin';
 
 export type UserStatus = 'pending' | 'approved' | 'rejected';
@@ -117,4 +119,6 @@ export interface VaccineStatus {
   passedVaccines: string[];
   /** Issue #89: display_name ของกฎ V2 ที่ไฟล์/`source_columns` ยืนยันคอลัมน์ไม่ได้ (เหตุของ status NOT_EVALUABLE) */
   notEvaluableVaccines?: string[];
+  /** Issue #121: กฎ V2 ที่ Birth Window ตัดเด็กออก (Inapplicable Rule) — ไม่นับในผลใด ใช้อธิบายในประวัติเท่านั้น */
+  inapplicableRules?: InapplicableRule[];
 }

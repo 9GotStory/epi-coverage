@@ -37,6 +37,55 @@ function parseDateChecks_(value) {
 }
 
 /**
+ * Issue #121 (ADR-0008): Birth Window ของกฎ — born_on_or_after (รวม) / born_before (ไม่รวม)
+ * เก็บเป็นข้อความ ISO ค.ศ. yyyy-MM-dd ค่าว่าง = ไม่จำกัด คอลัมน์เพิ่มท้ายชีตแบบ additive เหมือน date_checks
+ */
+const BIRTH_WINDOW_COLUMNS_ = ['born_on_or_after', 'born_before'];
+
+function isIsoCalendarDate_(value) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return false;
+  const year = Number(match[1]), month = Number(match[2]), day = Number(match[3]);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+}
+// Fail closed: a side is empty or a real calendar date, and a two-sided window must be non-empty.
+// `undefined` (older client omitted the field) is allowed here; the caller keeps the stored value.
+function validateBirthWindow_(window) {
+  for (const side of BIRTH_WINDOW_COLUMNS_) {
+    const value = window[side];
+    if (value === undefined || value === null || value === '') continue;
+    if (typeof value !== 'string' || !isIsoCalendarDate_(value)) {
+      throw new Error(`Invalid Birth Window: ${side} must be a calendar date yyyy-MM-dd`);
+    }
+  }
+  if (window.born_on_or_after && window.born_before && window.born_on_or_after >= window.born_before) {
+    throw new Error('Invalid Birth Window: born_on_or_after must be earlier than born_before');
+  }
+}
+function ensureBirthWindowColumns_(sheet) {
+  const headers = sheet.getDataRange().getValues()[0];
+  const missing = BIRTH_WINDOW_COLUMNS_.filter(name => !headers.includes(name));
+  if (missing.length > 0) sheet.getRange(1, headers.length + 1, 1, missing.length).setValues([missing]);
+}
+// Sheets may coerce an ISO text cell into a Date: read it back as its calendar day in the
+// spreadsheet time zone (Data.js convention), never through a UTC conversion.
+function normalizeBirthWindowCell_(value, timeZoneOf) {
+  if (value === undefined || value === null || value === '') return '';
+  if (Object.prototype.toString.call(value) === '[object Date]') return Utilities.formatDate(value, timeZoneOf(), 'yyyy-MM-dd');
+  return String(value).trim();
+}
+function spreadsheetTimeZoneOnce_() {
+  let timeZone;
+  return () => timeZone || (timeZone = getSpreadsheet().getSpreadsheetTimeZone());
+}
+// The value to persist for one side: an omitted side keeps the stored cell, null/'' clears it.
+function birthWindowCellForSave_(rule, side, storedValue, timeZoneOf) {
+  if (rule[side] === undefined) return normalizeBirthWindowCell_(storedValue, timeZoneOf);
+  return rule[side] || '';
+}
+
+/**
  * Issue #26 (Decision E — forward-only vaccine identity): a metric_key is
  * ESTABLISHED only when stored as a non-empty string. Absent/null/undefined/
  * empty means no established key; the effective runtime key is the rule_id.
@@ -278,6 +327,11 @@ function commitRulesRectangle_(sheet, headers, rows, previousDataRowCount) {
     if (hdcCodeColIndex !== -1) {
       sheet.getRange(2, hdcCodeColIndex + 1, height, 1).setNumberFormat('@');
     }
+    // Issue #121: เก็บ Birth Window เป็นข้อความ — กัน Sheets แปลง yyyy-MM-dd เป็น Date
+    for (const name of BIRTH_WINDOW_COLUMNS_) {
+      const col = headers.indexOf(name);
+      if (col !== -1) sheet.getRange(2, col + 1, height, 1).setNumberFormat('@');
+    }
     const target = sheet.getRange(2, 1, height, width);
     writeAttempted = true; // throw หลังจุดนี้คือความไม่ชัดเจน (batch อาจถูก apply ไปแล้ว)
     target.setValues(safeMatrix);
@@ -300,6 +354,7 @@ function getVaccineRules(fiscalYear, ageGroup) {
 
   const data = sheet.getDataRange().getValues();
   const headers = data[0];
+  const timeZoneOf = spreadsheetTimeZoneOnce_();
 
   return data.slice(1)
     .map(row => arrayToObj(headers, row))
@@ -326,6 +381,9 @@ function getVaccineRules(fiscalYear, ageGroup) {
         // key when established, otherwise this rule's own rule_id. Runtime identity
         // only; it never claims equivalence with another fiscal year.
         metric_key: establishedMetricKey_(r.metric_key) || r.rule_id,
+        // Issue #121: normalized yyyy-MM-dd or '' (a sheet without the columns has no window)
+        born_on_or_after: normalizeBirthWindowCell_(r.born_on_or_after, timeZoneOf),
+        born_before: normalizeBirthWindowCell_(r.born_before, timeZoneOf),
         is_active: r.is_active === true || r.is_active === 'TRUE' || r.is_active === 'true',
         is_required_for_v2: r.is_required_for_v2 === true || r.is_required_for_v2 === 'TRUE' || r.is_required_for_v2 === 'true'
       };
@@ -385,13 +443,14 @@ function saveVaccineRule(rule, adminEmail) {
       if (typeof f === 'string' && /^[a-z][a-z0-9_]*_date$/.test(f)) known.add(f);
     }));
     incoming.forEach(r => validateDateChecks_(r.date_checks, r, known));
+    incoming.forEach(validateBirthWindow_);
   } catch (error) { return { success: false, error: error.message }; }
   ensureDateChecksColumn_(sheet);
 
   // Issue #76: อ่าน-ตัดสิน-เขียนทั้งลำดับเกิดภายใต้ lock เดียว (release เสมอใน finally)
   return withRulesLock_(() => {
     const data = sheet.getDataRange().getValues();
-    const headers = data[0];
+    let headers = data[0];
     const idCol = headers.indexOf('rule_id');
 
     // Issue #80: ตัดสินชื่อ active ซ้ำภายใต้ lock จาก snapshot เดียวกับที่จะเขียน —
@@ -429,11 +488,28 @@ function saveVaccineRule(rule, adminEmail) {
       return { success: false, error: metricKeyResolution.error };
     }
 
+    // Issue #121: a side omitted by an older client keeps its stored value — validate the
+    // window as it will be stored, still before any row write
+    const timeZoneOf = spreadsheetTimeZoneOnce_();
+    const storedRow = existingRowIndex > 0 ? data[existingRowIndex - 1] : [];
+    const birthWindow = {};
+    for (const side of BIRTH_WINDOW_COLUMNS_) {
+      birthWindow[side] = birthWindowCellForSave_(rule, side, storedRow[headers.indexOf(side)], timeZoneOf);
+    }
+    try { validateBirthWindow_(birthWindow); } catch (error) { return { success: false, error: error.message }; }
+    // every rejection above leaves the sheet untouched; only now append the missing columns
+    // (existing column indices are unchanged, so the snapshot rows still line up)
+    ensureBirthWindowColumns_(sheet);
+    headers = sheet.getDataRange().getValues()[0];
+
     // ป้องกันเลข 0 นำหน้าหาย สำหรับ hdc_code
     const hdcCodeColIndex = headers.indexOf('hdc_code');
+    const targetRow = existingRowIndex !== -1 ? existingRowIndex : sheet.getLastRow() + 1;
     if (hdcCodeColIndex !== -1) {
-      const targetRow = existingRowIndex !== -1 ? existingRowIndex : sheet.getLastRow() + 1;
       sheet.getRange(targetRow, hdcCodeColIndex + 1).setNumberFormat('@');
+    }
+    for (const side of BIRTH_WINDOW_COLUMNS_) {
+      sheet.getRange(targetRow, headers.indexOf(side) + 1).setNumberFormat('@');
     }
 
     const rowData = headers.map(header => {
@@ -453,6 +529,8 @@ function saveVaccineRule(rule, adminEmail) {
         case 'target_age_months': return rule.target_age_months !== undefined ? rule.target_age_months : '';
         case 'date_checks': return rule.date_checks === undefined ? (existingRowIndex > 0 ? data[existingRowIndex - 1][headers.indexOf('date_checks')] || '' : '') : JSON.stringify(rule.date_checks);
         case 'note': return rule.note || '';
+        case 'born_on_or_after':
+        case 'born_before': return birthWindow[header];
         case 'metric_key': return metricKeyResolution.key;
         case 'updated_at': return now;
         case 'updated_by': return adminEmail || '';
@@ -500,6 +578,7 @@ function batchSaveRules(fiscalYear, ageGroup, rules, adminEmail) {
         if (typeof f === 'string' && /^[a-z][a-z0-9_]*_date$/.test(f)) known.add(f);
       }));
       incoming.forEach(r => validateDateChecks_(r.date_checks, r, known));
+      incoming.forEach(validateBirthWindow_);
       // Issue #80: batch แทนที่ rules ของ (fiscal_year, age_group) ทั้งชุด —
       // ตรวจชื่อ active ซ้ำภายในชุดใหม่เอง (ชุดเดิมจะถูกแทนที่ทั้งหมด)
       const duplicateName = findDuplicateActiveDisplayName_(incoming);
@@ -507,6 +586,47 @@ function batchSaveRules(fiscalYear, ageGroup, rules, adminEmail) {
     } catch (error) { return { success: false, error: error.message }; }
     ensureDateChecksColumn_(sheet);
 
+    const snapshot = sheet.getDataRange().getValues();
+    const snapshotHeaders = snapshot[0];
+
+    // Issue #26 (Decision E): resolve every incoming rule's forward identity against its
+    // STORED key BEFORE any sheet mutation. Established keys survive older-client omission
+    // and replacement; attempted lineage reassignment fails the whole batch with the
+    // (FY, ageGroup) ruleset untouched.
+    const idColIndex = snapshotHeaders.indexOf('rule_id');
+    const metricKeyColIndex = snapshotHeaders.indexOf('metric_key');
+    const storedKeyByRuleId = new Map();
+    for (let i = 1; i < snapshot.length; i++) {
+      if (String(arrayToObj(snapshotHeaders, snapshot[i]).fiscal_year) === String(fiscalYear) && arrayToObj(snapshotHeaders, snapshot[i]).age_group === ageGroup) {
+        storedKeyByRuleId.set(snapshot[i][idColIndex], metricKeyColIndex !== -1 ? snapshot[i][metricKeyColIndex] : undefined);
+      }
+    }
+    const resolvedMetricKeys = new Map();
+    for (const rule of rules) {
+      const resolution = resolveMetricKeyForSave_(rule, storedKeyByRuleId.get(rule.rule_id));
+      if (resolution.error) {
+        return { success: false, error: `rule ${rule.rule_id}: ${resolution.error}` };
+      }
+      resolvedMetricKeys.set(rule.rule_id, resolution.key);
+    }
+
+    // Issue #121: resolve each rule's Birth Window as it will be stored (omitted side keeps the
+    // stored cell) and validate it before any sheet mutation
+    const timeZoneOf = spreadsheetTimeZoneOnce_();
+    const resolvedBirthWindows = new Map();
+    for (const rule of rules) {
+      const storedRow = snapshot.slice(1).find(row => row[idColIndex] === rule.rule_id) || [];
+      const birthWindow = {};
+      for (const side of BIRTH_WINDOW_COLUMNS_) {
+        birthWindow[side] = birthWindowCellForSave_(rule, side, storedRow[snapshotHeaders.indexOf(side)], timeZoneOf);
+      }
+      try { validateBirthWindow_(birthWindow); } catch (error) { return { success: false, error: `rule ${rule.rule_id}: ${error.message}` }; }
+      resolvedBirthWindows.set(rule.rule_id, birthWindow);
+    }
+
+    // every rejection above leaves the sheet untouched; only now append the missing Birth Window
+    // columns, then work on the widened snapshot (existing column indices are unchanged)
+    ensureBirthWindowColumns_(sheet);
     const data = sheet.getDataRange().getValues();
     const headers = data[0];
 
@@ -519,27 +639,6 @@ function batchSaveRules(fiscalYear, ageGroup, rules, adminEmail) {
       if (String(obj.fiscal_year) !== String(fiscalYear) || obj.age_group !== ageGroup) {
         keptRows.push(row);
       }
-    }
-
-    // Issue #26 (Decision E): resolve every incoming rule's forward identity against its
-    // STORED key BEFORE any sheet mutation. Established keys survive older-client omission
-    // and replacement; attempted lineage reassignment fails the whole batch with the
-    // (FY, ageGroup) ruleset untouched.
-    const idColIndex = headers.indexOf('rule_id');
-    const metricKeyColIndex = headers.indexOf('metric_key');
-    const storedKeyByRuleId = new Map();
-    for (let i = 1; i < data.length; i++) {
-      if (String(arrayToObj(headers, data[i]).fiscal_year) === String(fiscalYear) && arrayToObj(headers, data[i]).age_group === ageGroup) {
-        storedKeyByRuleId.set(data[i][idColIndex], metricKeyColIndex !== -1 ? data[i][metricKeyColIndex] : undefined);
-      }
-    }
-    const resolvedMetricKeys = new Map();
-    for (const rule of rules) {
-      const resolution = resolveMetricKeyForSave_(rule, storedKeyByRuleId.get(rule.rule_id));
-      if (resolution.error) {
-        return { success: false, error: `rule ${rule.rule_id}: ${resolution.error}` };
-      }
-      resolvedMetricKeys.set(rule.rule_id, resolution.key);
     }
 
     // 2. แปลง new rules ให้เป็นรูปแบบ row
@@ -562,6 +661,8 @@ function batchSaveRules(fiscalYear, ageGroup, rules, adminEmail) {
           case 'target_age_months': return rule.target_age_months !== undefined ? rule.target_age_months : '';
           case 'date_checks': return rule.date_checks === undefined ? (data.slice(1).find(row => row[headers.indexOf('rule_id')] === rule.rule_id)?.[headers.indexOf('date_checks')] || '') : JSON.stringify(rule.date_checks);
           case 'metric_key': return resolvedMetricKeys.get(rule.rule_id);
+          case 'born_on_or_after':
+          case 'born_before': return resolvedBirthWindows.get(rule.rule_id)[header];
           case 'note': return rule.note || '';
           case 'updated_at': return now;
           case 'updated_by': return adminEmail || '';
@@ -643,6 +744,7 @@ function cloneRulesFromYearLocked_(fromYear, toYear, adminEmail) {
 
   // สร้าง Row ใหม่สำหรับปีปลายทาง
   const now = new Date();
+  const timeZoneOf = spreadsheetTimeZoneOnce_();
   const newRows = sourceRules.map(row => {
     const obj = arrayToObj(headers, row);
     // Issue #26 (Decision E): the clone is a NEW rule instance but preserves the source
@@ -655,6 +757,8 @@ function cloneRulesFromYearLocked_(fromYear, toYear, adminEmail) {
       if (header === 'fiscal_year') return toYear;
       if (header === 'updated_at') return now;
       if (header === 'updated_by') return adminEmail || '';
+      // Issue #121: the window is copied unchanged, as ISO text even if Sheets coerced the cell
+      if (BIRTH_WINDOW_COLUMNS_.includes(header)) return normalizeBirthWindowCell_(obj[header], timeZoneOf);
       return obj[header] !== undefined ? obj[header] : '';
     });
   });
@@ -694,6 +798,17 @@ function seedVaccineRules(fiscalYear, adminEmail, force = false) {
   return withRulesLock_(() => seedVaccineRulesLocked_(fiscalYear, adminEmail, force));
 }
 
+/**
+ * Issue #121 (ADR-0008): สูตรโปลิโอเปลี่ยน 1 ก.ค. 2566 (OPV 2/4 เดือน → IPV 2/4 เดือน)
+ * เด็กเกิดก่อน 1 พ.ค. 2566 อายุครบ 2 เดือนก่อนวันเปลี่ยน จึงใช้สูตรเดิม
+ * (docs/research/hdc-je-indicators-and-epi-schedule-2569.md §3.1)
+ */
+const POLIO_REGIMEN_CUT_OFF_ = '2023-05-01';
+function oldPolioRegimenNote_(removeFromFiscalYear) {
+  return 'สูตรโปลิโอเดิม สำหรับเด็กเกิดก่อน 1 พ.ค. 2566 (2023-05-01): opv1_date/opv2_date คือวัคซีนโปลิโอเข็มที่ 1/2 ชนิดใดก็ได้ (OPV หรือ IPV) ตามลำดับของ HDC — ' +
+    `ลบกฎนี้เมื่อกลุ่มอายุไม่มีเด็กเกิดก่อน 1 พ.ค. 2566 แล้ว (ตั้งแต่ปีงบ ${removeFromFiscalYear})`;
+}
+
 function seedVaccineRulesLocked_(fiscalYear, adminEmail, force) {
 
   const ss = getSpreadsheet();
@@ -701,16 +816,20 @@ function seedVaccineRulesLocked_(fiscalYear, adminEmail, force) {
   if (!sheet) return { success: false, error: 'vaccine_rules sheet not found. Run setup first.' };
 
   // ตรวจสอบว่ามี Rules ของปีนั้นอยู่แล้วหรือไม่
-  const data = sheet.getDataRange().getValues();
-  const headers = data[0];
-  const existing = data.slice(1).filter(row => {
-    const obj = arrayToObj(headers, row);
+  const snapshot = sheet.getDataRange().getValues();
+  const existing = snapshot.slice(1).filter(row => {
+    const obj = arrayToObj(snapshot[0], row);
     return String(obj.fiscal_year) === String(fiscalYear);
   });
 
   if (existing.length > 0 && !force) {
     return { success: false, error: `Year ${fiscalYear} already has ${existing.length} rules. Use cloneVaccineRules or delete existing rules first.` };
   }
+
+  // Issue #121: seed เขียน Birth Window ของกฎสูตรโปลิโอ — เพิ่มคอลัมน์ท้ายชีต (additive) หลังผ่านการตรวจ
+  ensureBirthWindowColumns_(sheet);
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0];
 
   // Issue #76: force ไม่ลบทีละแถวอีกต่อไป — แถวของปีอื่นถูกเก็บไว้แล้วเขียนทับทั้งบริเวณ
   // ด้วยสี่เหลี่ยมเดียว จึงไม่มีหน้าต่าง delete→append ที่พังครึ่งทางแล้วปีนั้นหายบางส่วน
@@ -748,8 +867,6 @@ function seedVaccineRulesLocked_(fiscalYear, adminEmail, force) {
     { age_group: '1yr', view_type: 1, vaccine_group: 'IPV', display_name: 'IPV เข็ม 2', hdc_code: 'I12', required_fields: ['ipv2_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 4 },
     
     // ── OPV ──
-    { age_group: '1yr', view_type: 1, vaccine_group: 'OPV', display_name: 'OPV เข็ม 1', hdc_code: '081', required_fields: ['opv1_date'], logic_type: 'ALL', is_required_for_v2: true, is_active: false, target_age_months: 2, note: 'ปฏิทิน 2569 ใช้ IPV แทนที่เข็ม 2 และ 4 เดือน — เปิดใช้กฎนี้เฉพาะข้อมูลปฏิทินเก่า' },
-    { age_group: '1yr', view_type: 1, vaccine_group: 'OPV', display_name: 'OPV เข็ม 2', hdc_code: '082', required_fields: ['opv2_date'], logic_type: 'ALL', is_required_for_v2: true, is_active: false, target_age_months: 4, note: 'ปฏิทิน 2569 ใช้ IPV แทนที่เข็ม 2 และ 4 เดือน — เปิดใช้กฎนี้เฉพาะข้อมูลปฏิทินเก่า' },
     { age_group: '1yr', view_type: 1, vaccine_group: 'OPV', display_name: 'OPV เข็ม 3', hdc_code: '083', required_fields: ['opv3_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 6 },
     
     // ── MMR ──
@@ -779,8 +896,6 @@ function seedVaccineRulesLocked_(fiscalYear, adminEmail, force) {
     { age_group: '1yr', view_type: 2, vaccine_group: 'Hib', display_name: 'Hib เข็ม 3', hdc_code: 'D23', required_fields: ['hib3_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 6 },
     { age_group: '1yr', view_type: 2, vaccine_group: 'IPV', display_name: 'IPV เข็ม 1', hdc_code: 'I11', required_fields: ['ipv1_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 2 },
     { age_group: '1yr', view_type: 2, vaccine_group: 'IPV', display_name: 'IPV เข็ม 2', hdc_code: 'I12', required_fields: ['ipv2_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 4 },
-    { age_group: '1yr', view_type: 2, vaccine_group: 'OPV', display_name: 'OPV เข็ม 1', hdc_code: '081', required_fields: ['opv1_date'], logic_type: 'ALL', is_required_for_v2: true, is_active: false, target_age_months: 2, note: 'ปฏิทิน 2569 ใช้ IPV แทนที่เข็ม 2 และ 4 เดือน — เปิดใช้กฎนี้เฉพาะข้อมูลปฏิทินเก่า' },
-    { age_group: '1yr', view_type: 2, vaccine_group: 'OPV', display_name: 'OPV เข็ม 2', hdc_code: '082', required_fields: ['opv2_date'], logic_type: 'ALL', is_required_for_v2: true, is_active: false, target_age_months: 4, note: 'ปฏิทิน 2569 ใช้ IPV แทนที่เข็ม 2 และ 4 เดือน — เปิดใช้กฎนี้เฉพาะข้อมูลปฏิทินเก่า' },
     { age_group: '1yr', view_type: 2, vaccine_group: 'OPV', display_name: 'OPV เข็ม 3', hdc_code: '083', required_fields: ['opv3_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 6 },
     { age_group: '1yr', view_type: 2, vaccine_group: 'MMR', display_name: 'MMR เข็ม 1', hdc_code: '061', required_fields: ['mmr1_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 9 },
     
@@ -826,8 +941,6 @@ function seedVaccineRulesLocked_(fiscalYear, adminEmail, force) {
     { age_group: '2yr', view_type: 2, vaccine_group: 'IPV', display_name: 'IPV เข็ม 2', hdc_code: 'I12', required_fields: ['ipv2_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 4 },
     
     // ── OPV (เช็ค 4 เข็ม) ──
-    { age_group: '2yr', view_type: 2, vaccine_group: 'OPV', display_name: 'OPV เข็ม 1', hdc_code: '081', required_fields: ['opv1_date'], logic_type: 'ALL', is_required_for_v2: true, is_active: false, target_age_months: 2, note: 'ปฏิทิน 2569 ใช้ IPV แทนที่เข็ม 2 และ 4 เดือน — เปิดใช้กฎนี้เฉพาะข้อมูลปฏิทินเก่า' },
-    { age_group: '2yr', view_type: 2, vaccine_group: 'OPV', display_name: 'OPV เข็ม 2', hdc_code: '082', required_fields: ['opv2_date'], logic_type: 'ALL', is_required_for_v2: true, is_active: false, target_age_months: 4, note: 'ปฏิทิน 2569 ใช้ IPV แทนที่เข็ม 2 และ 4 เดือน — เปิดใช้กฎนี้เฉพาะข้อมูลปฏิทินเก่า' },
     { age_group: '2yr', view_type: 2, vaccine_group: 'OPV', display_name: 'OPV เข็ม 3', hdc_code: '083', required_fields: ['opv3_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 6 },
     { age_group: '2yr', view_type: 2, vaccine_group: 'OPV', display_name: 'OPV เข็ม 4', hdc_code: '084', required_fields: ['opv4_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 18 },
     
@@ -868,12 +981,12 @@ function seedVaccineRulesLocked_(fiscalYear, adminEmail, force) {
     { age_group: '3yr', view_type: 2, vaccine_group: 'Hib', display_name: 'Hib เข็ม 3', hdc_code: 'D23', required_fields: ['hib3_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 6 },
     
     // ── IPV (เช็ค 2 เข็ม) ──
-    { age_group: '3yr', view_type: 2, vaccine_group: 'IPV', display_name: 'IPV เข็ม 1', hdc_code: 'I11', required_fields: ['ipv1_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 2 },
-    { age_group: '3yr', view_type: 2, vaccine_group: 'IPV', display_name: 'IPV เข็ม 2', hdc_code: 'I12', required_fields: ['ipv2_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 4 },
+    { age_group: '3yr', view_type: 2, vaccine_group: 'IPV', display_name: 'IPV เข็ม 1', hdc_code: 'I11', required_fields: ['ipv1_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 2, born_on_or_after: POLIO_REGIMEN_CUT_OFF_ },
+    { age_group: '3yr', view_type: 2, vaccine_group: 'IPV', display_name: 'IPV เข็ม 2', hdc_code: 'I12', required_fields: ['ipv2_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 4, born_on_or_after: POLIO_REGIMEN_CUT_OFF_ },
     
     // ── OPV (เช็ค 4 เข็ม) ──
-    { age_group: '3yr', view_type: 2, vaccine_group: 'OPV', display_name: 'OPV เข็ม 1', hdc_code: '081', required_fields: ['opv1_date'], logic_type: 'ALL', is_required_for_v2: true, is_active: false, target_age_months: 2, note: 'ปฏิทิน 2569 ใช้ IPV แทนที่เข็ม 2 และ 4 เดือน — เปิดใช้กฎนี้เฉพาะข้อมูลปฏิทินเก่า' },
-    { age_group: '3yr', view_type: 2, vaccine_group: 'OPV', display_name: 'OPV เข็ม 2', hdc_code: '082', required_fields: ['opv2_date'], logic_type: 'ALL', is_required_for_v2: true, is_active: false, target_age_months: 4, note: 'ปฏิทิน 2569 ใช้ IPV แทนที่เข็ม 2 และ 4 เดือน — เปิดใช้กฎนี้เฉพาะข้อมูลปฏิทินเก่า' },
+    { age_group: '3yr', view_type: 2, vaccine_group: 'OPV', display_name: 'โปลิโอ เข็ม 1 (สูตรเดิม)', hdc_code: '', required_fields: ['opv1_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 2, born_before: POLIO_REGIMEN_CUT_OFF_, note: oldPolioRegimenNote_('2570') },
+    { age_group: '3yr', view_type: 2, vaccine_group: 'OPV', display_name: 'โปลิโอ เข็ม 2 (สูตรเดิม)', hdc_code: '', required_fields: ['opv2_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 4, born_before: POLIO_REGIMEN_CUT_OFF_, note: oldPolioRegimenNote_('2570') },
     { age_group: '3yr', view_type: 2, vaccine_group: 'OPV', display_name: 'OPV เข็ม 3', hdc_code: '083', required_fields: ['opv3_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 6 },
     { age_group: '3yr', view_type: 2, vaccine_group: 'OPV', display_name: 'OPV เข็ม 4', hdc_code: '084', required_fields: ['opv4_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 18 },
     
@@ -915,12 +1028,12 @@ function seedVaccineRulesLocked_(fiscalYear, adminEmail, force) {
     { age_group: '5yr', view_type: 2, vaccine_group: 'Hib', display_name: 'Hib เข็ม 3', hdc_code: 'D23', required_fields: ['hib3_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 6 },
     
     // ── IPV (เช็ค 2 เข็ม) ──
-    { age_group: '5yr', view_type: 2, vaccine_group: 'IPV', display_name: 'IPV เข็ม 1', hdc_code: 'I11', required_fields: ['ipv1_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 2 },
-    { age_group: '5yr', view_type: 2, vaccine_group: 'IPV', display_name: 'IPV เข็ม 2', hdc_code: 'I12', required_fields: ['ipv2_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 4 },
+    { age_group: '5yr', view_type: 2, vaccine_group: 'IPV', display_name: 'IPV เข็ม 1', hdc_code: 'I11', required_fields: ['ipv1_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 2, born_on_or_after: POLIO_REGIMEN_CUT_OFF_ },
+    { age_group: '5yr', view_type: 2, vaccine_group: 'IPV', display_name: 'IPV เข็ม 2', hdc_code: 'I12', required_fields: ['ipv2_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 4, born_on_or_after: POLIO_REGIMEN_CUT_OFF_ },
     
     // ── OPV (เช็ค 5 เข็ม: 2, 4, 6, 18 เดือน, 4 ปี) ──
-    { age_group: '5yr', view_type: 2, vaccine_group: 'OPV', display_name: 'OPV เข็ม 1', hdc_code: '081', required_fields: ['opv1_date'], logic_type: 'ALL', is_required_for_v2: true, is_active: false, target_age_months: 2, note: 'ปฏิทิน 2569 ใช้ IPV แทนที่เข็ม 2 และ 4 เดือน — เปิดใช้กฎนี้เฉพาะข้อมูลปฏิทินเก่า' },
-    { age_group: '5yr', view_type: 2, vaccine_group: 'OPV', display_name: 'OPV เข็ม 2', hdc_code: '082', required_fields: ['opv2_date'], logic_type: 'ALL', is_required_for_v2: true, is_active: false, target_age_months: 4, note: 'ปฏิทิน 2569 ใช้ IPV แทนที่เข็ม 2 และ 4 เดือน — เปิดใช้กฎนี้เฉพาะข้อมูลปฏิทินเก่า' },
+    { age_group: '5yr', view_type: 2, vaccine_group: 'OPV', display_name: 'โปลิโอ เข็ม 1 (สูตรเดิม)', hdc_code: '', required_fields: ['opv1_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 2, born_before: POLIO_REGIMEN_CUT_OFF_, note: oldPolioRegimenNote_('2572') },
+    { age_group: '5yr', view_type: 2, vaccine_group: 'OPV', display_name: 'โปลิโอ เข็ม 2 (สูตรเดิม)', hdc_code: '', required_fields: ['opv2_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 4, born_before: POLIO_REGIMEN_CUT_OFF_, note: oldPolioRegimenNote_('2572') },
     { age_group: '5yr', view_type: 2, vaccine_group: 'OPV', display_name: 'OPV เข็ม 3', hdc_code: '083', required_fields: ['opv3_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 6 },
     { age_group: '5yr', view_type: 2, vaccine_group: 'OPV', display_name: 'OPV เข็ม 4', hdc_code: '084', required_fields: ['opv4_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 18 },
     { age_group: '5yr', view_type: 2, vaccine_group: 'OPV', display_name: 'OPV เข็ม 5', hdc_code: '085', required_fields: ['opv5_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 48 },
@@ -971,6 +1084,8 @@ function seedVaccineRulesLocked_(fiscalYear, adminEmail, force) {
         case 'target_age_months': return targetAge !== null ? targetAge : '';
         case 'date_checks': return r.date_checks === undefined ? '' : JSON.stringify(r.date_checks);
         case 'note': return r.note || '';
+        case 'born_on_or_after': return r.born_on_or_after || '';
+        case 'born_before': return r.born_before || '';
         case 'updated_at': return now;
         case 'updated_by': return adminEmail || 'system';
         default: return '';

@@ -6,6 +6,8 @@ import { AlertTriangle } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { getHdcVaccineRows, hdcValue, formatHdcDate, calendarDay } from '../utils/vaccine/hdcData';
 import { formatDateStr } from '../utils/dateUtils';
+import { inapplicableReason } from '../utils/vaccine/birthWindow';
+import type { InapplicableRule } from '../utils/vaccine/birthWindow';
 
 interface VaccineHistoryModalProps {
   rules?: VaccineRule[];
@@ -14,6 +16,8 @@ interface VaccineHistoryModalProps {
   warningsStatus?: string;
   /** แสดงหัวข้อ "ผลจาก HDC" — เฉพาะมุมมองที่ 2 (ข้อมูลนี้เป็นของมุมมองที่ 2 ไม่เกี่ยวกับการประเมินรายชนิด) */
   showHdcResult?: boolean;
+  /** Issue #121: Inapplicable Rules ของเด็กรายนี้จากผลประเมินของ engine (แสดงพร้อมเหตุผล) */
+  inapplicableRules?: InapplicableRule[];
   isOpen: boolean;
   onClose: () => void;
   record: EpiRecord | null;
@@ -36,10 +40,11 @@ function dateCellTooltip(record: EpiRecord, value: string): string | undefined {
   return months === 0 ? 'ฉีดเมื่อแรกเกิด (0 เดือน)' : `ฉีดเมื่ออายุประมาณ ${months} เดือน`;
 }
 
-export function VaccineHistoryModal({ isOpen, onClose, record, warnings, warningsStatus, rules, caption, showHdcResult = true }: VaccineHistoryModalProps) {
+export function VaccineHistoryModal({ isOpen, onClose, record, warnings, warningsStatus, rules, caption, inapplicableRules = [], showHdcResult = true }: VaccineHistoryModalProps) {
   if (!record) return null;
   const rows = getHdcVaccineRows(record, rules);
   const dateWarnings = warnings ?? [];
+  const inapplicableByName = new Map(inapplicableRules.map(rule => [rule.display_name, inapplicableReason(rule)]));
 
   return (
     <Dialog open={isOpen} onOpenChange={open => { if (!open) onClose(); }}>
@@ -67,6 +72,10 @@ export function VaccineHistoryModal({ isOpen, onClose, record, warnings, warning
           <p className="text-amber-700">ข้อสังเกตนี้ไม่เปลี่ยนผลจาก HDC และยังไม่ยืนยันว่าเป็นการบันทึกผิด</p>
           <ul className="list-disc pl-5 text-amber-800 marker:text-amber-500">{dateWarnings.map(warning => <li key={warning}>{warning}</li>)}</ul>
         </div>}
+        {inapplicableRules.length > 0 && <div className="border rounded-lg p-3 text-sm space-y-1">
+          <p className="font-semibold">เกณฑ์ที่ไม่ใช้กับเด็กรายนี้ (ตามช่วงวันเกิด)</p>
+          <ul className="list-disc pl-5 text-muted-foreground">{inapplicableRules.map(rule => <li key={rule.rule_id}>{rule.display_name}: {inapplicableReason(rule)}</li>)}</ul>
+        </div>}
         <Table>
           <TableHeader>
             <TableRow>
@@ -79,7 +88,7 @@ export function VaccineHistoryModal({ isOpen, onClose, record, warnings, warning
           <TableBody>
             {rows.map(row => (
               <TableRow key={row.id}>
-                <TableCell><div>{row.name}</div><div className="text-xs text-zinc-500" title="ชื่อคอลัมน์ในไฟล์ HDC ที่นำเข้า">{row.field}</div>{row.note && <div className="text-sm text-muted-foreground">{row.note}</div>}</TableCell>
+                <TableCell><div>{row.name}</div><div className="text-xs text-zinc-500" title="ชื่อคอลัมน์ในไฟล์ HDC ที่นำเข้า">{row.field}</div>{inapplicableByName.has(row.name) && <div className="text-sm font-medium">{inapplicableByName.get(row.name)}</div>}{row.note && <div className="text-sm text-muted-foreground">{row.note}</div>}</TableCell>
                 <TableCell className="whitespace-pre-wrap" title={dateCellTooltip(record, row.date)}>{formatHdcDate(row.date)}</TableCell>
                 <TableCell title={row.facility === '—' ? 'ไม่มีค่ารหัสสถานบริการในไฟล์ที่นำเข้า' : undefined}>{row.facility}</TableCell>
                 <TableCell title={row.inputFacility === '—' ? 'ไม่มีค่ารหัสหน่วยบันทึกในไฟล์ที่นำเข้า' : undefined}>{row.inputFacility}</TableCell>
