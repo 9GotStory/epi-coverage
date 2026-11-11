@@ -531,6 +531,7 @@ Preferred examples:
 - Vaccine Rules Engine for the rule subsystem
 - Full-File Sync only for the explicit synchronization behavior
 - View 2 Pending for the record-level not-yet-due state, never bare "pending" (which is an Approval Status)
+- Inapplicable Rule for a rule outside the child's Birth Window, never "not applicable" for a rule that is pending or not evaluable
 
 When a new domain concept appears repeatedly and cannot be expressed clearly using this vocabulary, update `CONTEXT.md` deliberately instead of inventing several competing names in code.
 
@@ -580,3 +581,28 @@ It is a rule-level concept: the dose is not due, so it is neither passed nor mis
 **View 2 Pending** is the record-level View 2 state of a child who has at least one Pending Rule and no Confirmed Missing Dose.
 
 Use "View 2 Pending", not bare "pending", for this state.
+
+---
+
+## 41. Birth Window
+
+A **Birth Window** is the optional range of birth dates a Vaccine Rule applies to (Issue #116).
+
+- The start is inclusive and the end is exclusive, so two rules that share a cut-off date leave no gap and no overlap.
+- An open side means "no limit". A rule with no Birth Window applies to every child in its fiscal year, age group and view.
+- It is how one age group holds two vaccine schedules side by side, for example IPV rules for children born on or after the 2566 polio-regimen switch and polio dose 1/2 rules for children born before it.
+
+A Birth Window is about birth date. It is not Target Age (§22), which is about the child's current age.
+
+---
+
+## 42. Inapplicable Rule
+
+An **Inapplicable Rule** is a Vaccine Rule whose Birth Window (§41) excludes the child. Thai UI wording: "ไม่ใช้กับเด็กรายนี้".
+
+It does not count for that child at all: it is not passed, not a Pending Rule (§39), not a Confirmed Missing Dose (§38), and not "ประเมินไม่ได้" (not evaluable).
+
+Do not confuse it with:
+
+- a Pending Rule, which will become due as the child grows; an Inapplicable Rule never applies to this child;
+- a not-evaluable rule, which is a data-quality problem. A child whose birth date is unknown cannot be placed against a Birth Window, so the rule is not evaluable for them, not inapplicable.
