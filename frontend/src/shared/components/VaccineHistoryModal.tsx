@@ -70,7 +70,7 @@ export function VaccineHistoryModal({ isOpen, onClose, record, warnings, warning
             <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
             ข้อสังเกตข้อมูลวันที่ — โปรดตรวจสอบต้นทาง
           </p>
-          <p className="text-amber-700">ข้อสังเกตนี้ไม่เปลี่ยนผลจาก HDC และยังไม่ยืนยันว่าเป็นการบันทึกผิด</p>
+          <p className="text-amber-700">ข้อสังเกตนี้ไม่แก้ค่าผลจาก HDC และยังไม่ยืนยันว่าเป็นการบันทึกผิด</p>
           <ul className="list-disc pl-5 text-amber-800 marker:text-amber-500">{dateWarnings.map(warning => <li key={warning}>{warning}</li>)}</ul>
         </div>}
         {!rules && inapplicableRules.length > 0 && <div className="border rounded-lg p-3 text-sm space-y-1">

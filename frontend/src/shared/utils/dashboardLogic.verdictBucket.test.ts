@@ -57,6 +57,15 @@ describe('Issue #101 — the View 2 summary carries no HDC-verdict bucket', () =
     expect(s.view2Breakdown.every(e => e.category === undefined)).toBe(true);
   });
 
+  it('fails closed without View 2 rules — every child not evaluable, never a 100% pass', () => {
+    const v1Only = rules.map(rule => ({ ...rule, view_type: 1 }));
+    const s = calcGroupSummary(
+      [child('A', { bcg_date: '', result: 'ไม่ผ่าน' }), child('B', { bcg_date: '2022-01-02', mmr1_date: '2022-10-05' })],
+      evalV1, (r: EpiRecord): VaccineStatus => evaluateDynamicV2(r, v1Only), 2569, v1Only,
+    );
+    expect(s).toMatchObject({ total: 2, view2Passed: 0, view2ApplicableTotal: 0, view2PendingCount: 0, view2NotEvaluableCount: 2, view2Coverage: 0 });
+  });
+
   it('keeps metric_key identity on the vaccine-rule entries', () => {
     const s = summarize([
       child('PASS', { bcg_date: '2022-01-02', mmr1_date: '2022-10-05' }),

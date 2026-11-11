@@ -51,20 +51,20 @@ export function HdcRecordsView({ age, fiscalYear, quarter, data, isLoading, erro
     });
   }, [data, fiscalYear, quarter, age]);
   // ไม่มีกฎ View 2 = ตัดสินไม่ได้ ต้องไม่แสดงว่าทุกคนผ่าน (fail closed)
-  const unavailable = rulesLoading ? 'กำลังโหลดเกณฑ์...'
+  const rulesUnavailableLabel = rulesLoading ? 'กำลังโหลดเกณฑ์...'
     : rulesError ? 'โหลดเกณฑ์ไม่สำเร็จ'
       : !rules.some(rule => rule.view_type === 2 && rule.is_active) ? 'ยังไม่มีเกณฑ์'
         : null;
   const processed = useMemo(() => cohort.map(record => {
-    if (unavailable) return { ...record, ruleStatus: unavailable, ruleDetails: '', hdcMismatch: false };
+    if (rulesUnavailableLabel) return { ...record, ruleStatus: rulesUnavailableLabel, ruleDetails: '', hdcMismatch: false };
     const evaluation = evaluateDynamicV2(record, rules);
     const details = [
       evaluation.missingVaccines.length ? `ขาด: ${evaluation.missingVaccines.join(', ')}` : '',
       evaluation.pendingVaccines?.length ? `ยังไม่ถึงเกณฑ์: ${evaluation.pendingVaccines.join(', ')}` : '',
       evaluation.notEvaluableVaccines?.length ? `ประเมินไม่ได้: ${evaluation.notEvaluableVaccines.join(', ')}` : '',
     ].filter(Boolean).join(' · ');
-    return { ...record, ruleStatus: RULE_STATUS_LABELS[evaluation.status ?? 'PASS'], ruleDetails: details, hdcMismatch: !!evaluation.hdcMismatch };
-  }), [cohort, rules, unavailable]);
+    return { ...record, ruleStatus: RULE_STATUS_LABELS[evaluation.status ?? 'NOT_EVALUABLE'], ruleDetails: details, hdcMismatch: !!evaluation.hdcMismatch };
+  }), [cohort, rules, rulesUnavailableLabel]);
   const facilities = useMemo(() => [...new Map(cohort.map(record => [record.hoscode, record.hosname])).entries()].sort(), [cohort]);
   const results = useMemo(() => [...new Set(cohort.map(record => hdcValue(record.result)))].sort(), [cohort]);
   const filtered = useMemo(() => {
@@ -124,7 +124,6 @@ export function HdcRecordsView({ age, fiscalYear, quarter, data, isLoading, erro
         <h2 className="text-lg font-semibold">รายชื่อเด็กอายุครบ {age} ปี</h2>
         <p className="text-sm text-zinc-500">ผลตามกฎวัคซีนที่ตั้งค่าไว้ แสดงผลจาก HDC ประกอบ เปิดประวัติเพื่อดูวันที่วัคซีนแต่ละเข็ม</p>
         {asOfDate && <p className="text-xs text-zinc-500 mt-1">ข้อมูล ณ วันที่ {formatDateTimeStr(asOfDate)}</p>}
-        {rulesError && <p role="alert" className="text-sm text-red-700 mt-1">โหลดเกณฑ์ไม่สำเร็จ: {rulesError}</p>}
       </div>
       <VaccineRulesGuide rules={rules} viewType={2} isLoading={rulesLoading} error={rulesError} />
       <div className="flex flex-wrap gap-3">

@@ -331,10 +331,11 @@ export const evaluateDynamicV2 = (record: EpiRecord, rules: VaccineRule[], evalu
 
   // ลำดับ Confirmed Missing Dose > Pending Rule > ประเมินไม่ได้ (#103, #119) — เด็กยังเล็กกว่าอายุเกณฑ์
   // คงสถานะ PENDING ตามสัญญา #23 อายุถึงแล้วคอลัมน์ยังไม่ครบจึงเป็น NOT_EVALUABLE (งานตามหาไฟล์ใหม่ #89)
+  // ไม่มีกฎ View 2 ที่เปิดใช้เลยก็ตัดสินไม่ได้ ไม่ใช่ผ่าน (fail closed — summary ต้องไม่เป็น 100% ปลอม)
   const status: 'PASS' | 'FAIL' | 'PENDING' | 'NOT_EVALUABLE' =
     missingVaccines.length > 0 ? 'FAIL'
       : pendingVaccines.length > 0 ? 'PENDING'
-        : notEvaluableVaccines.length > 0 ? 'NOT_EVALUABLE'
+        : notEvaluableVaccines.length > 0 || v2Rules.length === 0 ? 'NOT_EVALUABLE'
           : 'PASS';
 
   // Issue #101 (ADR-0006): ผลจากกฎเป็นหลัก `result` ของ HDC แสดงประกอบเท่านั้น ไม่เปลี่ยน status

@@ -612,9 +612,6 @@ Do not confuse it with:
 
 ## 43. HDC Result Mismatch
 
-An **HDC Result Mismatch** is a View 2 record where the configured rules and the imported HDC `result` both give a pass/fail verdict and the verdicts disagree (Issue #101). Thai UI wording: "ผลไม่ตรงกับ HDC".
+An **HDC Result Mismatch** is a View 2 record whose rule result (§12) and imported HDC `result` (§17) disagree (Issue #101). Thai UI wording: "ผลไม่ตรงกับ HDC".
 
-- Rules ไม่ผ่าน and HDC `ผ่าน`, or rules ผ่าน and HDC `ไม่ผ่าน`, is a mismatch.
-- View 2 Pending (§40) and "ประเมินไม่ได้" (not evaluable) are not verdicts, so they are never a mismatch. Neither is a blank or unrecognized `result`.
-
-The flag asks staff to review the record. It does not change the rule result.
+It is a review flag for staff, not a result: it never changes the rule result. Which combinations count as a mismatch is defined in `docs/features.md` §3.1.

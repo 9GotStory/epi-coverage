@@ -183,7 +183,7 @@ describe('ruleEngine', () => {
       expect(result.pendingRuleNames).toContain('MMR1');
     });
 
-    it('Issue #101: HDC "ผ่าน" does not override a missing dose — FAIL, flagged as a mismatch', () => {
+    it('Issue #101: HDC "ผ่าน" does not override a Confirmed Missing Dose — FAIL, flagged as a mismatch', () => {
       const record = { ...mockRecord, dtp3_date: '-', result: 'ผ่าน' };
       const result = evaluateDynamicV2(record, rules);
       expect(result.status).toBe('FAIL');
@@ -202,6 +202,12 @@ describe('ruleEngine', () => {
       expect(result.missingVaccines).toEqual([]);
       expect(result.hdcVerdict).toBe('FAIL');
       expect(result.hdcMismatch).toBe(true);
+    });
+
+    it('Issue #101: fails closed without active View 2 rules — NOT_EVALUABLE, never PASS', () => {
+      const v1Only = rules.filter(rule => rule.view_type === 1);
+      expect(evaluateDynamicV2({ ...mockRecord, result: 'ไม่ผ่าน' }, v1Only)).toMatchObject({ status: 'NOT_EVALUABLE', isFullyImmunized: false, hdcMismatch: false });
+      expect(evaluateDynamicV2(mockRecord, rules.map(rule => ({ ...rule, is_active: false }))).status).toBe('NOT_EVALUABLE');
     });
 
     it('Issue #101: no mismatch when HDC and the rules agree', () => {
