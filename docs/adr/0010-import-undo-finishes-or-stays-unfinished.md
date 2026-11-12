@@ -22,14 +22,14 @@ The design decisions were made in the grilling session on issue #140 (Q1–Q13).
 
 ## Decision
 
-1. **A receipt is `undone` only when every step is complete.** Import Undo first writes the receipt as `undoing`, with the plan: who started it, when, and the confirmed counts. Then it writes the rows, the audit and, when no Active Records remain, the summary deletion. The receipt becomes `undone` last.
+1. **A receipt is `undone` only when every step is complete.** Import Undo first writes the receipt as `undoing`, with the plan: who started it, when, and the confirmed counts. Then it writes the rows, deletes the summaries when no Active Records remain, and writes the audit, which therefore records what really happened to the summaries. The receipt becomes `undone` last.
 2. **An Unfinished Import Undo is finished by running Import Undo again.** It is the same action ("ย้อนต่อให้เสร็จ"), with the same admin and superadmin roles, enforced on the server. Any admin may finish it. Every step can be repeated safely: the rows are written only if they are not yet written, the audit only if it does not exist, and summaries are deleted only if the table and year have no Active Records at that moment.
 3. **Finishing is exact or refused.** The row effect that remains must equal the plan exactly (rows not yet written) or be zero (rows already written). Any other state is refused and the receipt stays `undoing`.
 4. **The audit is reconstructed from the plan.** There is one `undo_epi_import` event, attributed to the admin who started the undo, with the planned counts. If another admin finishes the undo, the event records who finished it.
 5. **An Unfinished Import Undo blocks Imports into its table and Fiscal Year.** Both the preflight and the first chunk write of any other Batch are refused, for the whole table and year and not only the overlapping facilities. The unfinished receipt therefore stays the latest written receipt until it is finished.
 6. Receipts already `undone` before this decision count as complete.
 
-Business behavior is in `docs/features.md`. The receipt status is in `docs/schema.md` and `docs/hdc-column-upgrade.md`.
+Business behavior is in `docs/features.md`. The receipt status is in `docs/hdc-column-upgrade.md`.
 
 ## Rationale
 
@@ -59,5 +59,5 @@ Business behavior is in `docs/features.md`. The receipt status is in `docs/schem
 * `0007-mandatory-import-preflight.md`
 * `../../CONTEXT.md` §44, §45, §47 (Unfinished Import Undo)
 * `../features.md`, `../schema.md`, `../hdc-column-upgrade.md`
-* `backend/src/Upload.js`: `undoEpiImport`, `ensureUploadAudit`; `backend/src/DashboardCache.js`: `deleteDashboardSummaries`
+* `backend/src/Upload.js`: `undoEpiImport`, `ensureUndoAudit` (modelled on `ensureUploadAudit`); `backend/src/DashboardCache.js`: `deleteDashboardSummaries`
 * Issues #112, #134, #139, #140

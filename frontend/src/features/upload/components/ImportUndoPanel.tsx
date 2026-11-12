@@ -21,6 +21,17 @@ const SUMMARIES_REMOVED_WARNING = (
   </div>
 );
 
+const factCards = (facts: Array<[string, string]>, columns: string) => (
+  <dl className={`grid grid-cols-1 ${columns} gap-4 text-[14px]`}>
+    {facts.map(([label, value]) => (
+      <div key={label} className="bg-[#fafafc] p-4 rounded-[16px] border border-[#e0e0e0]">
+        <dt className="text-[12px] text-[#7a7a7a] font-medium tracking-[0.231px]">{label}</dt>
+        <dd className="text-[#1d1d1f] font-medium mt-1 break-all">{value}</dd>
+      </div>
+    ))}
+  </dl>
+);
+
 /** Issue #139/#140: what Import Undo would change, computed by the server, whether it is unfinished, or why it is refused (ADR-0009, ADR-0010). */
 export function ImportUndoPanel({ preview, isBusy, errorMsg, onConfirm, onCancel }: Props) {
   const heading = (
@@ -60,13 +71,14 @@ export function ImportUndoPanel({ preview, isBusy, errorMsg, onConfirm, onCancel
     );
   }
 
+  // An admin tells a Batch apart by when, by whom and how it was imported; its id means nothing to them.
+  const batch = factCards([
+    ['นำเข้าเมื่อ', formatDateTimeStr(preview.importedAt)],
+    ['นำเข้าโดย', preview.importedBy || '-'],
+    ['วิธีนำเข้า', MODE_LABEL[preview.mode]],
+  ], 'sm:grid-cols-3');
+
   if (preview.unfinished) {
-    const facts: Array<[string, string]> = [
-      ['เริ่มย้อนเมื่อ', formatDateTimeStr(preview.startedAt)],
-      ['เริ่มย้อนโดย', preview.startedBy || '-'],
-      ['จะปิดสถานะ (รวม)', preview.wouldDeactivate.toLocaleString()],
-      ['จะเปิดสถานะคืน (รวม)', preview.wouldReactivate.toLocaleString()],
-    ];
     return (
       <div className="space-y-6 animate-in fade-in duration-500">
         {heading}
@@ -77,14 +89,13 @@ export function ImportUndoPanel({ preview, isBusy, errorMsg, onConfirm, onCancel
             <p>การย้อนการนำเข้านี้เริ่มแล้วแต่ยังทำไม่ครบทุกขั้น ระหว่างนี้นำเข้าข้อมูลของกลุ่มอายุและปีงบประมาณนี้ไม่ได้ กด "ย้อนต่อให้เสร็จ" เพื่อทำขั้นที่เหลือตามแผนเดิม</p>
           </div>
         </div>
-        <dl className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-[14px]">
-          {facts.map(([label, value]) => (
-            <div key={label} className="bg-[#fafafc] p-4 rounded-[16px] border border-[#e0e0e0]">
-              <dt className="text-[12px] text-[#7a7a7a] font-medium tracking-[0.231px]">{label}</dt>
-              <dd className="text-[#1d1d1f] font-medium mt-1 break-all">{value}</dd>
-            </div>
-          ))}
-        </dl>
+        {batch}
+        {factCards([
+          ['เริ่มย้อนเมื่อ', formatDateTimeStr(preview.startedAt)],
+          ['เริ่มย้อนโดย', preview.startedBy || '-'],
+          ['จะปิดสถานะ (รวม)', preview.wouldDeactivate.toLocaleString()],
+          ['จะเปิดสถานะคืน (รวม)', preview.wouldReactivate.toLocaleString()],
+        ], 'sm:grid-cols-2 lg:grid-cols-4')}
         {preview.summariesWillBeRemoved && SUMMARIES_REMOVED_WARNING}
         {error}
         {actions('ย้อนต่อให้เสร็จ')}
@@ -96,20 +107,7 @@ export function ImportUndoPanel({ preview, isBusy, errorMsg, onConfirm, onCancel
     <div className="space-y-6 animate-in fade-in duration-500">
       {heading}
 
-      <dl className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-[14px]">
-        <div className="bg-[#fafafc] p-4 rounded-[16px] border border-[#e0e0e0]">
-          <dt className="text-[12px] text-[#7a7a7a] font-medium tracking-[0.231px]">นำเข้าเมื่อ</dt>
-          <dd className="text-[#1d1d1f] font-medium mt-1">{formatDateTimeStr(preview.importedAt)}</dd>
-        </div>
-        <div className="bg-[#fafafc] p-4 rounded-[16px] border border-[#e0e0e0]">
-          <dt className="text-[12px] text-[#7a7a7a] font-medium tracking-[0.231px]">นำเข้าโดย</dt>
-          <dd className="text-[#1d1d1f] font-medium mt-1 break-all">{preview.importedBy || '-'}</dd>
-        </div>
-        <div className="bg-[#fafafc] p-4 rounded-[16px] border border-[#e0e0e0]">
-          <dt className="text-[12px] text-[#7a7a7a] font-medium tracking-[0.231px]">วิธีนำเข้า</dt>
-          <dd className="text-[#1d1d1f] font-medium mt-1">{MODE_LABEL[preview.mode]}</dd>
-        </div>
-      </dl>
+      {batch}
 
       <div className="overflow-x-auto rounded-[16px] border border-[#e0e0e0]">
         <table className="w-full text-[14px] text-left">

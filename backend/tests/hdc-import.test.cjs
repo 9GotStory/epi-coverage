@@ -1172,7 +1172,7 @@ test('Import Undo routes are closed to the public and to facility users', () => 
   assert.equal(call('undoEpiImport', actions.undoEpiImport).data.reason, 'no_batch');
 });
 
-test('a summary removal that fails leaves the undo audited but unfinished, and finishing it removes the summaries once', () => {
+test('a summary removal that fails leaves the undo unfinished, and finishing it removes the summaries and audits once', () => {
   const { context: c, sheets, createSheet } = setup();
   summarySheet(createSheet);
   const auditLogs = auditSheet(createSheet);
@@ -1182,15 +1182,17 @@ test('a summary removal that fails leaves the undo audited but unfinished, and f
   const deleteDashboardSummaries = c.deleteDashboardSummaries;
   c.deleteDashboardSummaries = () => { throw new Error('Sheets service failed'); };
   assert.throws(() => c.undoEpiImport(preview.batchId, { wouldDeactivate: 2, wouldReactivate: 0 }, administrator), /Sheets service failed/);
-  assert.equal(receiptOf(sheets, 'only-import').status, 'undoing'); // ADR-0010, replacing #139's "undone at once"
-  assert.equal(auditLogs.cells.filter(row => row[3] === 'undo_epi_import').length, 1);
+  assert.equal(receiptOf(sheets, 'only-import').status, 'undoing'); // ADR-0010, replacing #139's "undone at once": the receipt traces it
+  assert.equal(auditLogs.cells.filter(row => row[3] === 'undo_epi_import').length, 0); // audited only with the real summary outcome
 
   c.deleteDashboardSummaries = deleteDashboardSummaries;
   const unfinished = undoPreview(c);
   assert.deepEqual([unfinished.unfinished, unfinished.wouldDeactivate, unfinished.wouldReactivate, unfinished.summariesWillBeRemoved], [true, 2, 0, true]);
   assert.deepEqual(finishUndo(c, unfinished), { success: true, deactivated: 2, reactivated: 0, summariesRemoved: true });
   assert.deepEqual(sheets.get('Dashboard_Summaries').cells.slice(1).map(row => row[0]), ['Epi_1_Year_2570_all', 'Epi_2_Year_2569_all']);
-  assert.equal(auditLogs.cells.filter(row => row[3] === 'undo_epi_import').length, 1); // never audited twice
+  const events = auditLogs.cells.filter(row => row[3] === 'undo_epi_import');
+  assert.equal(events.length, 1);
+  assert.ok(events[0][4].includes('summaries removed true'), events[0][4]);
   assert.equal(receiptOf(sheets, 'only-import').status, 'undone');
 });
 
@@ -1282,6 +1284,7 @@ test('an undo whose final receipt write fails is finished without writing anythi
   assert.equal(receiptOf(sheets, 'only-import').status, 'undone');
   assert.equal(read().filter(isActive).length, 0);
   assert.equal('finishedBy' in JSON.parse(receiptOf(sheets, 'only-import').undo), false); // the same admin finished it
+  assert.equal(finishUndo(c, { batchId: 'only-import', wouldDeactivate: 2, wouldReactivate: 0 }).reason, 'already_undone');
 });
 
 test('finishing an undo is refused when the rows match neither the plan nor the finished undo, or when the counts are not the plan', () => {
@@ -1304,9 +1307,11 @@ test('finishing an undo is refused when the rows match neither the plan nor the 
   assert.equal(receiptOf(sheets, 'wrong').status, 'undoing');
 });
 
-test('finishing an undo keeps the Dashboard Summaries when Active Records exist by then', () => {
+test('finishing an undo keeps the Dashboard Summaries when Active Records exist by then, and audits what really happened', () => {
   const { context: c, sheets, createSheet } = setup();
   summarySheet(createSheet);
+  const auditLogs = auditSheet(createSheet);
+  c.logAction = (userId, email, action, details) => auditLogs.appendRow(['uuid', userId, email, action, details, 'at']);
   importBatch(c, cohort(1, '00002', 70), 'earlier');
   const cells = sheets.get('Epi_1_Year').cells;
   cells[1][cells[0].indexOf('is_active')] = false; // deactivated by hand before #139, so no batch recorded it
@@ -1324,6 +1329,9 @@ test('finishing an undo keeps the Dashboard Summaries when Active Records exist 
   assert.deepEqual(finishUndo(c, unfinished), { success: true, deactivated: 2, reactivated: 0, summariesRemoved: false });
   assert.equal(sheets.get('Dashboard_Summaries').cells.length, 9);
   assert.equal(JSON.parse(receiptOf(sheets, 'only-import').undo).summariesRemoved, false);
+  const events = auditLogs.cells.filter(row => row[3] === 'undo_epi_import');
+  assert.equal(events.length, 1);
+  assert.ok(events[0][4].includes('summaries removed false'), events[0][4]);
 });
 
 test('an Unfinished Import Undo blocks every Import into its table and year until it is finished', () => {

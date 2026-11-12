@@ -85,10 +85,13 @@ describe('Issue #140 — an Unfinished Import Undo in ImportUndoPanel', () => {
     wouldDeactivate: 143, wouldReactivate: 181, activeAfter: 0, summariesWillBeRemoved: true,
   };
 
-  it('says the undo is unfinished and shows who started it, when, and the planned totals', () => {
+  it('says the undo is unfinished and shows which Batch, who started it, when, and the planned totals', () => {
     renderPanel(unfinished);
     expect(screen.getByRole('heading', { name: /เด็ก 1 ปี.*ปีงบประมาณ 2569/ })).toBeTruthy();
     expect(screen.getByText(/การย้อนที่ยังไม่เสร็จ/)).toBeTruthy();
+    expect(screen.getByText('importer@example.test')).toBeTruthy(); // the Batch: who imported it, when and how
+    expect(screen.getByText(/ซิงค์ไฟล์เต็ม/)).toBeTruthy();
+    expect(screen.getByText(/11\/11\/2569|2569-11-11|11 พ\.ย\./)).toBeTruthy();
     expect(screen.getByText('admin@example.test')).toBeTruthy();
     expect(screen.getByText(/12\/11\/2569|2569-11-12|12 พ\.ย\./)).toBeTruthy();
     expect(screen.getByText('143')).toBeTruthy();

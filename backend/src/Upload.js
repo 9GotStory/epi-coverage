@@ -73,7 +73,7 @@ const EPI_RECORD_IDENTITY_FIELDS = ['hoscode', 'pid', 'cid', 'sex', 'birth', 'ch
 
 /** Issue #140: while an Import Undo of a table and Fiscal Year is unfinished, no Import may write to it (ADR-0010). */
 const EPI_UNFINISHED_UNDO_REFUSAL = { success: false, reason: 'unfinished_undo', error: 'An Import Undo of this table and fiscal year is unfinished. Finish it first.' };
-function epiUndoUnfinished(receipts, targetTable, fiscalYear) {
+function epiHasUnfinishedUndo(receipts, targetTable, fiscalYear) {
   return receipts.some((row, i) => i > 0 && row[1] === targetTable && String(row[2]) === String(fiscalYear) && row[7] === 'undoing');
 }
 
@@ -160,7 +160,7 @@ function preflightEpiImport(keyChunks, batchId, auth, fiscalYear, targetTable = 
     const batches = epiBatchSheet(ss);
     const receipts = batches.getDataRange().getValues();
     if (receipts.some((row, i) => i > 0 && row[0] === batchId)) return { success: false, error: 'Batch already exists. Start a new import.' };
-    if (epiUndoUnfinished(receipts, targetTable, fiscalYear)) return EPI_UNFINISHED_UNDO_REFUSAL;
+    if (epiHasUnfinishedUndo(receipts, targetTable, fiscalYear)) return EPI_UNFINISHED_UNDO_REFUSAL;
 
     const incoming = new Map(); // import key → Record Identity fields
     keyChunks.flat().forEach(key => incoming.set(epiImportKey(key, fiscalYear, timeZone), key));
@@ -315,7 +315,7 @@ function upsertEpiData(chunk, batchId, auth, fiscalYear, targetTable = 'Epi_1_Ye
     }
     // Staleness matters only before the first write; once writing, later progress elsewhere must not strand this batch half-done.
     const firstWrite = receipt[7] === 'preflight';
-    if (firstWrite && epiUndoUnfinished(receipts, targetTable, fiscalYear)) return EPI_UNFINISHED_UNDO_REFUSAL; // preflighted before the undo started
+    if (firstWrite && epiHasUnfinishedUndo(receipts, targetTable, fiscalYear)) return EPI_UNFINISHED_UNDO_REFUSAL; // preflighted before the undo started
     if (firstWrite && JSON.stringify(epiOverlapSnapshot(receipts, batchId, targetTable, fiscalYear, preflight.hoscodes)) !== JSON.stringify(preflight.overlapSnapshot)) {
       return { success: false, error: 'Data changed since preflight. Start a new import.' };
     }
@@ -557,13 +557,14 @@ function undoEpiImport(batchId, expected, auth) {
     effect.reactivate.forEach(i => { effect.rows[i][activeIndex] = true; effect.rows[i][deactivatedByIndex] = ''; });
     if (effect.deactivate.length || effect.reactivate.length) writeEpiRows(sheet, effect.headers, effect.rows);
     const summariesRemoved = effect.activeAfter === 0;
+    // CONTEXT.md §44: no Active Records means no Dashboard Summary, so none may outlive the rows it summarized.
+    // Deleted before the audit, so the single audit records what really happened to the summaries.
+    if (summariesRemoved) deleteDashboardSummaries(targetTable, fiscalYear);
     const finisher = auth && (auth.email || auth.userId);
     ensureUndoAudit(batchId, plan,
       `Batch ${batchId} [${targetTable} FY ${fiscalYear} ${mode}]: deactivated ${plan.deactivated}, reactivated ${plan.reactivated}; ` +
       `facilities [${JSON.parse(receipt[6]).join(', ')}]; summaries removed ${summariesRemoved}` +
       (finisher !== plan.by ? `; finished by ${finisher}` : ''));
-    // CONTEXT.md §44: no Active Records means no Dashboard Summary, so none may outlive the rows it summarized.
-    if (summariesRemoved) deleteDashboardSummaries(targetTable, fiscalYear);
     const finishedAt = new Date().toISOString();
     receipt[7] = 'undone'; receipt[8] = finishedAt; // undone only once every step is complete (ADR-0010)
     receipt[11] = JSON.stringify({ ...plan, summariesRemoved, ...(finisher !== plan.by ? { finishedBy: finisher, finishedAt } : {}) });
