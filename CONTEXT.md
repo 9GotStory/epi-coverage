@@ -299,6 +299,13 @@ A **Vaccine Rule** is a configurable rule used by the application's vaccine-rule
 
 Rules are scoped by domain properties such as fiscal year and age group and may describe required fields, alternatives, target age, activity state, and date validation settings.
 
+Staff can add, deactivate and delete a Vaccine Rule on the Rules Engine page (Issue #122). Deactivating and deleting are different:
+
+- An **Inactive Vaccine Rule** ("ปิดใช้งาน") is still part of that fiscal year's configuration. It is not evaluated, and cloning a fiscal year copies it. Use it to pause a rule.
+- **Deleting** a Vaccine Rule removes it from that fiscal year's configuration. Its cross-year identity (`metric_key` lineage) ends there: a rule added later under the same name is a new metric, never a continuation. Dashboard Summaries already stored are unchanged.
+
+A newly added Vaccine Rule always starts its own cross-year identity, whatever its name.
+
 The backend implementation is config-driven.
 
 Do not introduce duplicate hard-coded frontend vaccine-rule logic when behavior belongs to the shared rule system.
@@ -531,6 +538,7 @@ Preferred examples:
 - HDC OpenData for the aggregate external source
 - Vaccine Rule for one configurable evaluation rule
 - Vaccine Rules Engine for the rule subsystem
+- Deactivate ("ปิดใช้งาน") for pausing a Vaccine Rule and delete ("ลบ") only for removing it from the fiscal year's configuration (§19); never "ลบ" for deactivating
 - Full-File Sync only for the explicit synchronization behavior
 - Summary Regeneration for recomputing Dashboard Summaries, never "Sync Summaries" or "sync"
 - View 2 Pending for the record-level not-yet-due state, never bare "pending" (which is an Approval Status)
