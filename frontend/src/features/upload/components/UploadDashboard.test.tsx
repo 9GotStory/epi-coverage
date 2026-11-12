@@ -1,0 +1,78 @@
+// @vitest-environment jsdom
+/**
+ * Issue #134 (#115) — the upload page must make the Summary Regeneration scope visible before
+ * anything is written, and must say when an import wrote no Dashboard Summary.
+ *
+ * Seam: the rendered page with the real `useUploadManager`; only external boundaries are mocked
+ * (`fetchApi`, the file parser, `sonner`). All records are synthetic.
+ */
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { UploadDashboard } from './UploadDashboard';
+
+const api = vi.hoisted(() => ({ fetchApi: vi.fn() }));
+const parser = vi.hoisted(() => ({ parseHdcFile: vi.fn() }));
+vi.mock('../../../shared/lib/api', () => ({ fetchApi: api.fetchApi }));
+vi.mock('../utils/parseHdcFile', () => ({ parseHdcFile: parser.parseHdcFile }));
+vi.mock('sonner', () => ({ toast: { success: vi.fn(), warning: vi.fn(), error: vi.fn() } }));
+
+function renderPage() {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(<QueryClientProvider client={client}><UploadDashboard /></QueryClientProvider>);
+}
+
+beforeEach(() => { api.fetchApi.mockReset(); parser.parseHdcFile.mockReset(); });
+afterEach(() => { cleanup(); });
+
+describe('Issue #134 — Summary Regeneration confirmation', () => {
+  it('the dialog title names the selected Fiscal Year and the description lists the four Age Groups', async () => {
+    renderPage();
+    // Pick a year other than the default so the title is shown to follow the selector, without pinning today's date.
+    const yearSelect = screen.getAllByRole('combobox').find(el => el.querySelector('option[value]')?.textContent?.includes('ปีงบประมาณ')) as HTMLSelectElement;
+    const pickedYear = yearSelect.options[0].value;
+    fireEvent.change(yearSelect, { target: { value: pickedYear } });
+
+    fireEvent.click(screen.getByRole('button', { name: 'ประมวลผล Dashboard ใหม่ทั้งหมด' }));
+    const dialog = await screen.findByRole('alertdialog');
+    expect(within(dialog).getByRole('heading', { name: `ประมวลผล Dashboard ใหม่ · ปีงบประมาณ ${pickedYear}` })).toBeTruthy();
+    const description = within(dialog).getByText(/กลุ่มอายุ/);
+    for (const label of ['เด็ก 1 ปี', 'เด็ก 2 ปี', 'เด็ก 3 ปี', 'เด็ก 5 ปี']) expect(description.textContent).toContain(label);
+    expect(api.fetchApi).not.toHaveBeenCalledWith('saveDashboardSummary', expect.anything());
+  });
+
+  it('the advanced-tool heading says Summary Regeneration, not Sync Summaries', () => {
+    renderPage();
+    expect(screen.getByRole('heading', { name: /ประมวลผล Dashboard ใหม่ \(Summary Regeneration\)/ })).toBeTruthy();
+    expect(screen.queryByText(/Sync Summaries/)).toBeNull();
+  });
+});
+
+describe('Issue #134 — import result when no summary was created', () => {
+  it('a successful import whose table has no Active Records left says no summary was created', async () => {
+    const rows = [{ hoscode: '00001', pid: '1', cid: '0000000000001', sex: '1', birth: '2024-11-15', check_vhid: '00000101', name: 'สมมติ', lname: 'ทดสอบ' }];
+    parser.parseHdcFile.mockResolvedValue({ rows, columns: Object.keys(rows[0]) });
+    api.fetchApi.mockImplementation(async (action: string) => {
+      if (action === 'preflightEpiImport') return { data: {
+        success: true, batchId: 'server-echo', targetTable: 'Epi_1_Year', fiscalYear: '2569', mode: 'sync',
+        matched: 1, newRows: 0, wouldDeactivate: 0, activeBefore: 1,
+        byHoscode: [{ hoscode: '00001', activeBefore: 1, matched: 1, newRows: 0, wouldDeactivate: 0 }],
+        risk: { zeroMatchHoscodes: [], shrinkOverThreshold: false }, requiredConfirmation: null, shrinkThreshold: 0.2,
+      } };
+      if (action === 'upsertEpiData') return { data: { success: true, inserted: 0, updated: 1 } };
+      if (action === 'cleanupEpiData') return { data: { success: true, deactivated: 0 } };
+      if (action === 'getEpiData') return { data: [] };
+      return { data: { success: true } };
+    });
+    const { container } = renderPage();
+
+    const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(fileInput, { target: { files: [new File(['x'], 'EPI-1YEAR.json', { type: 'application/json' })] } });
+    fireEvent.click(await screen.findByRole('button', { name: /ตรวจสอบก่อนนำเข้า/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /ยืนยันนำเข้า/ }));
+
+    await screen.findByText('นำเข้าข้อมูลสำเร็จ');
+    expect(screen.getByText('ไม่ได้สร้างสรุปเพราะไม่มีรายการที่เปิดใช้งาน')).toBeTruthy();
+    await waitFor(() => expect(api.fetchApi).not.toHaveBeenCalledWith('saveDashboardSummary', expect.anything()));
+  });
+});

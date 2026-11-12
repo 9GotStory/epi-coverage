@@ -6,7 +6,7 @@ import { Alert, AlertDescription, AlertTitle } from '../../../shared/components/
 import { SubNav } from '../../../widgets/layout/SubNav';
 import { ConfirmModal } from '../../../shared/components/ui/confirm-modal';
 import { getAgeString } from '../utils/uploadHelpers';
-import { useUploadManager } from '../hooks/useUploadManager';
+import { useUploadManager, SUMMARY_REGENERATION_TABLES } from '../hooks/useUploadManager';
 import { ImportPreflightPanel } from './ImportPreflightPanel';
 
 export function UploadDashboard() {
@@ -24,6 +24,7 @@ export function UploadDashboard() {
     status,
     errorMsg,
     results,
+    summarySkipped,
     isSyncing,
     handleDrop,
     handleUpload,
@@ -159,6 +160,7 @@ export function UploadDashboard() {
           <AlertTitle className="text-[#1d1d1f] font-semibold text-[17px] tracking-[-0.374px]">นำเข้าข้อมูลสำเร็จ</AlertTitle>
           <AlertDescription className="text-[#7a7a7a] text-[14px] mt-2">
             ประมวลผลข้อมูลสำเร็จจำนวน <strong className="text-[#1d1d1f] font-semibold">{results.inserted + results.updated}</strong> รายการ
+            {summarySkipped && <p role="status" className="mt-2 text-[#1d1d1f]">ไม่ได้สร้างสรุปเพราะไม่มีรายการที่เปิดใช้งาน</p>}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4">
               <div className="bg-white p-4 rounded-[16px] border border-[#e0e0e0] flex flex-col">
                 <span className="text-[12px] text-[#7a7a7a] font-medium uppercase tracking-[0.231px]">เพิ่มข้อมูลใหม่</span>
@@ -311,15 +313,16 @@ export function UploadDashboard() {
         <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm mt-8">
           <h3 className="text-base font-semibold text-slate-900 flex items-center gap-2 mb-2">
             <RefreshCw className="w-5 h-5 text-slate-400" />
-            เครื่องมือขั้นสูง: ประมวลผล Dashboard ใหม่ (Sync Summaries)
+            เครื่องมือขั้นสูง: ประมวลผล Dashboard ใหม่ (Summary Regeneration)
           </h3>
           <p className="text-sm text-slate-500 mb-4">
-            ใช้ปุ่มนี้เพื่อคำนวณและสร้าง Cache สำหรับหน้า Dashboard ใหม่ทั้งหมด (ทั้ง 4 กลุ่มอายุ) สำหรับปีงบประมาณ {fiscalYear} 
+            ใช้ปุ่มนี้เพื่อคำนวณและสร้าง Cache สำหรับหน้า Dashboard ใหม่ทั้งหมด (ทั้ง 4 กลุ่มอายุ) สำหรับปีงบประมาณ {fiscalYear}
             โดยดึงข้อมูลล่าสุดจากฐานข้อมูล (ใช้ในกรณีที่ข้อมูลหน้า Dashboard ไม่ตรงกับฐานข้อมูล)
           </p>
+          {/* Issue #134: the year and the four Age Groups are named before anything is written. */}
           <ConfirmModal
-            title="ยืนยันการประมวลผลใหม่"
-            description="การประมวลผลใหม่อาจใช้เวลาสักครู่ ระบบจะสร้าง Cache ขึ้นมาใหม่เพื่อแสดงผลในหน้า Dashboard ต้องการดำเนินการต่อหรือไม่?"
+            title={`ประมวลผล Dashboard ใหม่ · ปีงบประมาณ ${fiscalYear}`}
+            description={`ระบบจะคำนวณสรุป Dashboard ของปีงบประมาณ ${fiscalYear} ใหม่ สำหรับ ${SUMMARY_REGENERATION_TABLES.length} กลุ่มอายุ: ${SUMMARY_REGENERATION_TABLES.map(({ label }) => label).join(', ')} กลุ่มอายุที่ไม่มีข้อมูลในปีนี้จะถูกข้ามและไม่บันทึกสรุป การประมวลผลอาจใช้เวลาสักครู่ ต้องการดำเนินการต่อหรือไม่?`}
             onConfirm={handleSyncAll}
             confirmText="ประมวลผล"
           >
