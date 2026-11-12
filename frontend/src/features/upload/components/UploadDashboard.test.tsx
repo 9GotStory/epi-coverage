@@ -23,19 +23,20 @@ function renderPage() {
 }
 
 beforeEach(() => { api.fetchApi.mockReset(); parser.parseHdcFile.mockReset(); });
-afterEach(() => { cleanup(); });
+afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 describe('Issue #134 — Summary Regeneration confirmation', () => {
   it('the dialog title names the selected Fiscal Year and the description lists the four Age Groups', async () => {
+    // Pin today (default year FY2570, options 2567–2571); only Date is faked so the dialog's timers still run.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-11-12T09:00:00+07:00'));
     renderPage();
-    // Pick a year other than the default so the title is shown to follow the selector, without pinning today's date.
-    const yearSelect = screen.getAllByRole('combobox').find(el => el.querySelector('option[value]')?.textContent?.includes('ปีงบประมาณ')) as HTMLSelectElement;
-    const pickedYear = yearSelect.options[0].value;
-    fireEvent.change(yearSelect, { target: { value: pickedYear } });
+    // A year other than the default, so the title is shown to follow the selector.
+    fireEvent.change(screen.getByRole('combobox', { name: 'ปีงบประมาณ' }), { target: { value: '2569' } });
 
     fireEvent.click(screen.getByRole('button', { name: 'ประมวลผล Dashboard ใหม่ทั้งหมด' }));
     const dialog = await screen.findByRole('alertdialog');
-    expect(within(dialog).getByRole('heading', { name: `ประมวลผล Dashboard ใหม่ · ปีงบประมาณ ${pickedYear}` })).toBeTruthy();
+    expect(within(dialog).getByRole('heading', { name: 'ประมวลผล Dashboard ใหม่ · ปีงบประมาณ 2569' })).toBeTruthy();
     const description = within(dialog).getByText(/กลุ่มอายุ/);
     for (const label of ['เด็ก 1 ปี', 'เด็ก 2 ปี', 'เด็ก 3 ปี', 'เด็ก 5 ปี']) expect(description.textContent).toContain(label);
     expect(api.fetchApi).not.toHaveBeenCalledWith('saveDashboardSummary', expect.anything());

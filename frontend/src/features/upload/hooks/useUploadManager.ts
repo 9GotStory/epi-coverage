@@ -20,21 +20,20 @@ async function saveSummary(payload: Record<string, unknown>) {
 
 export type TargetTable = 'Epi_1_Year' | 'Epi_2_Year' | 'Epi_3_Year' | 'Epi_5_Year';
 
-/** The four Age Group tables Summary Regeneration processes, with their Thai labels. */
-export const SUMMARY_REGENERATION_TABLES: ReadonlyArray<{ table: TargetTable; label: string }> = [
-  { table: 'Epi_1_Year', label: 'เด็ก 1 ปี' },
-  { table: 'Epi_2_Year', label: 'เด็ก 2 ปี' },
-  { table: 'Epi_3_Year', label: 'เด็ก 3 ปี' },
-  { table: 'Epi_5_Year', label: 'เด็ก 5 ปี' },
-];
+export const TABLE_LABEL: Record<TargetTable, string> = {
+  Epi_1_Year: 'เด็ก 1 ปี', Epi_2_Year: 'เด็ก 2 ปี', Epi_3_Year: 'เด็ก 3 ปี', Epi_5_Year: 'เด็ก 5 ปี',
+};
+
+/** The four Age Group tables Summary Regeneration processes. */
+export const SUMMARY_REGENERATION_TABLES: readonly TargetTable[] = ['Epi_1_Year', 'Epi_2_Year', 'Epi_3_Year', 'Epi_5_Year'];
 
 /**
  * Issue #134: writes the Dashboard Summaries (`_all` + Q1–Q4) of one table and Fiscal Year from its
- * Active Records. A table with no Active Records gets no summary at all and its existing rows are left
- * untouched (CONTEXT.md §44). An empty cohort or quarter inside a table with records is still a real 0.
- * Returns false when the table was skipped.
+ * Active Records, for both Summary Regeneration and the post-import step. A table with no Active Records
+ * gets no summary at all and its existing rows are left untouched (CONTEXT.md §44). An empty cohort or
+ * quarter inside a table with records is still a real 0. Returns false when the table was skipped.
  */
-async function regenerateTableSummaries(targetTable: TargetTable, fiscalYear: string): Promise<boolean> {
+async function writeTableSummaries(targetTable: TargetTable, fiscalYear: string): Promise<boolean> {
   const fullDataRes = await fetchApi('getEpiData', { targetTable, fiscalYear: Number(fiscalYear), hoscode: '00588' });
   const fullData = fullDataRes.data; // getEpiData คืน array ตรงๆ (ถ้าไม่มี sheet คืน [])
   if (!Array.isArray(fullData)) throw new Error('รูปแบบข้อมูล EPI ไม่ถูกต้อง (ต้องเป็น array)');
@@ -233,7 +232,7 @@ export function useUploadManager() {
       setStatus('generating_summary');
       setProgress(90);
       // Issue #134: a Full-File Sync that deactivated every record leaves no Active Records, so no summary.
-      setSummarySkipped(!(await regenerateTableSummaries(targetTable, fiscalYear)));
+      setSummarySkipped(!(await writeTableSummaries(targetTable, fiscalYear)));
 
       setProgress(100);
       setResults({ inserted, updated, deactivated: cleanupPayload.deactivated || 0 });
@@ -275,26 +274,17 @@ export function useUploadManager() {
 
   const handleSyncAll = useCallback(async () => {
     setIsSyncing(true);
+    // Issue #134: refresh unless the run certainly wrote nothing; a failure part-way may follow saved tables.
+    let wroteNothing = false;
     try {
       const skippedLabels: string[] = [];
-      for (const { table, label } of SUMMARY_REGENERATION_TABLES) {
-        if (!(await regenerateTableSummaries(table, fiscalYear))) skippedLabels.push(label);
+      for (const table of SUMMARY_REGENERATION_TABLES) {
+        if (!(await writeTableSummaries(table, fiscalYear))) skippedLabels.push(TABLE_LABEL[table]);
       }
       if (skippedLabels.length === SUMMARY_REGENERATION_TABLES.length) {
+        wroteNothing = true;
         toast.error(`ไม่มีข้อมูลปีงบประมาณ ${fiscalYear} ในทุกกลุ่มอายุ — ไม่ได้บันทึกสรุป`);
-        return;
-      }
-
-      // Invalidate relevant queries to force dashboard and rules refresh
-      queryClient.invalidateQueries({ queryKey: ['dashboardSummaries'] });
-      // Issue #22: Comparison reads must refresh too (separate query family), plus
-      // the summary-derived usable comparison years.
-      queryClient.invalidateQueries({ queryKey: ['dashboardSummariesMultiYear'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboardSummaryYears'] });
-      queryClient.invalidateQueries({ queryKey: ['vaccineRules'] });
-      queryClient.invalidateQueries({ queryKey: ['epiData'] });
-
-      if (skippedLabels.length > 0) {
+      } else if (skippedLabels.length > 0) {
         const regeneratedCount = SUMMARY_REGENERATION_TABLES.length - skippedLabels.length;
         toast.warning(`ประมวลผลปีงบประมาณ ${fiscalYear} แล้ว ${regeneratedCount} กลุ่มอายุ · ข้าม${skippedLabels.join(', ')} (ไม่มีข้อมูลปีนี้)`);
       } else {
@@ -304,6 +294,16 @@ export function useUploadManager() {
       console.error(error);
       toast.error('เกิดข้อผิดพลาดในการประมวลผล: ' + (error.message || 'Unknown error'));
     } finally {
+      if (!wroteNothing) {
+        // Invalidate relevant queries to force dashboard and rules refresh
+        queryClient.invalidateQueries({ queryKey: ['dashboardSummaries'] });
+        // Issue #22: Comparison reads must refresh too (separate query family), plus
+        // the summary-derived usable comparison years.
+        queryClient.invalidateQueries({ queryKey: ['dashboardSummariesMultiYear'] });
+        queryClient.invalidateQueries({ queryKey: ['dashboardSummaryYears'] });
+        queryClient.invalidateQueries({ queryKey: ['vaccineRules'] });
+        queryClient.invalidateQueries({ queryKey: ['epiData'] });
+      }
       setIsSyncing(false);
     }
   }, [fiscalYear, queryClient]);

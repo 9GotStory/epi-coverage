@@ -58,8 +58,9 @@ const safePreflight = {
   risk: { zeroMatchHoscodes: [], shrinkOverThreshold: false }, requiredConfirmation: null, shrinkThreshold: 0.2,
 };
 
+let client: QueryClient;
 function renderManager() {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const wrapper = ({ children }: { children?: ReactNode }) => createElement(QueryClientProvider, { client }, children);
   return renderHook(() => useUploadManager(), { wrapper }).result;
 }
@@ -101,6 +102,21 @@ describe('Issue #134 — Summary Regeneration skips Age Group tables with no Act
     expect(toast.success).not.toHaveBeenCalled();
     expect(toast.error).not.toHaveBeenCalled();
     expect(toast.warning).toHaveBeenCalledWith('ประมวลผลปีงบประมาณ 2569 แล้ว 3 กลุ่มอายุ · ข้ามเด็ก 5 ปี (ไม่มีข้อมูลปีนี้)');
+  });
+
+  it('a failure after some tables were written still refreshes the summary queries for what was written', async () => {
+    const saved = stubApi({ Epi_1_Year: [recordInQ1.Epi_1_Year], Epi_2_Year: [recordInQ1.Epi_2_Year] });
+    const fallback = api.fetchApi.getMockImplementation()!;
+    api.fetchApi.mockImplementation(async (action: string, payload?: Record<string, unknown>) =>
+      action === 'getVaccineRules' && payload?.ageGroup === '2yr' ? { data: { error: 'boom' } } : fallback(action, payload));
+    const result = renderManager();
+    const invalidate = vi.spyOn(client, 'invalidateQueries');
+    await act(async () => { result.current.setFiscalYear('2569'); });
+    await act(async () => { await result.current.handleSyncAll(); });
+    expect(savedScopes(saved)).toEqual(allFiveRows('Epi_1_Year'));
+    expect(toast.error).toHaveBeenCalledTimes(1);
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['dashboardSummaries'] });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['dashboardSummaryYears'] });
   });
 
   it('names every skipped Age Group when more than one table is empty', async () => {

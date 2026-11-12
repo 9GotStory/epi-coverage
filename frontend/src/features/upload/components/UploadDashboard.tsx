@@ -6,7 +6,7 @@ import { Alert, AlertDescription, AlertTitle } from '../../../shared/components/
 import { SubNav } from '../../../widgets/layout/SubNav';
 import { ConfirmModal } from '../../../shared/components/ui/confirm-modal';
 import { getAgeString } from '../utils/uploadHelpers';
-import { useUploadManager, SUMMARY_REGENERATION_TABLES } from '../hooks/useUploadManager';
+import { useUploadManager, SUMMARY_REGENERATION_TABLES, TABLE_LABEL } from '../hooks/useUploadManager';
 import { ImportPreflightPanel } from './ImportPreflightPanel';
 
 export function UploadDashboard() {
@@ -69,7 +69,8 @@ export function UploadDashboard() {
             </p>
           </div>
           <div className="w-full sm:w-64">
-            <select 
+            <select
+              aria-label="ปีงบประมาณ"
               className="w-full h-10 px-3 rounded-md border border-slate-200 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm font-medium disabled:opacity-50 disabled:bg-slate-50 disabled:cursor-not-allowed"
               value={fiscalYear}
               onChange={(e) => setFiscalYear(e.target.value)}
@@ -322,7 +323,7 @@ export function UploadDashboard() {
           {/* Issue #134: the year and the four Age Groups are named before anything is written. */}
           <ConfirmModal
             title={`ประมวลผล Dashboard ใหม่ · ปีงบประมาณ ${fiscalYear}`}
-            description={`ระบบจะคำนวณสรุป Dashboard ของปีงบประมาณ ${fiscalYear} ใหม่ สำหรับ ${SUMMARY_REGENERATION_TABLES.length} กลุ่มอายุ: ${SUMMARY_REGENERATION_TABLES.map(({ label }) => label).join(', ')} กลุ่มอายุที่ไม่มีข้อมูลในปีนี้จะถูกข้ามและไม่บันทึกสรุป การประมวลผลอาจใช้เวลาสักครู่ ต้องการดำเนินการต่อหรือไม่?`}
+            description={`ระบบจะคำนวณสรุป Dashboard ของปีงบประมาณ ${fiscalYear} ใหม่ สำหรับ ${SUMMARY_REGENERATION_TABLES.length} กลุ่มอายุ: ${SUMMARY_REGENERATION_TABLES.map(table => TABLE_LABEL[table]).join(', ')} กลุ่มอายุที่ไม่มีข้อมูลในปีนี้จะถูกข้ามและไม่บันทึกสรุป การประมวลผลอาจใช้เวลาสักครู่ ต้องการดำเนินการต่อหรือไม่?`}
             onConfirm={handleSyncAll}
             confirmText="ประมวลผล"
           >
