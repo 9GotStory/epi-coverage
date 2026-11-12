@@ -45,6 +45,8 @@ describe('Issue #102 — exports carry the date warnings of ตรวจสอ�
     withRules(<HdcRecordsView age={1} fiscalYear={2569} quarter="all" data={[warned]} isLoading={false} error={null} asOfDate={null} />);
     fireEvent.click(screen.getByRole('button', { name: 'Excel พร้อมข้อมูลวัคซีน' }));
     expect(exportedRow()).toMatchObject({ 'ผลตามกฎ': 'ตรวจสอบประวัติ', 'ข้อสังเกตวันที่': WARNING });
+    fireEvent.click(screen.getByRole('button', { name: 'PDF รายชื่อ' }));
+    expect(exports.exportToPdf.mock.calls.at(-1)![0][0]).toMatchObject({ 'ผลตามกฎ': 'ตรวจสอบประวัติ', 'ข้อสังเกตวันที่': WARNING });
   });
 
   it('View 1 list', () => {

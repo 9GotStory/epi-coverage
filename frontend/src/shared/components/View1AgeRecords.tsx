@@ -41,18 +41,17 @@ export function View1AgeRecords({ age, fiscalYear, quarter, data, isLoading, err
     }).map(record => {
       const evaluation = evaluateDynamicV1(record, rules);
       const warnings = getRecordDateWarnings(record, ageRules);
-      const missing = evaluation.missingVaccines;
       const unknown = rulesLoading || rulesError || !rules.length || !!evaluation.unknownVaccines?.length;
       // สถานะเต็ม (ใช้กับ filter + tooltip): unknown > missing > ตรวจสอบประวัติ (#102) > pending > ครบ
       // (คำเตือนวันที่ เช่น ลงวันที่ตรงวันเกิด → rule นั้นไม่ผ่านแต่ไม่ขาด จึงเป็น ตรวจสอบประวัติ ไม่ใช่ ครบ หรือ ไม่ครบ)
       const status = unknown ? STATUS_UNKNOWN
-        : missing.length ? STATUS_INCOMPLETE
+        : evaluation.missingVaccines.length ? STATUS_INCOMPLETE
         : evaluation.reviewRuleNames?.length ? STATUS_REVIEW
         : evaluation.pendingVaccines?.length ? STATUS_PENDING
         : STATUS_COMPLETE;
       // badge แสดงเฉพาะ ครบ/ตรวจสอบประวัติ/ไม่ครบ — เหตุผลเต็มอยู่ใน tooltip
       const badge = status === STATUS_COMPLETE || status === STATUS_REVIEW ? status : STATUS_INCOMPLETE;
-      const details = [...missing, ...(evaluation.pendingVaccines || []), ...(evaluation.unknownVaccines || [])];
+      const details = [...evaluation.missingVaccines, ...(evaluation.pendingVaccines || []), ...(evaluation.unknownVaccines || [])];
       const tooltipParts = details.length ? [details.join(' · ')] : [];
       if (warnings.length) tooltipParts.push(`ตรวจสอบวันที่: ${warnings.join(' · ')}`);
       // Issue #102: export/PDF ใช้รายละเอียดเดียวกับ tooltip — รายการตรวจสอบประวัติต้องมีข้อสังเกตวันที่ให้แก้ต้นทางได้

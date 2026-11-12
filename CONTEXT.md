@@ -535,6 +535,7 @@ Preferred examples:
 - View 2 Pending for the record-level not-yet-due state, never bare "pending" (which is an Approval Status)
 - Inapplicable Rule for a rule outside the child's Birth Window, never "not applicable" for a rule that is pending or not evaluable
 - HDC Result Mismatch for a disagreement between the rule result and the HDC `result`, never "HDC override"
+- "ตรวจสอบประวัติ" (review history, code `REVIEW` / `review*`) for a rule or record held back only by a date-check warning (§23), never "missing" or "ไม่ผ่าน"
 
 When a new domain concept appears repeatedly and cannot be expressed clearly using this vocabulary, update `CONTEXT.md` deliberately instead of inventing several competing names in code.
 

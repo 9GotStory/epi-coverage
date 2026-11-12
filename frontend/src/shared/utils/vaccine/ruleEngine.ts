@@ -322,7 +322,7 @@ export const evaluateDynamicV2 = (record: EpiRecord, rules: VaccineRule[], evalu
             : 'PASS';
 
   // Issue #101 (ADR-0006): ผลจากกฎเป็นหลัก `result` ของ HDC แสดงประกอบเท่านั้น ไม่เปลี่ยน status
-  // ขัดกัน = ทั้งสองฝ่ายตัดสินผ่าน/ไม่ผ่านแล้วไม่ตรงกัน — View 2 Pending/ประเมินไม่ได้ไม่ใช่คำตัดสิน จึงไม่ติดป้าย
+  // ขัดกัน = ทั้งสองฝ่ายตัดสินผ่าน/ไม่ผ่านแล้วไม่ตรงกัน — ตรวจสอบประวัติ/View 2 Pending/ประเมินไม่ได้ไม่ใช่คำตัดสิน จึงไม่ติดป้าย
   const hdcVerdict = readHdcVerdict(record.result);
   const hdcMismatch = (hdcVerdict === 'PASS' && status === 'FAIL') || (hdcVerdict === 'FAIL' && status === 'PASS');
 

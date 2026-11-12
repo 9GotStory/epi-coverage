@@ -161,6 +161,7 @@ export function HdcRecordsView({ age, fiscalYear, quarter, data, isLoading, erro
           'ผลตามกฎ': record.ruleStatus,
           'ผลจาก HDC': hdcValue(record.result),
           [MISMATCH_LABEL]: record.hdcMismatch ? 'ใช่' : '',
+          'ข้อสังเกตวันที่': record.dateWarnings,
         })), filename, `รายชื่อเด็กอายุครบ ${age} ปี — ผลตามกฎและผลจาก HDC`)}>PDF รายชื่อ</Button>
       </div>
       <p className="text-sm text-zinc-500">แสดง {filtered.length.toLocaleString()} จาก {cohort.length.toLocaleString()} คน</p>
