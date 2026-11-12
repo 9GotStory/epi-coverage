@@ -99,12 +99,12 @@ export function VaccineHistoryModal({ isOpen, onClose, record, warnings, warning
             {rows.map(row => {
               const notes = notesOf(row.field);
               return (
-              <TableRow key={row.id} className={notes.length > 0 ? 'bg-amber-50 hover:bg-amber-100/70' : undefined}>
-                <TableCell><div>{row.name}</div><div className="text-xs text-zinc-500" title="ชื่อคอลัมน์ในไฟล์ HDC ที่นำเข้า">{row.field}</div>{reasonOf(row.ruleId) && <div className="text-sm font-medium">{reasonOf(row.ruleId)}</div>}{row.note && <div className="text-sm text-muted-foreground">{row.note}</div>}{notes.map(note => <div key={note} className="text-sm text-amber-800 flex items-center gap-1"><AlertTriangle className="w-3.5 h-3.5 text-amber-500 shrink-0" />{note}</div>)}</TableCell>
-                <TableCell className="whitespace-pre-wrap" title={dateCellTooltip(record, row.date)}>{formatHdcDate(row.date)}</TableCell>
-                <TableCell title={row.facility === '—' ? 'ไม่มีค่ารหัสสถานบริการในไฟล์ที่นำเข้า' : undefined}>{row.facility}</TableCell>
-                <TableCell title={row.inputFacility === '—' ? 'ไม่มีค่ารหัสหน่วยบันทึกในไฟล์ที่นำเข้า' : undefined}>{row.inputFacility}</TableCell>
-              </TableRow>
+                <TableRow key={row.id} className={notes.length > 0 ? 'bg-amber-50 hover:bg-amber-100/70' : undefined}>
+                  <TableCell><div>{row.name}</div><div className="text-xs text-zinc-500" title="ชื่อคอลัมน์ในไฟล์ HDC ที่นำเข้า">{row.field}</div>{reasonOf(row.ruleId) && <div className="text-sm font-medium">{reasonOf(row.ruleId)}</div>}{row.note && <div className="text-sm text-muted-foreground">{row.note}</div>}{notes.map(note => <div key={note} className="text-sm text-amber-800 flex items-center gap-1"><AlertTriangle className="w-3.5 h-3.5 text-amber-500 shrink-0" />{note}</div>)}</TableCell>
+                  <TableCell className="whitespace-pre-wrap" title={dateCellTooltip(record, row.date)}>{formatHdcDate(row.date)}</TableCell>
+                  <TableCell title={row.facility === '—' ? 'ไม่มีค่ารหัสสถานบริการในไฟล์ที่นำเข้า' : undefined}>{row.facility}</TableCell>
+                  <TableCell title={row.inputFacility === '—' ? 'ไม่มีค่ารหัสหน่วยบันทึกในไฟล์ที่นำเข้า' : undefined}>{row.inputFacility}</TableCell>
+                </TableRow>
               );
             })}
             {rows.length === 0 && <TableRow><TableCell colSpan={4} className="text-center py-8">ไม่พบคอลัมน์วัคซีนในข้อมูลที่โหลดมา</TableCell></TableRow>}

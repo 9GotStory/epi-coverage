@@ -40,7 +40,8 @@ export function View1AgeRecords({ age, fiscalYear, quarter, data, isLoading, err
       return birth >= start && birth <= end;
     }).map(record => {
       const evaluation = evaluateDynamicV1(record, rules);
-      const dateWarningDetails = getRecordDateWarningDetails(record, ageRules);
+      // Issue #130: ตรวจเฉพาะกฎของกลุ่มอายุ แต่ตั้งชื่อเข็มจากกฎทั้งหมด ให้ตรงกับ View 2 และ Rules Engine
+      const dateWarningDetails = getRecordDateWarningDetails(record, ageRules, rules);
       const warnings = dateWarningDetails.map(warning => warning.message);
       const unknown = rulesLoading || rulesError || !rules.length || !!evaluation.unknownVaccines?.length;
       // สถานะเต็ม (ใช้กับ filter + tooltip): unknown > missing > ตรวจสอบประวัติ (#102) > pending > ครบ
@@ -114,6 +115,6 @@ export function View1AgeRecords({ age, fiscalYear, quarter, data, isLoading, err
     </div>
     <p className="text-sm text-muted-foreground">แสดง {filtered.length} จาก {processed.length} คน</p>
     <EpiDataTable data={filtered} columns={columns} />
-    <VaccineHistoryModal rules={ageRules} caption={`รายการวัคซีนสำหรับกลุ่มอายุ ${age} ปี`} showHdcResult={false} record={selected} isOpen={!!selected} onClose={() => setSelected(null)} inapplicableRules={selected ? evaluateDynamicV1(selected, rules).inapplicableRules : []} warnings={selected ? getRecordDateWarningDetails(selected, ageRules) : []} warningsStatus={rulesLoading ? 'กำลังโหลดเกณฑ์...' : rulesError || undefined} />
+    <VaccineHistoryModal rules={ageRules} caption={`รายการวัคซีนสำหรับกลุ่มอายุ ${age} ปี`} showHdcResult={false} record={selected} isOpen={!!selected} onClose={() => setSelected(null)} inapplicableRules={selected ? evaluateDynamicV1(selected, rules).inapplicableRules : []} warnings={selected ? getRecordDateWarningDetails(selected, ageRules, rules) : []} warningsStatus={rulesLoading ? 'กำลังโหลดเกณฑ์...' : rulesError || undefined} />
   </div>;
 }

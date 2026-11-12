@@ -122,6 +122,7 @@ describe('Issue #130 — structured warnings name both doses and their dates', (
 
     it('labels JE and LAJE per dose', () => {
       expect(messages({ je1_date: '2026-01-20', je2_date: '2026-01-20' })).toEqual(['JE เข็ม 1 และ JE เข็ม 2 ฉีดวันเดียวกัน (20-01-2026)']);
+      expect(messages({ j11_date: '20/01/2569' })).toEqual(['LAJE เข็ม 1 รูปแบบวันที่ไม่ถูกต้อง ("20/01/2569")']);
     });
 
     it('keeps the configured name of the first single-column rule and labels other columns by convention', () => {

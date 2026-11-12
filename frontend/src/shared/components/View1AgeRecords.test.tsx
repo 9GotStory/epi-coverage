@@ -76,6 +76,20 @@ describe('age-specific individual view rendering (rules-driven)', () => {
     expect(html).toContain('>OPV เข็ม 5 ฉีดตรงวันเกิด (01-01-2021) ซึ่งเกณฑ์ไม่อนุญาต<');
   });
 
+  it('Issue #130: names a counterpart dose outside the age group as View 2 and the Rules Engine do', () => {
+    // dtp4 has a single-column rule only in View 2; the View 1 pair still names it by that rule
+    const paired = rules.map(rule => rule.rule_id === 'dtp5' ? { ...rule, date_checks: { ...rule.date_checks!, ordered_pairs: [{ field: 'dtp4_date', other_field: 'dtp5_date' }] } } : rule);
+    const withView2 = [...paired, { ...rules[0], rule_id: 'v2-dtp4', view_type: 2 as const, display_name: 'DTP เข็ม 4 (18 เดือน)', required_fields: ['dtp4_date'] }];
+    const client = new QueryClient();
+    client.setQueryData(['vaccineRules', 2569, '5yr'], withView2);
+    const html = renderToStaticMarkup(
+      <QueryClientProvider client={client}>
+        <View1AgeRecords age={5} fiscalYear={2569} quarter="all" data={[{ ...data[0], dtp4_date: '2025-03-01' }]} isLoading={false} error={null} asOfDate={null} />
+      </QueryClientProvider>,
+    );
+    expect(html).toContain('>DTP เข็ม 5 (01-02-2025) ฉีดก่อน DTP เข็ม 4 (18 เดือน) (01-03-2025)<');
+  });
+
   it('Issue #102: a really missing dose still makes the record ไม่ครบ alongside a date warning', () => {
     const html = renderRecords([{ ...data[0], dtp5_date: '2021-01-01', opv5_date: '' }]);
     expect(html).toContain('>ไม่ครบ<');

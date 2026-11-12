@@ -60,43 +60,48 @@ const warningKey = ({ type, fields }: DateWarning) => `${type}|${(type === 'same
 const uniqueWarnings = (warnings: DateWarning[]): DateWarning[] =>
   warnings.filter((warning, index) => warnings.findIndex(other => warningKey(other) === warningKey(warning)) === index);
 
-export function getRuleDateWarningDetails(record: EpiRecord, rule: VaccineRule, allRules: VaccineRule[]): DateWarning[] {
+/**
+ * labelRules: กฎที่ใช้ตั้งชื่อเข็ม — ปกติคือ allRules แต่ View 1 ตรวจเฉพาะกฎของกลุ่มอายุ
+ * จึงส่งกฎทั้งหมดของปีและกลุ่มอายุมาเพื่อให้ชื่อเข็มตรงกับ View 2 และหน้า Rules Engine
+ */
+export function getRuleDateWarningDetails(record: EpiRecord, rule: VaccineRule, allRules: VaccineRule[], labelRules: VaccineRule[] = allRules): DateWarning[] {
   // Issue #121: Inapplicable Rule ไม่ใช้กับเด็กรายนี้ จึงไม่มีข้อสังเกตวันที่ของตัวเอง
   if (!rule.is_active || ruleApplicability(rule, record).kind === 'inapplicable') return [];
   const config = getRuleDateChecks(rule, allRules);
   // Issue #130: ป้ายชื่อเข็มเดียวกับหน้า Rules Engine (display_name ของ rule คอลัมน์เดียว หรือป้ายตามคอลัมน์)
-  const name = buildDoseLabeler(allRules);
-  const value = (field: string) => record[field as keyof EpiRecord];
+  const name = buildDoseLabeler(labelRules);
+  const rawValue = (field: string) => record[field as keyof EpiRecord];
   const warnings: DateWarning[] = [];
-  const single = (type: DateWarning['type'], field: string, message: (date: string) => string, birth?: string): DateWarning => {
+  const singleDoseWarning = (type: DateWarning['type'], field: string, message: (date: string) => string, birth?: string): DateWarning => {
     // An invalid value is shown as stored (String, since hdcValue cannot format an invalid Date).
-    const date = type === 'invalid' ? String(value(field)).trim() : formatHdcDate(value(field));
+    const date = type === 'invalid' ? String(rawValue(field)).trim() : formatHdcDate(rawValue(field));
     return { type, fields: [field], labels: [name(field)], dates: [date], ...(birth ? { birth } : {}), message: message(date) };
   };
   const birth = dateKey(record.birth);
   const birthDate = formatHdcDate(record.birth);
   const fields = [...new Set([...rule.required_fields, ...(rule.branch_alt_fields || [])])];
   for (const field of fields) {
-    const day = dateKey(value(field));
-    if (day === '') warnings.push(single('invalid', field, date => `${name(field)} รูปแบบวันที่ไม่ถูกต้อง ("${date}")`));
+    const day = dateKey(rawValue(field));
+    if (day === '') warnings.push(singleDoseWarning('invalid', field, date => `${name(field)} รูปแบบวันที่ไม่ถูกต้อง ("${date}")`));
     else if (day && birth) {
-      if (config.before_birth && day < birth) warnings.push(single('before_birth', field, date => `${name(field)} ฉีดก่อนวันเกิด (${date}, เกิด ${birthDate})`, birthDate));
-      if (!config.allow_on_birth && day === birth) warnings.push(single('on_birth', field, date => `${name(field)} ฉีดตรงวันเกิด (${date}) ซึ่งเกณฑ์ไม่อนุญาต`));
+      if (config.before_birth && day < birth) warnings.push(singleDoseWarning('before_birth', field, date => `${name(field)} ฉีดก่อนวันเกิด (${date}, เกิด ${birthDate})`, birthDate));
+      if (!config.allow_on_birth && day === birth) warnings.push(singleDoseWarning('on_birth', field, date => `${name(field)} ฉีดตรงวันเกิด (${date}) ซึ่งเกณฑ์ไม่อนุญาต`));
     }
   }
-  const pair = (type: DateWarning['type'], first: string, second: string, message: (a: string, b: string) => string): DateWarning => {
-    const dates = [formatHdcDate(value(first)), formatHdcDate(value(second))];
+  const pairWarning = (type: DateWarning['type'], first: string, second: string, message: (firstDate: string, secondDate: string) => string): DateWarning => {
+    const dates = [formatHdcDate(rawValue(first)), formatHdcDate(rawValue(second))];
     return { type, fields: [first, second], labels: [name(first), name(second)], dates, message: message(dates[0], dates[1]) };
   };
   for (const { field, other_field } of config.same_day_pairs) {
-    const a = dateKey(value(field));
-    const b = dateKey(value(other_field));
-    if (a && b && a === b) warnings.push(pair('same_day', field, other_field, day => `${name(field)} และ ${name(other_field)} ฉีดวันเดียวกัน (${day})`));
+    const a = dateKey(rawValue(field));
+    const b = dateKey(rawValue(other_field));
+    if (a && b && a === b) warnings.push(pairWarning('same_day', field, other_field, day => `${name(field)} และ ${name(other_field)} ฉีดวันเดียวกัน (${day})`));
   }
   for (const { field, other_field } of config.ordered_pairs) {
-    const a = dateKey(value(field));
-    const b = dateKey(value(other_field));
-    if (a && b && a > b) warnings.push(pair('ordered', field, other_field, (later, earlier) => `${name(other_field)} (${earlier}) ฉีดก่อน ${name(field)} (${later})`));
+    const a = dateKey(rawValue(field));
+    const b = dateKey(rawValue(other_field));
+    // field ควรฉีดก่อน other_field แต่วันที่จริงกลับหลัง จึงขึ้นต้นด้วย other_field
+    if (a && b && a > b) warnings.push(pairWarning('ordered', field, other_field, (fieldDate, otherDate) => `${name(other_field)} (${otherDate}) ฉีดก่อน ${name(field)} (${fieldDate})`));
   }
   return uniqueWarnings(warnings);
 }
@@ -114,8 +119,8 @@ export function dateWarningNote(warning: DateWarning, field: string): string {
   }
 }
 
-export function getRecordDateWarningDetails(record: EpiRecord, rules: VaccineRule[]): DateWarning[] {
-  return uniqueWarnings(rules.flatMap(rule => getRuleDateWarningDetails(record, rule, rules)));
+export function getRecordDateWarningDetails(record: EpiRecord, rules: VaccineRule[], labelRules: VaccineRule[] = rules): DateWarning[] {
+  return uniqueWarnings(rules.flatMap(rule => getRuleDateWarningDetails(record, rule, rules, labelRules)));
 }
 
 export function getRuleDateWarnings(record: EpiRecord, rule: VaccineRule, allRules: VaccineRule[]): string[] {
