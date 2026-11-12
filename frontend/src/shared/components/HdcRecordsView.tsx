@@ -1,5 +1,5 @@
 import { useVaccineRules } from '../hooks/useVaccineRules';
-import { getRecordDateWarnings } from '../utils/vaccine/dateWarnings';
+import { getRecordDateWarningDetails } from '../utils/vaccine/dateWarnings';
 import { evaluateDynamicV2 } from '../utils/vaccine/ruleEngine';
 import { useMemo, useState } from 'react';
 import type { ColumnDef } from '@tanstack/react-table';
@@ -58,17 +58,18 @@ export function HdcRecordsView({ age, fiscalYear, quarter, data, isLoading, erro
       : !rules.some(rule => rule.view_type === 2 && rule.is_active) ? 'ยังไม่มีเกณฑ์'
         : null;
   const processed = useMemo(() => cohort.map(record => {
-    if (rulesUnavailableLabel) return { ...record, ruleStatus: rulesUnavailableLabel, ruleDetails: '', dateWarnings: '', hdcMismatch: false };
+    if (rulesUnavailableLabel) return { ...record, ruleStatus: rulesUnavailableLabel, ruleDetails: '', dateWarningDetails: [], dateWarnings: '', hdcMismatch: false };
     const evaluation = evaluateDynamicV2(record, rules);
     const details = [
       evaluation.missingVaccines.length ? `ขาด: ${evaluation.missingVaccines.join(', ')}` : '',
-      evaluation.reviewVaccines?.length ? `${RULE_STATUS_LABELS.REVIEW}: ${evaluation.reviewVaccines.join(', ')}` : '',
       evaluation.pendingVaccines?.length ? `ยังไม่ถึงเกณฑ์: ${evaluation.pendingVaccines.join(', ')}` : '',
       evaluation.notEvaluableVaccines?.length ? `ประเมินไม่ได้: ${evaluation.notEvaluableVaccines.join(', ')}` : '',
     ].filter(Boolean).join(' · ');
-    // Issue #102: รายการตรวจสอบประวัติที่ export ต้องมีข้อสังเกตวันที่ให้แก้ต้นทางได้โดยไม่ต้องเปิดประวัติทีละคน
-    const dateWarnings = getRecordDateWarnings(record, rules).join(' · ');
-    return { ...record, ruleStatus: RULE_STATUS_LABELS[evaluation.status ?? 'NOT_EVALUABLE'], ruleDetails: details, dateWarnings, hdcMismatch: !!evaluation.hdcMismatch };
+    // Issue #102/#130: ข้อสังเกตวันที่ (ชื่อเข็มและวันที่) แสดงใต้ผลตามกฎและอยู่ในไฟล์ export
+    // ให้แก้ต้นทางได้โดยไม่ต้องเปิดประวัติทีละคน — แทนรายละเอียด "ตรวจสอบประวัติ: <ชื่อกฎ>"
+    const dateWarningDetails = getRecordDateWarningDetails(record, rules);
+    const dateWarnings = dateWarningDetails.map(warning => warning.message).join(' · ');
+    return { ...record, ruleStatus: RULE_STATUS_LABELS[evaluation.status ?? 'NOT_EVALUABLE'], ruleDetails: details, dateWarningDetails, dateWarnings, hdcMismatch: !!evaluation.hdcMismatch };
   }), [cohort, rules, rulesUnavailableLabel]);
   const facilities = useMemo(() => [...new Map(cohort.map(record => [record.hoscode, record.hosname])).entries()].sort(), [cohort]);
   const results = useMemo(() => [...new Set(cohort.map(record => hdcValue(record.result)))].sort(), [cohort]);
@@ -97,6 +98,7 @@ export function HdcRecordsView({ age, fiscalYear, quarter, data, isLoading, erro
         <div>
           <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${RULE_STATUS_CLASSES[row.original.ruleStatus] ?? 'bg-zinc-100 text-zinc-700'}`}>{row.original.ruleStatus}</span>
           {row.original.ruleDetails && <div className="text-xs text-zinc-500 mt-1">{row.original.ruleDetails}</div>}
+          {row.original.dateWarningDetails.length > 0 && <ul className="text-xs text-amber-800 mt-1 space-y-0.5">{row.original.dateWarningDetails.map(warning => <li key={warning.message}>{warning.message}</li>)}</ul>}
         </div>
       ),
     },
@@ -166,7 +168,7 @@ export function HdcRecordsView({ age, fiscalYear, quarter, data, isLoading, erro
       </div>
       <p className="text-sm text-zinc-500">แสดง {filtered.length.toLocaleString()} จาก {cohort.length.toLocaleString()} คน</p>
       <EpiDataTable data={filtered} columns={columns} />
-      <VaccineHistoryModal warnings={selectedPatient ? getRecordDateWarnings(selectedPatient, rules) : []} warningsStatus={rulesLoading ? 'กำลังโหลดเกณฑ์ตรวจวันที่...' : rulesError ? 'โหลดเกณฑ์ตรวจวันที่ไม่สำเร็จ' : rules.length === 0 ? 'ยังไม่มีเกณฑ์ตรวจวันที่สำหรับปีและกลุ่มอายุนี้' : undefined} inapplicableRules={selectedPatient ? evaluateDynamicV2(selectedPatient, rules).inapplicableRules : []} ruleResult={selectedPatient ? { label: selectedPatient.ruleStatus, hdcMismatch: selectedPatient.hdcMismatch } : undefined} isOpen={!!selectedPatient} record={selectedPatient} onClose={() => setSelectedPatient(null)} />
+      <VaccineHistoryModal warnings={selectedPatient ? getRecordDateWarningDetails(selectedPatient, rules) : []} warningsStatus={rulesLoading ? 'กำลังโหลดเกณฑ์ตรวจวันที่...' : rulesError ? 'โหลดเกณฑ์ตรวจวันที่ไม่สำเร็จ' : rules.length === 0 ? 'ยังไม่มีเกณฑ์ตรวจวันที่สำหรับปีและกลุ่มอายุนี้' : undefined} inapplicableRules={selectedPatient ? evaluateDynamicV2(selectedPatient, rules).inapplicableRules : []} ruleResult={selectedPatient ? { label: selectedPatient.ruleStatus, hdcMismatch: selectedPatient.hdcMismatch } : undefined} isOpen={!!selectedPatient} record={selectedPatient} onClose={() => setSelectedPatient(null)} />
     </div>
   );
 }

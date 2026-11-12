@@ -110,11 +110,11 @@ export const ruleHasDataError = (record: EpiRecord, rule: VaccineRule, allRules?
 };
 
 /**
- * ข้อความ error ของ rule — ถ้า error ระบุชื่อ rule ไว้แล้ว (ป้ายจาก display_name ใน vaccine_rules)
- * ไม่ต้องนำหน้าชื่อ rule ซ้ำ เช่น "DTP เข็ม 1: วันที่ฉีดก่อนวันเกิด"
+ * ข้อความ error ของ rule — ถ้า error ขึ้นต้นด้วยชื่อ rule แล้ว (ป้ายจาก display_name ใน vaccine_rules)
+ * ไม่ต้องนำหน้าชื่อ rule ซ้ำ เช่น "DTP เข็ม 1 ฉีดก่อนวันเกิด (14-01-2025, เกิด 15-01-2025)"
  */
 const formatRuleError = (rule: VaccineRule, error: string): string =>
-  error.startsWith(`${rule.display_name}:`) ? error : `${rule.display_name} (${error})`;
+  error.startsWith(`${rule.display_name} `) ? error : `${rule.display_name} (${error})`;
 
 export const getDataErrors = (record: EpiRecord, rules: VaccineRule[]): string[] => {
   const errors: string[] = [];

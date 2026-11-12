@@ -1,6 +1,5 @@
 import { getRuleDateChecks } from '../../../shared/utils/vaccine/dateWarnings';
-import { buildFieldLabelMap } from '../../../shared/utils/vaccine/rulePresentation';
-import { vaccineFieldLabel } from '../../../shared/utils/vaccine/hdcData';
+import { buildDoseLabeler } from '../../../shared/utils/vaccine/rulePresentation';
 import { describeBirthWindow, hasBirthWindow } from '../../../shared/utils/vaccine/birthWindow';
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../../shared/components/ui/card';
@@ -37,9 +36,8 @@ interface VaccineRuleManagerProps {
 
 function describeDateChecks(rule: VaccineRule, rules: VaccineRule[]) {
   const checks = getRuleDateChecks(rule, rules);
-  // ป้ายชื่อเข็มมาจาก vaccine_rules (display_name) โดย fallback ที่ vaccineFieldLabel
-  const labels = buildFieldLabelMap(rules);
-  const name = (field: string) => labels.get(field) ?? vaccineFieldLabel(field);
+  // Issue #130: ป้ายชื่อเข็มเดียวกับข้อสังเกตวันที่และตัวเลือกคู่เข็ม
+  const name = buildDoseLabeler(rules);
   return [
     `ตรวจฉีดก่อนวันเกิด: ${checks.before_birth ? 'เปิด' : 'ปิด'}`,
     `ฉีดตรงวันเกิด: ${checks.allow_on_birth ? 'อนุญาต' : 'ไม่อนุญาต'}`,
