@@ -106,7 +106,7 @@ function handleRequest(method, e) {
       case 'seedVaccineRules': return responseJson(seedVaccineRules(body.fiscalYear, authResult.email, body.force));
       case 'saveVaccineRule': return responseJson(saveVaccineRule(body.rule, authResult.email));
       case 'cloneVaccineRules': return responseJson(cloneRulesFromYear(body.fromYear, body.toYear, authResult.email));
-      case 'batchSaveRules': return responseJson(batchSaveRules(body.fiscalYear, body.ageGroup, body.rules, authResult.email));
+      case 'batchSaveRules': return responseJson(batchSaveRules(body.fiscalYear, body.ageGroup, body.rules, authResult.email, body.deleted_rule_ids));
       case 'suggestRuleTargetAges': return responseJson(suggestRuleTargetAges(body.rules));
       case 'suggestRuleDateChecks': return responseJson(suggestRuleDateChecks(body.rules));
       // Issue #59: one-time metric_key migration — audit identity มาจาก session ที่ตรวจแล้ว

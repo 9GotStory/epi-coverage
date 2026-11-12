@@ -115,6 +115,19 @@
 
 คอลัมน์ `metric_key` (String) เก็บรหัสเชื่อมโยงเชิงตรรกะข้ามปีงบประมาณ — ความหมายทางธุรกิจ (นิยามคีย์ที่ establish แล้ว กฎการ clone/seed) เป็นของ `docs/specs/comparison-page-improvement.md` Decision E ชีตที่สร้างก่อนมีคอลัมน์นี้ได้รับคอลัมน์เพิ่มท้ายชีตผ่านการย้ายข้อมูลครั้งเดียวโดยแอดมิน (`migrateVaccineMetricKeys`) ซึ่งเติมคีย์ที่ยังว่างด้วย `rule_id` ของแถวนั้น ไม่แตะเซลล์อื่น และรันซ้ำได้อย่าง idempotent
 
+การบันทึกแบบกลุ่ม `batchSaveRules` (Issue #148) แทนที่กฎทั้งชุดของ (`fiscal_year`, `age_group`) ด้วยกฎใน `rules` คำขอมี `deleted_rule_ids` (array ของ `rule_id`, ไม่ส่ง = ว่าง) ภายใต้ lock และ snapshot เดียวกับที่เขียน server ปฏิเสธทั้งคำขอโดยไม่เขียนอะไรเลยเมื่อ:
+
+- กฎที่เก็บไว้ของ (`fiscal_year`, `age_group`) ไม่อยู่ทั้งใน `rules` และ `deleted_rule_ids` (ไม่มีการลบเงียบ)
+- `deleted_rule_ids` มีรหัสที่ไม่ใช่กฎที่เก็บไว้ของ (`fiscal_year`, `age_group`) นั้น หรือไม่ใช่ array ของข้อความ
+- รหัสเดียวกันอยู่ทั้งใน `rules` และ `deleted_rule_ids` หรือซ้ำใน `rules`
+- ผลลัพธ์จะไม่เหลือกฎเลย
+
+กฎใน `rules` ที่ `rule_id` ยังไม่มีในชีตคือการเพิ่ม `metric_key` ของกฎที่เพิ่มเป็นไปตาม [Decision E](specs/comparison-page-improvement.md)
+
+ทั้ง `batchSaveRules` (ทุกกฎในคำขอ) และ `saveVaccineRule` ตรวจโครงสร้างกฎก่อนเขียนแบบ fail closed ข้อความ error ระบุ `rule_id` ของกฎที่ผิด: `display_name` และ `vaccine_group` ไม่ว่างหลัง trim; `view_type` เป็น 1 หรือ 2; `logic_type` เป็น `ALL`/`ANY`/`BRANCH`; `required_fields` มีอย่างน้อยหนึ่งรายการ ทุกรายการตรง `^[a-z][a-z0-9_]*_date$`; กฎ `BRANCH` มี `branch_alt_fields` อย่างน้อยหนึ่งรายการในรูปเดียวกัน; `target_age_months` ถ้ามีต้องเป็นจำนวนเต็มไม่ติดลบ (ค่าว่างได้ — server ไม่บังคับ) กฎในชีตที่ผิดโครงสร้างอยู่ก่อนจึงบล็อก Batch Save จนกว่าจะแก้หรือลบกฎนั้น
+
+บันทึก `batch_save_rules` ใน `audit_logs` มีจำนวนกฎ ปีงบประมาณ กลุ่มอายุ และ `added=`/`deleted=` เป็น JSON ของ `{rule_id, display_name}` ของกฎที่เพิ่มและลบ เป็นข้อมูลการตั้งค่าเท่านั้น ไม่มีข้อมูลรายบุคคล
+
 คอลัมน์ `date_checks` เก็บ JSON: `before_birth` (Boolean), `allow_on_birth` (Boolean), `same_day_pairs` และ `ordered_pairs` (รายการ `{field, other_field}`)
 
 - `same_day_pairs`: คู่คอลัมน์ที่ห้ามมีวันฉีดเดียวกัน
