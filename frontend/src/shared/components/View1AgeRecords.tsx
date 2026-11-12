@@ -16,9 +16,15 @@ import { Button } from './ui/button';
 
 const STATUS_COMPLETE = 'ครบ';
 const STATUS_INCOMPLETE = 'ไม่ครบ';
+// Issue #102: วันที่ครบแต่มีคำเตือนวันที่ — งานตรวจข้อมูลต้นทาง ไม่ใช่เข็มขาด
+const STATUS_REVIEW = 'ตรวจสอบประวัติ';
 const STATUS_PENDING = 'ยังไม่ถึงเกณฑ์';
 const STATUS_UNKNOWN = 'ข้อมูลไม่พอประเมิน';
-const STATUS_OPTIONS = [STATUS_COMPLETE, STATUS_INCOMPLETE, STATUS_PENDING, STATUS_UNKNOWN];
+const STATUS_OPTIONS = [STATUS_COMPLETE, STATUS_INCOMPLETE, STATUS_REVIEW, STATUS_PENDING, STATUS_UNKNOWN];
+const BADGE_CLASSES: Record<string, string> = {
+  [STATUS_COMPLETE]: 'bg-emerald-100 text-emerald-800',
+  [STATUS_REVIEW]: 'bg-amber-100 text-amber-800',
+};
 
 export function View1AgeRecords({ age, fiscalYear, quarter, data, isLoading, error, asOfDate }: View1AgeProps & { age: EpiAge }) {
   const { rules, isLoading: rulesLoading, error: rulesError } = useVaccineRules(fiscalYear, `${age}yr`);
@@ -35,20 +41,22 @@ export function View1AgeRecords({ age, fiscalYear, quarter, data, isLoading, err
     }).map(record => {
       const evaluation = evaluateDynamicV1(record, rules);
       const warnings = getRecordDateWarnings(record, ageRules);
-      const missing = evaluation.missingVaccines.filter(value => !warnings.some(warning => value.includes(warning)));
       const unknown = rulesLoading || rulesError || !rules.length || !!evaluation.unknownVaccines?.length;
-      // สถานะเต็ม (ใช้กับ filter + tooltip): unknown > missing > warnings > pending > ครบ
-      // (กรณีมี date warning เช่น ลงวันที่ตรงวันเกิด → rule นั้นไม่ผ่าน จึงต้องเป็น ไม่ครบ ไม่ใช่ ครบ)
+      // สถานะเต็ม (ใช้กับ filter + tooltip): unknown > missing > ตรวจสอบประวัติ (#102) > pending > ครบ
+      // (คำเตือนวันที่ เช่น ลงวันที่ตรงวันเกิด → rule นั้นไม่ผ่านแต่ไม่ขาด จึงเป็น ตรวจสอบประวัติ ไม่ใช่ ครบ หรือ ไม่ครบ)
       const status = unknown ? STATUS_UNKNOWN
-        : missing.length || warnings.length ? STATUS_INCOMPLETE
+        : evaluation.missingVaccines.length ? STATUS_INCOMPLETE
+        : evaluation.reviewRuleNames?.length ? STATUS_REVIEW
         : evaluation.pendingVaccines?.length ? STATUS_PENDING
         : STATUS_COMPLETE;
-      // badge แสดงเฉพาะ ครบ/ไม่ครบ — เหตุผลเต็มอยู่ใน tooltip
-      const badge = status === STATUS_COMPLETE ? STATUS_COMPLETE : STATUS_INCOMPLETE;
-      const details = [...missing, ...(evaluation.pendingVaccines || []), ...(evaluation.unknownVaccines || [])];
+      // badge แสดงเฉพาะ ครบ/ตรวจสอบประวัติ/ไม่ครบ — เหตุผลเต็มอยู่ใน tooltip
+      const badge = status === STATUS_COMPLETE || status === STATUS_REVIEW ? status : STATUS_INCOMPLETE;
+      const details = [...evaluation.missingVaccines, ...(evaluation.pendingVaccines || []), ...(evaluation.unknownVaccines || [])];
       const tooltipParts = details.length ? [details.join(' · ')] : [];
       if (warnings.length) tooltipParts.push(`ตรวจสอบวันที่: ${warnings.join(' · ')}`);
-      return { ...record, evaluationStatus: status, evaluationBadge: badge, evaluationDetails: details.join(' · '), evaluationTooltip: tooltipParts.join(' · ') };
+      // Issue #102: export/PDF ใช้รายละเอียดเดียวกับ tooltip — รายการตรวจสอบประวัติต้องมีข้อสังเกตวันที่ให้แก้ต้นทางได้
+      const reasons = tooltipParts.join(' · ');
+      return { ...record, evaluationStatus: status, evaluationBadge: badge, evaluationDetails: reasons, evaluationTooltip: reasons };
     });
   }, [data, fiscalYear, quarter, age, rules, ageRules, rulesLoading, rulesError]);
   const facilities = [...new Map(processed.map(record => [record.hoscode, record.hosname])).entries()].sort();
@@ -68,7 +76,7 @@ export function View1AgeRecords({ age, fiscalYear, quarter, data, isLoading, err
       accessorKey: 'evaluationBadge',
       cell: ({ row }) => (
         <div title={row.original.evaluationTooltip || row.original.evaluationBadge}>
-          <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${row.original.evaluationBadge === STATUS_COMPLETE ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-700'}`}>
+          <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${BADGE_CLASSES[row.original.evaluationBadge] ?? 'bg-red-100 text-red-700'}`}>
             {row.original.evaluationBadge}
           </span>
         </div>

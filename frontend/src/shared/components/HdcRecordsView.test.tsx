@@ -76,3 +76,14 @@ describe('Issue #101 — View 2 list: rule result first, HDC result alongside', 
     expect(html).not.toContain(MISMATCH_BADGE);
   });
 });
+
+describe('Issue #102 — View 2 list: a date warning is ตรวจสอบประวัติ, not ไม่ผ่าน', () => {
+  it('shows a child whose only problem is a date warning as ตรวจสอบประวัติ, with no mismatch flag against HDC ผ่าน', () => {
+    const html = renderRows([child('DATE-WARNING', { bcg_date: '2025-01-14', mmr1_date: '2025-10-20', result: 'ผ่าน' })]);
+    expect(html).toContain('>ตรวจสอบประวัติ<');
+    expect(html).toContain('ตรวจสอบประวัติ: BCG 1 เข็ม');
+    expect(html).not.toContain('>ไม่ผ่าน<');
+    expect(html).not.toContain('ขาด:');
+    expect(html).not.toContain(MISMATCH_BADGE);
+  });
+});

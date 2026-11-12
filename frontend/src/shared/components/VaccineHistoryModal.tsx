@@ -16,12 +16,16 @@ interface VaccineHistoryModalProps {
   warningsStatus?: string;
   /** แสดงหัวข้อ "ผลจาก HDC" — เฉพาะมุมมองที่ 2 (ข้อมูลนี้เป็นของมุมมองที่ 2 ไม่เกี่ยวกับการประเมินรายชนิด) */
   showHdcResult?: boolean;
+  /** Issue #102: ผลตามกฎ View 2 ของเด็กรายนี้ แสดงคู่กับ "ผลจาก HDC" พร้อมป้ายเมื่อขัดกัน (CONTEXT.md §43) */
+  ruleResult?: { label: string; hdcMismatch: boolean };
   /** Issue #121: Inapplicable Rules ของเด็กรายนี้จากผลประเมินของ engine (แสดงพร้อมเหตุผล) */
   inapplicableRules?: InapplicableRule[];
   isOpen: boolean;
   onClose: () => void;
   record: EpiRecord | null;
 }
+
+export const HDC_MISMATCH_LABEL = 'ผลไม่ตรงกับ HDC';
 
 const MISSING_COLUMN_TEXT = 'ไฟล์ไม่มีคอลัมน์ / ยังไม่มีข้อมูลต้นทาง';
 
@@ -40,7 +44,7 @@ function dateCellTooltip(record: EpiRecord, value: string): string | undefined {
   return months === 0 ? 'ฉีดเมื่อแรกเกิด (0 เดือน)' : `ฉีดเมื่ออายุประมาณ ${months} เดือน`;
 }
 
-export function VaccineHistoryModal({ isOpen, onClose, record, warnings, warningsStatus, rules, caption, inapplicableRules = [], showHdcResult = true }: VaccineHistoryModalProps) {
+export function VaccineHistoryModal({ isOpen, onClose, record, warnings, warningsStatus, rules, caption, inapplicableRules = [], showHdcResult = true, ruleResult }: VaccineHistoryModalProps) {
   if (!record) return null;
   const rows = getHdcVaccineRows(record, rules);
   const dateWarnings = warnings ?? [];
@@ -58,6 +62,7 @@ export function VaccineHistoryModal({ isOpen, onClose, record, warnings, warning
           <div><dt className="text-zinc-500">ชื่อ-สกุล</dt><dd>{record.name} {record.lname}</dd></div>
           <div><dt className="text-zinc-500">CID</dt><dd>{record.cid}</dd></div>
           <div><dt className="text-zinc-500">วันเกิด</dt><dd>{formatDateStr(record.birth)}</dd></div>
+          {showHdcResult && ruleResult && <div><dt className="text-zinc-500">ผลตามกฎ</dt><dd>{ruleResult.label}{ruleResult.hdcMismatch && <span className="ml-2 inline-block rounded-full px-2.5 py-0.5 text-xs font-medium bg-amber-100 text-amber-800">{HDC_MISMATCH_LABEL}</span>}</dd></div>}
           {showHdcResult && <div><dt className="text-zinc-500">ผลจาก HDC</dt><dd className="whitespace-pre-wrap">{hdcValue(record.result)}</dd></div>}
           <div><dt className="text-muted-foreground">ที่อยู่</dt><dd>{hdcValue(record.addr)}</dd></div>
           <div><dt className="text-muted-foreground">ประเภทพื้นที่</dt><dd>{hdcValue(record.check_typearea)}</dd></div>
@@ -70,7 +75,7 @@ export function VaccineHistoryModal({ isOpen, onClose, record, warnings, warning
             <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
             ข้อสังเกตข้อมูลวันที่ — โปรดตรวจสอบต้นทาง
           </p>
-          <p className="text-amber-700">ข้อสังเกตนี้ไม่แก้ค่าผลจาก HDC และยังไม่ยืนยันว่าเป็นการบันทึกผิด</p>
+          <p className="text-amber-700">ข้อสังเกตวันที่ไม่นับเป็นวัคซีนขาด เกณฑ์ที่มีวันที่ครบแต่มีข้อสังเกตแสดงผล "ตรวจสอบประวัติ" และไม่นำมาคำนวณร้อยละจนกว่าจะแก้ข้อมูลต้นทาง</p>
           <ul className="list-disc pl-5 text-amber-800 marker:text-amber-500">{dateWarnings.map(warning => <li key={warning}>{warning}</li>)}</ul>
         </div>}
         {!rules && inapplicableRules.length > 0 && <div className="border rounded-lg p-3 text-sm space-y-1">

@@ -46,6 +46,8 @@ export interface DashboardSummaryData {
   view1PassedDoses?: number;
   view1TotalDoses?: number;
   view1UnknownDoses?: number;
+  /** Issue #102: dose rules excluded from the View 1 denominator because of a date warning (ตรวจสอบประวัติ). */
+  view1ReviewDoses?: number;
 
   view2Coverage: number;
   view2Passed: number;
@@ -57,6 +59,9 @@ export interface DashboardSummaryData {
   /** Persisted by every newly generated summary (#89 — records whose required V2 rule is not
    *  evaluable from the source columns); snapshots generated before #89 predate the field. */
   view2NotEvaluableCount?: number;
+  /** Persisted by every newly generated summary (#102 — records whose only problem is a date warning,
+   *  ตรวจสอบประวัติ); snapshots generated before #102 predate the field. */
+  view2ReviewCount?: number;
 
   view1Breakdown?: VaccineBreakdownEntry[];
   view2Breakdown?: VaccineBreakdownEntry[];

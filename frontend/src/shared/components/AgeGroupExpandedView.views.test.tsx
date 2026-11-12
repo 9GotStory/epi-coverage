@@ -75,3 +75,16 @@ describe('Issue #89 — View 2 breakdown shows its denominator and ประเ�
     expect(screen.queryByText('0.0%')).toBeNull();
   });
 });
+
+describe('Issue #102 — ตรวจสอบประวัติ is announced apart from coverage', () => {
+  it('announces children whose only problem is a date warning in View 2', () => {
+    render(<AgeGroupExpandedView summary={{ ...summary, view2ReviewCount: 4 }} fiscalYear={2569} ageGroup="1yr" quarter="all" />);
+    expect(screen.getByText('ตรวจสอบประวัติ 4 คน (วันที่ผิดปกติ ไม่ใช่วัคซีนขาด) จึงไม่รวมในการคำนวณร้อยละ')).toBeTruthy();
+  });
+
+  it('announces dose rules with only a date warning in View 1', () => {
+    render(<AgeGroupExpandedView summary={{ ...summary, view1ReviewDoses: 3 }} fiscalYear={2569} ageGroup="1yr" quarter="all" />);
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'มุมมองที่ 1 (รายวัคซีน)' }), { button: 0 });
+    expect(screen.getByText('ตรวจสอบประวัติ 3 รายการ (วันที่ผิดปกติ ไม่ใช่วัคซีนขาด) จึงไม่รวมในการคำนวณร้อยละ')).toBeTruthy();
+  });
+});

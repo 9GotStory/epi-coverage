@@ -5,6 +5,8 @@ import type { View1Evaluation, VaccineRule } from './vaccine/ruleEngine';
 export interface GroupSummary {
   total: number;
   view1UnknownDoses?: number;
+  /** Issue #102: dose rules whose dates are present but carry a date warning (ตรวจสอบประวัติ) — excluded from the View 1 denominator */
+  view1ReviewDoses?: number;
   view1PassedDoses: number;
   view1TotalDoses: number;
   view1Coverage: number;
@@ -24,6 +26,9 @@ export interface GroupSummary {
   /** Issue #89: records excluded from the View 2 denominator because a required V2 rule cannot be
    * evaluated from the source columns (ประเมินไม่ได้) — counted directly (required on every newly generated summary). */
   view2NotEvaluableCount: number;
+  /** Issue #102: records whose only problem is a date warning (ตรวจสอบประวัติ) — excluded from the
+   * View 2 denominator and counted directly (required on every newly generated summary). */
+  view2ReviewCount: number;
 }
 
 /**
@@ -31,8 +36,8 @@ export interface GroupSummary {
  * denominator contract above, but historical snapshots may predate it — the denominator fields
  * are OPTIONAL here so legacy rows stay consumable without fabricating values.
  */
-export type LegacyCompatibleGroupSummary = Omit<GroupSummary, 'view2ApplicableTotal' | 'view2PendingCount' | 'view2NotEvaluableCount'> &
-  Partial<Pick<GroupSummary, 'view2ApplicableTotal' | 'view2PendingCount' | 'view2NotEvaluableCount'>>;
+export type LegacyCompatibleGroupSummary = Omit<GroupSummary, 'view2ApplicableTotal' | 'view2PendingCount' | 'view2NotEvaluableCount' | 'view2ReviewCount'> &
+  Partial<Pick<GroupSummary, 'view2ApplicableTotal' | 'view2PendingCount' | 'view2NotEvaluableCount' | 'view2ReviewCount'>>;
 
 /**
  * Issue #80: renderability gate for a stored snapshot before the Dashboard cards
@@ -74,22 +79,33 @@ export function calcGroupSummary(
   
   const total = filtered.length;
   let view1UnknownDoses = 0;
+  let view1ReviewDoses = 0;
   let view1PassedDoses = 0;
   let view1TotalDoses = 0;
   let view2Passed = 0;
   let view2ApplicableTotal = 0; // Issue #23: the View 2 coverage denominator, counted directly
   let view2PendingCount = 0;    // Issue #23/#119: View 2 Pending records, excluded from that denominator
   let view2NotEvaluableCount = 0; // Issue #89: records excluded because a required V2 rule is not evaluable from the source columns
+  let view2ReviewCount = 0; // Issue #102: records excluded because their only problem is a date warning (ตรวจสอบประวัติ)
   
   const view1Details: Record<string, number> = {};
   const view1TargetDetails: Record<string, number> = {}; // NEW: track applicable target per vaccine
   const view2Details: Record<string, number> = {};
   const view2TargetDetails: Record<string, number> = {}; // NEW: track applicable target per vaccine
   const facilityMap: Record<string, { hosname: string; totalV2: number; passedV2: number; totalV1: number; passedV1: number }> = {};
+  // กฎที่ไม่นับในตัวหารรายกฎ (ประเมินไม่ได้ #89 / ตรวจสอบประวัติ #102) ยังอยู่ใน breakdown ที่ total 0
+  // เพื่อให้ UI แสดง "ยังประเมินไม่ได้" รายกฎ (เหมือน View 1)
+  const listV2RulesAtZero = (names: string[] | undefined) => {
+    for (const vac of names ?? []) {
+      if (view2Details[vac] === undefined) view2Details[vac] = 0;
+      if (view2TargetDetails[vac] === undefined) view2TargetDetails[vac] = 0;
+    }
+  };
 
   for (const r of filtered) {
     const v1 = evalView1Fn(r);
     view1UnknownDoses += v1.unknownRuleNames?.length || 0;
+    view1ReviewDoses += v1.reviewRuleNames?.length || 0;
     const hoscode = r.hoscode || 'unknown';
     if (!facilityMap[hoscode]) {
       facilityMap[hoscode] = { hosname: r.hosname || hoscode, totalV2: 0, passedV2: 0, totalV1: 0, passedV1: 0 };
@@ -97,8 +113,8 @@ export function calcGroupSummary(
 
     if (v1.passedCount !== undefined && v1.results) {
       view1PassedDoses += v1.passedCount;
-      // ตัดเฉพาะ rule ที่ pending ออกจากตัวหาร — ใช้ pendingRuleNames (display_name) เทียบกับ key ของ results ให้ตรงกัน
-      const applicableCount = Object.keys(v1.results).length - (v1.pendingRuleNames?.length || 0) - (v1.unknownRuleNames?.length || 0);
+      // ตัด rule ที่ pending/ประเมินไม่ได้/ตรวจสอบประวัติ (#102) ออกจากตัวหาร — เทียบ display_name กับ key ของ results ให้ตรงกัน
+      const applicableCount = Object.keys(v1.results).length - (v1.pendingRuleNames?.length || 0) - (v1.unknownRuleNames?.length || 0) - (v1.reviewRuleNames?.length || 0);
       view1TotalDoses += applicableCount;
       facilityMap[hoscode].passedV1 += v1.passedCount;
       facilityMap[hoscode].totalV1 += applicableCount;
@@ -108,8 +124,8 @@ export function calcGroupSummary(
         if (!view1Details[vac]) view1Details[vac] = 0;
         if (!view1TargetDetails[vac]) view1TargetDetails[vac] = 0;
         
-        // ถ้าเป็น pending จะไม่เอามาคิดเป็นตัวหาร (เทียบด้วย display_name ให้ตรง key ของ results)
-        if (v1.pendingRuleNames?.includes(vac) || v1.unknownRuleNames?.includes(vac)) continue;
+        // pending/ประเมินไม่ได้/ตรวจสอบประวัติไม่เอามาคิดเป็นตัวหาร (เทียบด้วย display_name ให้ตรง key ของ results)
+        if (v1.pendingRuleNames?.includes(vac) || v1.unknownRuleNames?.includes(vac) || v1.reviewRuleNames?.includes(vac)) continue;
         
         view1TargetDetails[vac]++;
         if (passed) view1Details[vac]++;
@@ -123,25 +139,25 @@ export function calcGroupSummary(
 
     const v2 = evalView2Fn(r);
 
-    // Issue #89: แบ่งกลุ่มต่อ record เป็น 3 ส่วนไม่ซ้ำกัน — View 2 Pending (#23) / not evaluable
-    // (กฎ V2 ที่ไฟล์ยืนยันคอลัมน์ไม่ได้) / applicable (ตัวหาร coverage)
+    // Issue #89/#102: แบ่งกลุ่มต่อ record เป็น 4 ส่วนไม่ซ้ำกัน — View 2 Pending (#23) / not evaluable
+    // (กฎ V2 ที่ไฟล์ยืนยันคอลัมน์ไม่ได้) / ตรวจสอบประวัติ (คำเตือนวันที่) / applicable (ตัวหาร coverage)
     // Issue #119 (design #117, ADR-0006): จัดกลุ่มจาก status ของ engine จุดเดียว — ลำดับ
-    // Confirmed Missing Dose > Pending Rule > ประเมินไม่ได้ ตัดสินใน evaluateDynamicV2 (`result` ของ HDC ไม่มีผล, #101)
-    // เด็กที่ขาดจริงแม้มี Pending Rule จึงเป็น applicable ไม่ผ่าน ไม่ใช่ View 2 Pending;
+    // Confirmed Missing Dose > ตรวจสอบประวัติ > Pending Rule > ประเมินไม่ได้ ตัดสินใน evaluateDynamicV2 (`result` ของ HDC ไม่มีผล, #101)
+    // เด็กที่ขาดจริงแม้มี Pending Rule หรือคำเตือนวันที่จึงเป็น applicable ไม่ผ่าน;
     // status อื่นหรือไม่มี status (evaluator รุ่นเดิม) → applicable
     if (v2.status === 'PENDING') {
       // Issue #23: count View 2 Pending records directly in the loop — the loop itself creates the
-      // exact partition (no post-loop derivation); the third bucket lives in the branch below.
+      // exact partition (no post-loop derivation); the other buckets live in the branches below.
       view2PendingCount++;
+    } else if (v2.status === 'REVIEW') {
+      // Issue #102: คำเตือนวันที่ไม่ใช่เข็มขาด — ออกจากตัวหาร นับแยก (งานคุณภาพข้อมูล ไม่ใช่รายชื่อตามฉีด)
+      view2ReviewCount++;
+      listV2RulesAtZero(v2.reviewVaccines);
     } else if (v2.status === 'NOT_EVALUABLE') {
       // Issue #89: กฎ V2 ที่ประเมินไม่ได้ทำให้ตัดสินรายคนไม่ได้ — ออกจากตัวหาร นับแยกตามสัญญา
-      // view2ApplicableTotal + view2PendingCount + view2NotEvaluableCount === total
+      // view2ApplicableTotal + view2PendingCount + view2NotEvaluableCount + view2ReviewCount === total (#102)
       view2NotEvaluableCount++;
-      // เก็บชื่อกฎไว้ใน breakdown ที่ total 0 เพื่อให้ UI แสดง "ยังประเมินไม่ได้" รายกฎ (เหมือน View 1)
-      for (const vac of v2.notEvaluableVaccines ?? []) {
-        if (view2Details[vac] === undefined) view2Details[vac] = 0;
-        if (view2TargetDetails[vac] === undefined) view2TargetDetails[vac] = 0;
-      }
+      listV2RulesAtZero(v2.notEvaluableVaccines);
     } else {
       view2ApplicableTotal++;
       if (v2.isFullyImmunized) view2Passed++;
@@ -161,11 +177,9 @@ export function calcGroupSummary(
           if (view2TargetDetails[vac] === undefined) view2TargetDetails[vac] = 0;
         }
       }
-      // Issue #103: เด็กที่ขาดจริงยังอยู่กลุ่มนี้แม้มีกฎประเมินไม่ได้ — กฎนั้นแสดงที่ total 0 ไม่นับตัวหารรายกฎ
-      for (const vac of v2.notEvaluableVaccines ?? []) {
-        if (view2Details[vac] === undefined) view2Details[vac] = 0;
-        if (view2TargetDetails[vac] === undefined) view2TargetDetails[vac] = 0;
-      }
+      // Issue #103/#102: เด็กที่ขาดจริงยังอยู่กลุ่มนี้แม้มีกฎประเมินไม่ได้หรือตรวจสอบประวัติ — กฎนั้นแสดงที่ total 0 ไม่นับตัวหารรายกฎ
+      listV2RulesAtZero(v2.notEvaluableVaccines);
+      listV2RulesAtZero(v2.reviewVaccines);
 
       // Aggregate each group in View 2
       if (v2.passedVaccines) {
@@ -240,6 +254,7 @@ export function calcGroupSummary(
   return {
     total,
     view1UnknownDoses,
+    view1ReviewDoses,
     view1PassedDoses,
     view1TotalDoses,
     view1Coverage,
@@ -252,5 +267,6 @@ export function calcGroupSummary(
     view2ApplicableTotal,
     view2PendingCount,
     view2NotEvaluableCount,
+    view2ReviewCount,
   };
 }

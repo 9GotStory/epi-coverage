@@ -154,3 +154,20 @@ describe('Issue #23 — Dashboard "ยังไม่ผ่านเกณฑ์
     expect(missed[0]).not.toMatch(/^\d/);
   });
 });
+
+describe('Issue #102 — Dashboard shows ตรวจสอบประวัติ apart from coverage', () => {
+  it('counts children and doses with only a date warning separately from the percentage', () => {
+    const html = renderDashboardWith({
+      ...baseSummary,
+      view1Coverage: 75, view1PassedDoses: 3, view1TotalDoses: 4, view1ReviewDoses: 2,
+      view2Coverage: 50, view2Passed: 1, view2ApplicableTotal: 2, view2PendingCount: 0, view2NotEvaluableCount: 0, view2ReviewCount: 1,
+    });
+    expect(html).toContain('ตรวจสอบประวัติ 2 รายการ (วันที่ผิดปกติ ไม่นำมาคำนวณร้อยละ)');
+    expect(html).toContain('ตรวจสอบประวัติ <strong class="text-zinc-800">1</strong> คน (วันที่ผิดปกติ ไม่นำมาคำนวณร้อยละ)');
+  });
+
+  it('hides the ตรวจสอบประวัติ lines when there is none (or the summary predates #102)', () => {
+    const html = renderDashboardWith({ ...baseSummary, view2Coverage: 50, view2Passed: 5, view2ApplicableTotal: 10, view2PendingCount: 0 });
+    expect(html).not.toContain('ตรวจสอบประวัติ');
+  });
+});

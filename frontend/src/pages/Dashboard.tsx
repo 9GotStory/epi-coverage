@@ -116,6 +116,7 @@ const AgeGroupSection = memo(function AgeGroupSection({
               <p className="text-sm text-zinc-500 mt-1">
                 ผ่านเกณฑ์ <strong className="text-zinc-800">{summary.view1PassedDoses.toLocaleString()}</strong> จาก <strong className="text-zinc-800">{summary.view1TotalDoses.toLocaleString()}</strong> รายการประเมินรายเข็ม
                 {!!summary.view1UnknownDoses && <span className="block">ข้อมูลไม่เพียงพอ {summary.view1UnknownDoses.toLocaleString()} รายการ (ไม่นำมาคำนวณร้อยละ)</span>}
+                {!!summary.view1ReviewDoses && <span className="block">ตรวจสอบประวัติ {summary.view1ReviewDoses.toLocaleString()} รายการ (วันที่ผิดปกติ ไม่นำมาคำนวณร้อยละ)</span>}
               </p>
             </div>
             <div className="text-right">
@@ -160,6 +161,8 @@ const AgeGroupSection = memo(function AgeGroupSection({
                 <span className="mx-1.5 text-zinc-300">·</span>
                 ยังไม่ผ่านเกณฑ์ <strong className="text-zinc-800">{typeof summary.view2ApplicableTotal === 'number' ? (summary.view2ApplicableTotal - summary.view2Passed).toLocaleString() : '—'}</strong> คน
                 {!!summary.view2NotEvaluableCount && <span className="block">ข้อมูลไม่ครบ <strong className="text-zinc-800">{summary.view2NotEvaluableCount.toLocaleString()}</strong> คน (ประเมินไม่ได้ จึงไม่นำมาคำนวณร้อยละ)</span>}
+                {/* Issue #102: คำเตือนวันที่เป็นงานตรวจข้อมูลต้นทาง ไม่ใช่ยังไม่ผ่านเกณฑ์ — สรุปรุ่นก่อน #102 ไม่มีฟิลด์นี้ */}
+                {!!summary.view2ReviewCount && <span className="block">ตรวจสอบประวัติ <strong className="text-zinc-800">{summary.view2ReviewCount.toLocaleString()}</strong> คน (วันที่ผิดปกติ ไม่นำมาคำนวณร้อยละ)</span>}
               </p>
             </div>
             <div className="text-right">

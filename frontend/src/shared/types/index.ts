@@ -111,10 +111,12 @@ export interface EpiRecord {
 
 export interface VaccineStatus {
   isFullyImmunized: boolean; // Keep for backward compatibility initially, though status replaces it
-  status?: 'PASS' | 'FAIL' | 'PENDING' | 'NOT_EVALUABLE';
+  status?: 'PASS' | 'FAIL' | 'REVIEW' | 'PENDING' | 'NOT_EVALUABLE';
   missingVaccines: string[];
   pendingVaccines?: string[];
   passedVaccines: string[];
+  /** Issue #102: display_name ของกฎ V2 ที่วันที่ครบแต่มีคำเตือนวันที่ ("ตรวจสอบประวัติ" — เหตุของ status REVIEW) */
+  reviewVaccines?: string[];
   /** Issue #89: display_name ของกฎ V2 ที่ไฟล์/`source_columns` ยืนยันคอลัมน์ไม่ได้ (เหตุของ status NOT_EVALUABLE) */
   notEvaluableVaccines?: string[];
   /** Issue #121: กฎ V2 ที่ Birth Window ตัดเด็กออก (Inapplicable Rule) — ไม่นับในผลใด ใช้อธิบายในประวัติเท่านั้น */
