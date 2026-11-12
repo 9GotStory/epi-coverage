@@ -294,17 +294,18 @@ function upsertEpiData(chunk, batchId, auth, fiscalYear, targetTable = 'Epi_1_Ye
     const completed = JSON.parse(receipt[5]);
     const fingerprint = Utilities.base64Encode(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, JSON.stringify(chunk)));
     const replay = completed.find(item => item.index === index);
+    // Issue #144 (ADR-0011): finalize a batch whose chunks are all written, reporting the result on top of this chunk's.
+    const finalizeOnto = result => {
+      const finalized = epiFinalizeBatch(ss, batches, receipts, receiptIndex, auth && auth.email);
+      return finalized.success ? { ...result, finalized: true, deactivated: finalized.deactivated } : finalized;
+    };
     if (replay) {
       if (replay.fingerprint !== fingerprint) return { success: false, error: 'Chunk contents differ from the original submission.' };
       ensureUploadAudit(batchId, index, replay.audit); // repair a missing audit from ORIGINAL metadata; never duplicate an existing one
       const replayed = { success: true, inserted: 0, updated: 0, replayed: true, batch_id: batchId };
       if (receipt[7] === 'complete') return { ...replayed, finalized: true, deactivated: epiRecordedDeactivations(receipt) };
-      // Issue #144 (ADR-0011): every chunk is written but the finalize was cut off, so resending a chunk finishes it.
-      if (receipt[7] === 'uploading' && completed.length === total) {
-        const finalized = epiFinalizeBatch(ss, batches, receipts, receiptIndex, auth && auth.email);
-        if (!finalized.success) return finalized;
-        return { ...replayed, finalized: true, deactivated: finalized.deactivated };
-      }
+      // Every chunk is written but the finalize was cut off, so resending a chunk finishes it.
+      if (receipt[7] === 'uploading' && completed.length === total) return finalizeOnto(replayed);
       return { ...replayed, finalized: false };
     }
     if (!['preflight', 'uploading'].includes(receipt[7])) return { success: false, error: 'Batch is already finalized.' };
@@ -371,11 +372,9 @@ function upsertEpiData(chunk, batchId, auth, fiscalYear, targetTable = 'Epi_1_Ye
     receipt[8] = new Date().toISOString();
     writeEpiRows(batches, receipts[0], receipts);
     ensureUploadAudit(batchId, index, auditMeta); // after the receipt is durable; a failure here surfaces instead of a false audited success
-    if (completed.length !== total) return { success: true, batch_id: batchId, inserted, updated, finalized: false };
-    // Issue #144 (ADR-0011): the chunk that completes the batch finalizes it, so no client step sits between writing and finalizing.
-    const finalized = epiFinalizeBatch(ss, batches, receipts, receiptIndex, auth && auth.email);
-    if (!finalized.success) return finalized;
-    return { success: true, batch_id: batchId, inserted, updated, finalized: true, deactivated: finalized.deactivated };
+    const written = { success: true, batch_id: batchId, inserted, updated };
+    // The chunk that completes the batch finalizes it, so no client step sits between writing and finalizing.
+    return completed.length === total ? finalizeOnto(written) : { ...written, finalized: false };
   });
 }
 
@@ -404,7 +403,7 @@ function epiRecordedDeactivations(receipt) {
  * Issue #144 (ADR-0011): finalize a batch whose chunks are all written, under the caller's import lock.
  * Repeatable: a finalize cut off after its row write is finished, and the count is every row this batch deactivated.
  */
-function epiFinalizeBatch(ss, batches, receipts, receiptIndex, adminEmail) {
+function epiFinalizeBatch(ss, batches, receipts, receiptIndex, actorEmail) {
   const receipt = receipts[receiptIndex];
   const [batchId, targetTable, fiscalYear, mode] = receipt;
   if (['undoing', 'undone'].includes(receipt[7])) return { success: false, error: 'This import was undone.' }; // Issue #139/#140: never finalize it again
@@ -440,7 +439,7 @@ function epiFinalizeBatch(ss, batches, receipts, receiptIndex, adminEmail) {
   writeEpiRows(batches, receipts[0], receipts);
   // Issue #80: Router ส่งอีเมลจาก session ที่ตรวจสอบแล้วเสมอ — fallback 'unknown' แทน
   // ชื่อ 'Admin' แบบ generic เมื่อบัญชีไม่มีอีเมล
-  logAction('SYSTEM', adminEmail || 'unknown', 'cleanup_epi_data', `Batch ${batchId}: ${deactivated} deactivated (${mode}).`);
+  logAction('SYSTEM', actorEmail || 'unknown', 'cleanup_epi_data', `Batch ${batchId}: ${deactivated} deactivated (${mode}).`);
   return { success: true, deactivated };
 }
 

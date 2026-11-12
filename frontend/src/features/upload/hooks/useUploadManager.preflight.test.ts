@@ -83,13 +83,15 @@ describe('Issue #111 — preflight before any import write', () => {
     expect(result.current.preflight?.requiredConfirmations).toEqual({ existingChildren: 5 });
   });
 
-  it('a risky import confirms the typed number, then uploads the same batch', async () => {
+  it('a risky import confirms the typed number, then uploads the same batch, which its last chunk finalizes', async () => {
     stubApi(riskyPreflight);
     const result = await preparedHook();
     const batchId = (calls('preflightEpiImport')[0] as { batchId: string }).batchId;
     await act(async () => { await result.current.confirmUpload({ existingChildren: '5' }); });
     expect(calls('confirmEpiImport')).toEqual([{ batchId, typedNumbers: { existingChildren: '5' } }]);
     expect(calls('upsertEpiData')).toEqual([expect.objectContaining({ batchId, chunk: rows, fiscalYear: '2569', targetTable: 'Epi_1_Year' })]);
+    expect(calls('cleanupEpiData')).toHaveLength(0);
+    expect(result.current.results.deactivated).toBe(5);
     expect(result.current.status).toBe('success');
   });
 

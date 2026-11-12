@@ -155,9 +155,11 @@ test('incomplete batch cannot cleanup; complete sync uses validated facility sco
 });
 
 test('merge finalization never deactivates missing people', () => {
-  const { context: c, read } = setup();
+  const { context: c, read, sheets } = setup();
   upload(c, [person(), person({ cid: '0000000000002' })], 'old');
-  upload(c, [person()], 'merge');
+  const written = plain(upload(c, [person()], 'merge'));
+  assert.deepEqual([written.finalized, written.deactivated], [true, 0]); // Issue #144: its only chunk finalized it
+  assert.equal(receiptOf(sheets, 'merge').status, 'complete');
   assert.equal(finish(c, 'merge').deactivated, 0);
   assert.equal(read().every(row => row.is_active), true);
 });
@@ -1075,7 +1077,7 @@ test('only the latest written batch of a table and year can be undone, even when
 });
 
 test('an undone receipt is never finalized again, and an overlapping open preflight goes stale', () => {
-  const { context: c, read } = setup();
+  const { context: c, read, sheets } = setup();
   importBatch(c, cohort(3), 'existing', { mode: 'sync' });
   importBatch(c, cohort(2, '00588', 40), 'wrong', { mode: 'merge' });
   prepare(c, [cohort(3)], 'fresh-preflight', { mode: 'sync', auth: importer }); // open while the admin undoes 'wrong'
@@ -1083,7 +1085,9 @@ test('an undone receipt is never finalized again, and an overlapping open prefli
   assert.deepEqual(plain(c.cleanupEpiData('wrong', [], 'admin', 2569)), { success: false, error: 'This import was undone.' });
   const stale = c.upsertEpiData(cohort(3), 'fresh-preflight', importer, 2569, 'Epi_1_Year', { mode: 'sync' });
   assert.deepEqual([stale.success, stale.error], [false, 'Data changed since preflight. Start a new import.']);
-  assert.equal(c.upsertEpiData(cohort(2, '00588', 40), 'wrong', importer, 2569).replayed, true); // a retried chunk is a no-op replay
+  const resent = plain(c.upsertEpiData(cohort(2, '00588', 40), 'wrong', importer, 2569));
+  assert.deepEqual([resent.replayed, resent.finalized], [true, false]); // a retried chunk is a no-op replay (Issue #144: never finalized)
+  assert.equal(receiptOf(sheets, 'wrong').status, 'undone');
   assert.deepEqual(activeCids(read), cohort(3).map(row => row.cid));
 });
 
@@ -1367,7 +1371,8 @@ test('an undoing receipt is never finalized, and a resent chunk of its batch wri
   failNextWrite(sheets, 'Epi_1_Year');
   assert.throws(() => undo(c, preview), /Sheets service failed/);
   assert.deepEqual(plain(c.cleanupEpiData('wrong', [], 'admin', 2569)), { success: false, error: 'This import was undone.' });
-  assert.equal(c.upsertEpiData(cohort(2), 'wrong', importer, 2569).replayed, true);
+  const resent = plain(c.upsertEpiData(cohort(2), 'wrong', importer, 2569));
+  assert.deepEqual([resent.replayed, resent.finalized], [true, false]); // Issue #144: never finalized
   assert.equal(receiptOf(sheets, 'wrong').status, 'undoing');
   assert.deepEqual(activeCids(read), cohort(2).map(row => row.cid)); // untouched until the undo is finished
 });
