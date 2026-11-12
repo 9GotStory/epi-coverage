@@ -77,10 +77,10 @@ const RECORD_IDENTITY_FIELDS = ['hoscode', 'pid', 'cid', 'sex', 'birth', 'check_
 const keysOf = rows => rows.map(row => Object.fromEntries(RECORD_IDENTITY_FIELDS.filter(field => row && field in row).map(field => [field, row[field]])));
 const preflight = (c, chunks, batch, { year = 2569, table = 'Epi_1_Year', mode = 'merge', auth = 'admin' } = {}) =>
   c.preflightEpiImport(chunks.map(keysOf), batch, auth, year, table, mode);
-/** Preflight, then type the required number when the preflight asks for it (the normal admin path). */
+/** Preflight, then type every number the preflight asks for (the normal admin path; Issue #136: one per condition). */
 function prepare(c, chunks, batch, options = {}) {
   const result = preflight(c, chunks, batch, options);
-  if (result.success && result.requiredConfirmation != null) c.confirmEpiImport(batch, String(result.requiredConfirmation), options.auth || 'admin');
+  if (result.success && result.requiredConfirmations != null) c.confirmEpiImport(batch, { ...result.requiredConfirmations }, options.auth || 'admin');
   return result;
 }
 const person = (overrides = {}) => ({ hoscode: '00588', hosname: 'ทดสอบ', pid: '0001', cid: '0000000000001', name: 'ข้อมูล', lname: 'จำลอง', birth: '2025-01-01', bcg_date: '2025-01-01', ...(overrides.cid ? { pid: String(Number(overrides.cid) || 1) } : {}), ...overrides });
@@ -595,6 +595,7 @@ test('import writes apply plain-text formatting to every canonical identifier co
 });
 
 /* ─────────────── Issue #111: import preflight guard ─────────────── */
+const plain = value => JSON.parse(JSON.stringify(value)); // plain objects across the vm realm
 const cohort = (count, hoscode = '00588', from = 1) =>
   Array.from({ length: count }, (_, i) => person({ hoscode, cid: String(from + i).padStart(13, '0') }));
 
@@ -605,9 +606,9 @@ test('preflight reports the incident shape (sync file matching no existing child
   const result = JSON.parse(JSON.stringify(preflight(c, [cohort(4, '00588', 100)], 'wrong-file', { mode: 'sync' }))); // plain objects across the vm realm
   assert.equal(result.success, true);
   assert.deepEqual([result.matched, result.newRows, result.wouldDeactivate, result.activeBefore], [0, 4, 5, 5]);
-  assert.deepEqual(result.risk, { zeroMatchHoscodes: ['00588'], shrinkOverThreshold: true });
-  assert.equal(result.requiredConfirmation, 5); // sync: the number of children that would be deactivated
-  assert.deepEqual(result.byHoscode, [{ hoscode: '00588', activeBefore: 5, matched: 0, newRows: 4, wouldDeactivate: 5 }]);
+  assert.deepEqual(result.risk, { zeroMatchHoscodes: ['00588'], shrinkOverThreshold: true, outsideCohort: false });
+  assert.deepEqual(result.requiredConfirmations, { existingChildren: 5 }); // sync: the number of children that would be deactivated
+  assert.deepEqual(result.byHoscode, [{ hoscode: '00588', activeBefore: 5, matched: 0, newRows: 4, wouldDeactivate: 5, outsideCohort: 0 }]);
   assert.equal(JSON.stringify(read()), before); // read-only for EPI data
   // Response is counts and facility codes only — never identities.
   assert.equal(/\d{13}/.test(JSON.stringify(result)), false);
@@ -626,19 +627,19 @@ test('a risky preflight blocks the upload until the exact typed number is confir
   const audit = [];
   c.logAction = (...entry) => audit.push(entry);
   const wrong = [cohort(4, '00588', 100)];
-  assert.equal(preflight(c, wrong, 'wrong-file', { mode: 'sync', auth: importer }).requiredConfirmation, 5);
+  assert.deepEqual(plain(preflight(c, wrong, 'wrong-file', { mode: 'sync', auth: importer }).requiredConfirmations), { existingChildren: 5 });
   const blocked = c.upsertEpiData(wrong[0], 'wrong-file', importer, 2569, 'Epi_1_Year', { mode: 'sync' });
   assert.deepEqual([blocked.success, blocked.error], [false, 'Typed confirmation required.']);
-  assert.equal(c.confirmEpiImport('wrong-file', '4', importer).success, false); // a guess is not a confirmation
+  assert.equal(c.confirmEpiImport('wrong-file', { existingChildren: '4' }, importer).success, false); // a guess is not a confirmation
   assert.equal(read().length, 5);
   assert.equal(audit.length, 0); // nothing confirmed, nothing written
-  assert.equal(c.confirmEpiImport('wrong-file', '5', importer).success, true);
+  assert.equal(c.confirmEpiImport('wrong-file', { existingChildren: '5' }, importer).success, true);
   assert.equal(c.upsertEpiData(wrong[0], 'wrong-file', importer, 2569, 'Epi_1_Year', { mode: 'sync' }).success, true);
   const confirmed = audit.filter(entry => entry[2] === 'confirm_epi_import');
   assert.equal(confirmed.length, 1);
   assert.deepEqual([confirmed[0][0], confirmed[0][1]], ['u1', 'importer@example.test']); // server-derived actor
   const details = confirmed[0][3];
-  for (const fact of ['wrong-file', 'sync', 'matched 0', 'new 4', 'would deactivate 5', 'typed 5', '00588']) assert.ok(details.includes(fact), details);
+  for (const fact of ['wrong-file', 'sync', 'matched 0', 'new 4', 'would deactivate 5', 'typed existing children 5', '00588']) assert.ok(details.includes(fact), details);
   assert.equal(/\d{13}/.test(details), false); // counts and facility codes only
 });
 
@@ -646,7 +647,7 @@ test('a safe preflight needs no typed confirmation', () => {
   const { context: c } = setup();
   upload(c, cohort(5), 'existing');
   const result = preflight(c, [cohort(5)], 'same-cohort', { mode: 'sync' });
-  assert.deepEqual([result.matched, result.newRows, result.wouldDeactivate, result.requiredConfirmation], [5, 0, 0, null]);
+  assert.deepEqual([result.matched, result.newRows, result.wouldDeactivate, result.requiredConfirmations], [5, 0, 0, null]);
   assert.equal(c.upsertEpiData(cohort(5), 'same-cohort', importer, 2569, 'Epi_1_Year', { mode: 'sync' }).success, true);
 });
 
@@ -658,14 +659,14 @@ test('one facility with zero matches is flagged even when the aggregate shrink s
   assert.equal(result.wouldDeactivate, 2); // 2 of 22 active = 9% — under the aggregate threshold
   assert.equal(result.risk.shrinkOverThreshold, false);
   assert.deepEqual([...result.risk.zeroMatchHoscodes], ['00002']);
-  assert.equal(result.requiredConfirmation, 2);
+  assert.deepEqual(plain(result.requiredConfirmations), { existingChildren: 2 });
 });
 
 test('sync shrink just over 20% needs confirmation; exactly 20% does not', () => {
   const { context: c } = setup();
   upload(c, cohort(10), 'existing');
-  assert.equal(preflight(c, [cohort(8)], 'drop-2', { mode: 'sync' }).requiredConfirmation, null); // 2/10 = 20%
-  assert.equal(preflight(c, [cohort(7)], 'drop-3', { mode: 'sync' }).requiredConfirmation, 3);    // 3/10 = 30%
+  assert.equal(preflight(c, [cohort(8)], 'drop-2', { mode: 'sync' }).requiredConfirmations, null); // 2/10 = 20%
+  assert.deepEqual(plain(preflight(c, [cohort(7)], 'drop-3', { mode: 'sync' }).requiredConfirmations), { existingChildren: 3 }); // 3/10 = 30%
 });
 
 test('merge with zero matches asks for the number of new rows; merge never reports deactivations', () => {
@@ -674,10 +675,10 @@ test('merge with zero matches asks for the number of new rows; merge never repor
   const result = preflight(c, [cohort(3, '00588', 100)], 'merge-dupes', { mode: 'merge' });
   assert.deepEqual([result.matched, result.newRows, result.wouldDeactivate], [0, 3, 0]);
   assert.equal(result.risk.shrinkOverThreshold, false);
-  assert.equal(result.requiredConfirmation, 3);
+  assert.deepEqual(plain(result.requiredConfirmations), { existingChildren: 3 });
   // First import into an empty table has nothing to protect.
   const { context: fresh } = setup();
-  assert.equal(preflight(fresh, [cohort(3)], 'first-import').requiredConfirmation, null);
+  assert.equal(preflight(fresh, [cohort(3)], 'first-import').requiredConfirmations, null);
 });
 
 test('a chunk whose keys differ from the preflighted file is refused', () => {
@@ -725,7 +726,7 @@ test('preflight and confirmation are admin-only routes', () => {
   for (const role of ['user', 'admin']) {
     c.validateTokenAndGetRole = () => ({ valid: true, role, userId: 'u1', email: 'importer@example.test', hoscode: '00588' });
     for (const action of ['preflightEpiImport', 'confirmEpiImport']) {
-      const body = JSON.stringify({ action, keyChunks: [keysOf(cohort(1))], batchId: `${role}-${action}`, fiscalYear: 2569, targetTable: 'Epi_1_Year', mode: 'merge', typedNumber: '1' });
+      const body = JSON.stringify({ action, keyChunks: [keysOf(cohort(1))], batchId: `${role}-${action}`, fiscalYear: 2569, targetTable: 'Epi_1_Year', mode: 'merge', typedNumbers: { existingChildren: '1' } });
       const response = c.handleRequest('POST', { postData: { contents: body }, parameter: {} });
       if (role === 'user') assert.equal(response.status, 403, action);
       else assert.notEqual(response.status, 403, action);
@@ -743,7 +744,7 @@ test('a file that matches only previously deactivated children is still flagged 
   const result = preflight(c, [cohort(3, '00588', 6)], 'only-inactive', { mode: 'merge' }); // would silently reactivate 3
   assert.equal(result.matched, 3);
   assert.deepEqual([...result.risk.zeroMatchHoscodes], ['00588']);
-  assert.equal(result.requiredConfirmation, 3); // merge: file rows not matching an ACTIVE child (here: 3 reactivations)
+  assert.deepEqual(plain(result.requiredConfirmations), { existingChildren: 3 }); // merge: file rows not matching an ACTIVE child (here: 3 reactivations)
 });
 
 test('progress by another batch after this import started never strands it half-written', () => {
@@ -774,9 +775,9 @@ test('only the admin who ran the preflight can type the confirmation', () => {
   const { context: c } = setup();
   upload(c, cohort(5), 'existing');
   preflight(c, [cohort(4, '00588', 100)], 'wrong-file', { mode: 'sync', auth: importer });
-  const other = c.confirmEpiImport('wrong-file', '5', { userId: 'u2', email: 'other@example.test' });
+  const other = c.confirmEpiImport('wrong-file', { existingChildren: '5' }, { userId: 'u2', email: 'other@example.test' });
   assert.deepEqual([other.success, other.error], [false, 'Only the admin who ran the preflight can confirm.']);
-  assert.equal(c.confirmEpiImport('wrong-file', '5', importer).success, true);
+  assert.equal(c.confirmEpiImport('wrong-file', { existingChildren: '5' }, importer).success, true);
 });
 
 test('every import audits its preflight counts on the first chunk, risky or not, without identities', () => {
@@ -801,4 +802,122 @@ test('preflight rejects an impossible birth date exactly like the import does', 
 test('preflight reports the shrink threshold it applied', () => {
   const { context: c } = setup();
   assert.equal(preflight(c, [cohort(1)], 'threshold').shrinkThreshold, 0.2);
+});
+
+/* ─────────────── Issue #136/#137: Cohort Birth Range ─────────────── */
+const bornOn = (birth, count, hoscode = '00588', from = 1) => cohort(count, hoscode, from).map(row => ({ ...row, birth, bcg_date: birth }));
+
+test('FY2569 2-year births synced into an empty FY2570 are risky and the warning names FY2569 (the #136 incident)', () => {
+  const { context: c, sheets } = setup();
+  const file = [bornOn('2024-01-15', 3)];
+  const result = plain(preflight(c, file, 'wrong-year', { year: 2570, table: 'Epi_2_Year', mode: 'sync', auth: importer }));
+  assert.equal(result.success, true);
+  assert.equal(result.activeBefore, 0); // the #111 conditions cannot see this case
+  assert.deepEqual(result.cohortBirthRange, { start: '2024-10-01', end: '2025-09-30' });
+  assert.equal(result.outsideCohort, 3);
+  assert.equal(result.byHoscode[0].outsideCohort, 3);
+  assert.equal(result.outsideCohortFiscalYear, '2569');
+  assert.deepEqual(result.requiredConfirmations, { outsideCohort: 3 });
+  const blocked = c.upsertEpiData(file[0], 'wrong-year', importer, 2570, 'Epi_2_Year', { mode: 'sync' });
+  assert.deepEqual([blocked.success, blocked.error], [false, 'Typed confirmation required.']);
+  assert.equal(sheets.has('Epi_2_Year'), false);
+});
+
+test('the Cohort Birth Range of every Age Group includes 1 Oct and 30 Sep and excludes the day either side', () => {
+  const edges = { // FY2569: [start, end, day before start, day after end]
+    Epi_1_Year: ['2024-10-01', '2025-09-30', '2024-09-30', '2025-10-01'],
+    Epi_2_Year: ['2023-10-01', '2024-09-30', '2023-09-30', '2024-10-01'],
+    Epi_3_Year: ['2022-10-01', '2023-09-30', '2022-09-30', '2023-10-01'],
+    Epi_5_Year: ['2020-10-01', '2021-09-30', '2020-09-30', '2021-10-01'],
+  };
+  for (const [table, [start, end, before, after]] of Object.entries(edges)) {
+    const { context: c } = setup();
+    const file = [[...bornOn(start, 1, '00588', 1), ...bornOn(end, 1, '00588', 2), ...bornOn(before, 1, '00588', 3), ...bornOn(after, 1, '00588', 4)]];
+    const result = plain(preflight(c, file, `edges-${table}`, { table }));
+    assert.deepEqual(result.cohortBirthRange, { start, end }, table);
+    assert.equal(result.outsideCohort, 2, table);
+  }
+});
+
+test('the matching Fiscal Year is named only when every out-of-range birth agrees on one year', () => {
+  const { context: c } = setup();
+  const options = { year: 2570, table: 'Epi_2_Year' }; // range 2024-10-01..2025-09-30
+  const oneYear = [[...bornOn('2025-01-01', 2), ...bornOn('2024-03-01', 1, '00588', 10), ...bornOn('2023-10-01', 1, '00588', 11)]];
+  assert.deepEqual(pick(preflight(c, oneYear, 'one-year', options)), [2, '2569']); // both outside births are in the FY2569 range
+  const twoYears = [[...bornOn('2024-03-01', 1), ...bornOn('2023-03-01', 1, '00588', 10)]];
+  assert.deepEqual(pick(preflight(c, twoYears, 'two-years', options)), [2, null]); // FY2569 and FY2568: never guess
+});
+const pick = result => [result.outsideCohort, result.outsideCohortFiscalYear];
+
+test('a merge into a year that already has data is risky too when a row is outside the Cohort Birth Range', () => {
+  const { context: c } = setup();
+  upload(c, cohort(5), 'existing');
+  const result = plain(preflight(c, [[...cohort(5), ...bornOn('2024-05-01', 1, '00588', 50)]], 'merge-stray', { mode: 'merge' }));
+  assert.deepEqual([result.matched, result.risk.zeroMatchHoscodes, result.risk.outsideCohort], [5, [], true]);
+  assert.deepEqual(result.requiredConfirmations, { outsideCohort: 1 });
+});
+
+test('two risk conditions at once need both typed numbers before anything is written', () => {
+  const { context: c, read } = setup();
+  upload(c, cohort(10), 'existing');
+  const file = [...cohort(7), ...bornOn('2024-05-01', 2, '00588', 50)]; // drops 3 of 10 (30%) and adds 2 out-of-range births
+  const result = plain(preflight(c, [file], 'both', { mode: 'sync', auth: importer }));
+  assert.deepEqual(result.requiredConfirmations, { existingChildren: 3, outsideCohort: 2 });
+  for (const typed of [{ existingChildren: '3' }, { outsideCohort: '2' }, { existingChildren: '3', outsideCohort: '3' }]) {
+    assert.deepEqual(plain(c.confirmEpiImport('both', typed, importer)), { success: false, error: 'Typed number does not match.' }, JSON.stringify(typed));
+  }
+  assert.equal(c.upsertEpiData(file, 'both', importer, 2569, 'Epi_1_Year', { mode: 'sync' }).error, 'Typed confirmation required.');
+  assert.equal(read().length, 10);
+  assert.equal(c.confirmEpiImport('both', { existingChildren: '3', outsideCohort: '2' }, importer).success, true);
+  assert.equal(c.upsertEpiData(file, 'both', importer, 2569, 'Epi_1_Year', { mode: 'sync' }).success, true);
+});
+
+test('a confirmation in the pre-#136 single-number format is refused', () => {
+  const { context: c } = setup();
+  const file = [bornOn('2024-01-15', 3)];
+  preflight(c, file, 'old-client', { year: 2570, table: 'Epi_2_Year', auth: importer });
+  for (const typed of ['3', 3]) assert.equal(c.confirmEpiImport('old-client', typed, importer).success, false);
+  assert.equal(c.upsertEpiData(file[0], 'old-client', importer, 2570, 'Epi_2_Year').error, 'Typed confirmation required.');
+});
+
+test('the preflight and confirmation audits carry the out-of-range count, the matching year and each typed number', () => {
+  const { context: c } = setup();
+  const audit = [];
+  c.logAction = (...entry) => audit.push(entry);
+  const file = [bornOn('2024-01-15', 3)];
+  preflight(c, file, 'audited', { year: 2570, table: 'Epi_2_Year', mode: 'sync', auth: importer });
+  c.confirmEpiImport('audited', { outsideCohort: '3' }, importer);
+  c.upsertEpiData(file[0], 'audited', importer, 2570, 'Epi_2_Year', { mode: 'sync' });
+  const [confirmed] = audit.filter(entry => entry[2] === 'confirm_epi_import');
+  const [uploaded] = audit.filter(entry => entry[2] === 'upload_excel');
+  for (const details of [confirmed[3], uploaded[3]]) {
+    for (const fact of ['outside cohort birth range 2024-10-01..2025-09-30: 3', 'births match FY 2569', 'typed outside cohort 3']) assert.ok(details.includes(fact), details);
+    assert.equal(/\d{13}/.test(details), false); // counts and facility codes only
+  }
+});
+
+/** Rewrites a stored preflight receipt as a pre-#136 one: one number, no Cohort Birth Range result. */
+function asPre136Receipt(sheets, batch) {
+  const row = sheets.get('epi_import_batches').cells.find(cells => cells[0] === batch);
+  const { cohortBirthRange, outsideCohort, outsideCohortFiscalYear, requiredConfirmations, ...legacy } = JSON.parse(row[9]);
+  row[9] = JSON.stringify({ ...legacy, requiredConfirmation: null });
+}
+
+test('a preflight receipt from before the Cohort Birth Range check cannot start an import', () => {
+  const { context: c, sheets } = setup();
+  const file = [bornOn('2024-01-15', 3)];
+  preflight(c, file, 'pre-136', { year: 2570, table: 'Epi_2_Year' });
+  asPre136Receipt(sheets, 'pre-136');
+  const result = c.upsertEpiData(file[0], 'pre-136', 'admin', 2570, 'Epi_2_Year');
+  assert.deepEqual([result.success, result.error], [false, 'Preflight is out of date. Start a new import.']);
+  assert.equal(sheets.has('Epi_2_Year'), false);
+});
+
+test('an import already writing when the Cohort Birth Range check shipped is not stranded halfway', () => {
+  const { context: c, sheets, read } = setup();
+  prepare(c, [cohort(2), cohort(2, '00588', 3)], 'in-flight');
+  assert.equal(c.upsertEpiData(cohort(2), 'in-flight', 'admin', 2569, 'Epi_1_Year', { totalChunks: 2 }).success, true);
+  asPre136Receipt(sheets, 'in-flight');
+  assert.equal(c.upsertEpiData(cohort(2, '00588', 3), 'in-flight', 'admin', 2569, 'Epi_1_Year', { totalChunks: 2, chunkIndex: 1 }).success, true);
+  assert.equal(read().length, 4);
 });

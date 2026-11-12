@@ -1,23 +1,36 @@
 import { useState } from 'react';
 import { AlertTriangle, ShieldCheck } from 'lucide-react';
 import { Button } from '../../../shared/components/ui/button';
+import { formatDateStr } from '../../../shared/utils/dateUtils';
 import { TABLE_LABEL } from '../hooks/useUploadManager';
-import type { ImportPreflight } from '../hooks/useUploadManager';
+import type { ImportPreflight, RiskConfirmation, TypedConfirmations } from '../hooks/useUploadManager';
 
 interface Props {
   preflight: ImportPreflight;
   isBusy: boolean;
   errorMsg: string;
-  onConfirm: (typedNumber?: string) => void;
+  onConfirm: (typedNumbers?: TypedConfirmations) => void;
   onCancel: () => void;
 }
 
-/** Issue #111: what the import will do, shown before any write; a risky import needs the exact number typed. */
+/** The order the typed-number fields appear in, matching the order of the warnings. */
+const CONFIRMATION_ORDER: RiskConfirmation[] = ['existingChildren', 'outsideCohort'];
+
+/**
+ * Issue #111: what the import will do, shown before any write; a risky import needs the exact number typed.
+ * Issue #136: each fired risk condition has its own number, so one warning can never hide another.
+ */
 export function ImportPreflightPanel({ preflight, isBusy, errorMsg, onConfirm, onCancel }: Props) {
-  const [typed, setTyped] = useState('');
-  const required = preflight.requiredConfirmation;
+  const [typed, setTyped] = useState<TypedConfirmations>({});
+  const required = preflight.requiredConfirmations;
+  const conditions = CONFIRMATION_ORDER.filter(name => required?.[name] != null);
   const isSync = preflight.mode === 'sync';
-  const canConfirm = !isBusy && (required == null || typed.trim() === String(required));
+  const showOutsideCohort = preflight.outsideCohort > 0;
+  const canConfirm = !isBusy && conditions.every(name => (typed[name] ?? '').trim() === String(required?.[name]));
+  const confirmationLabel: Record<RiskConfirmation, string> = {
+    existingChildren: isSync ? 'จำนวนเด็กเดิมที่จะถูกปิดสถานะ' : 'จำนวนรายชื่อในไฟล์ที่ไม่ตรงกับเด็กที่เปิดใช้งานอยู่',
+    outsideCohort: 'จำนวนรายชื่อในไฟล์ที่เกิดนอกช่วงวันเกิด',
+  };
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -54,18 +67,23 @@ export function ImportPreflightPanel({ preflight, isBusy, errorMsg, onConfirm, o
               <th className="px-4 py-3 whitespace-nowrap text-right">จับคู่ได้</th>
               <th className="px-4 py-3 whitespace-nowrap text-right">ใหม่</th>
               {isSync && <th className="px-4 py-3 whitespace-nowrap text-right">จะปิดสถานะ</th>}
+              {showOutsideCohort && <th className="px-4 py-3 whitespace-nowrap text-right">นอกช่วงวันเกิด</th>}
             </tr>
           </thead>
           <tbody className="divide-y divide-[#f0f0f0] bg-white">
             {preflight.byHoscode.map(row => {
-              const flagged = preflight.risk.zeroMatchHoscodes.includes(row.hoscode);
+              const zeroMatch = preflight.risk.zeroMatchHoscodes.includes(row.hoscode);
+              const outsideCohort = row.outsideCohort > 0;
               return (
-                <tr key={row.hoscode} className={flagged ? 'bg-[#fff0f0]' : undefined}>
+                <tr key={row.hoscode} className={zeroMatch || outsideCohort ? 'bg-[#fff0f0]' : undefined}>
                   <td className="px-4 py-3 font-mono text-[12px] text-[#1d1d1f]">{row.hoscode}</td>
                   <td className="px-4 py-3 text-right">{row.activeBefore.toLocaleString()}</td>
-                  <td className={`px-4 py-3 text-right ${flagged ? 'text-[#ff3b30] font-semibold' : ''}`}>{row.matched.toLocaleString()}</td>
+                  <td className={`px-4 py-3 text-right ${zeroMatch ? 'text-[#ff3b30] font-semibold' : ''}`}>{row.matched.toLocaleString()}</td>
                   <td className="px-4 py-3 text-right">{row.newRows.toLocaleString()}</td>
                   {isSync && <td className="px-4 py-3 text-right">{row.wouldDeactivate.toLocaleString()}</td>}
+                  {showOutsideCohort && (
+                    <td className={`px-4 py-3 text-right ${outsideCohort ? 'text-[#ff3b30] font-semibold' : ''}`}>{row.outsideCohort.toLocaleString()}</td>
+                  )}
                 </tr>
               );
             })}
@@ -85,22 +103,35 @@ export function ImportPreflightPanel({ preflight, isBusy, errorMsg, onConfirm, o
               {preflight.risk.shrinkOverThreshold && (
                 <p>จะปิดสถานะเด็กเดิม {preflight.wouldDeactivate.toLocaleString()} จาก {preflight.activeBefore.toLocaleString()} คน (เกิน {Math.round(preflight.shrinkThreshold * 100)}%)</p>
               )}
+              {preflight.risk.outsideCohort && (
+                <>
+                  <p>
+                    {preflight.outsideCohort.toLocaleString()} รายชื่อในไฟล์เกิดนอกช่วงวันเกิดของ{TABLE_LABEL[preflight.targetTable]} ปีงบประมาณ {preflight.fiscalYear}
+                    {' '}({formatDateStr(preflight.cohortBirthRange.start)} – {formatDateStr(preflight.cohortBirthRange.end)})
+                  </p>
+                  {preflight.outsideCohortFiscalYear && (
+                    <p className="font-semibold">วันเกิดตรงกับปีงบประมาณ {preflight.outsideCohortFiscalYear} โปรดตรวจสอบว่าเลือกปีงบประมาณถูกต้อง</p>
+                  )}
+                </>
+              )}
             </div>
           </div>
-          <div className="space-y-2">
-            <label htmlFor="preflight-typed-number" className="block text-[14px] font-medium text-[#1d1d1f]">
-              พิมพ์ตัวเลข {required.toLocaleString('en-US', { useGrouping: false })} ({isSync ? 'จำนวนเด็กเดิมที่จะถูกปิดสถานะ' : 'จำนวนรายชื่อในไฟล์ที่ไม่ตรงกับเด็กที่เปิดใช้งานอยู่'}) เพื่อยืนยัน
-            </label>
-            <input
-              id="preflight-typed-number"
-              inputMode="numeric"
-              autoComplete="off"
-              value={typed}
-              disabled={isBusy}
-              onChange={event => setTyped(event.target.value)}
-              className="w-full sm:w-64 h-10 px-3 rounded-md border border-[#e0e0e0] bg-white text-[14px] focus:outline-none focus:ring-2 focus:ring-[#ff3b30]/20"
-            />
-          </div>
+          {conditions.map(name => (
+            <div key={name} className="space-y-2">
+              <label htmlFor={`preflight-typed-${name}`} className="block text-[14px] font-medium text-[#1d1d1f]">
+                พิมพ์ตัวเลข {required[name]!.toLocaleString('en-US', { useGrouping: false })} ({confirmationLabel[name]}) เพื่อยืนยัน
+              </label>
+              <input
+                id={`preflight-typed-${name}`}
+                inputMode="numeric"
+                autoComplete="off"
+                value={typed[name] ?? ''}
+                disabled={isBusy}
+                onChange={event => setTyped(current => ({ ...current, [name]: event.target.value }))}
+                className="w-full sm:w-64 h-10 px-3 rounded-md border border-[#e0e0e0] bg-white text-[14px] focus:outline-none focus:ring-2 focus:ring-[#ff3b30]/20"
+              />
+            </div>
+          ))}
         </div>
       ) : (
         <div className="flex gap-3 bg-[#f0f9f0] rounded-[16px] p-4 text-[14px] text-[#1d1d1f]">
@@ -113,7 +144,8 @@ export function ImportPreflightPanel({ preflight, isBusy, errorMsg, onConfirm, o
 
       <div className="flex flex-col-reverse sm:flex-row justify-end gap-3">
         <Button variant="outline" className="rounded-full px-6" disabled={isBusy} onClick={onCancel}>ยกเลิก</Button>
-        <Button size="lg" disabled={!canConfirm} onClick={() => onConfirm(required == null ? undefined : typed.trim())}>
+        <Button size="lg" disabled={!canConfirm}
+          onClick={() => onConfirm(required == null ? undefined : Object.fromEntries(conditions.map(name => [name, (typed[name] ?? '').trim()])))}>
           ยืนยันนำเข้า
         </Button>
       </div>

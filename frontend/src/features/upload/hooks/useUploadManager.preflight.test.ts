@@ -26,13 +26,20 @@ const rows = [
 
 const riskyPreflight = {
   success: true, batchId: 'server-echo', targetTable: 'Epi_1_Year', fiscalYear: '2569', mode: 'sync',
-  matched: 0, newRows: 2, wouldDeactivate: 5, activeBefore: 5,
-  byHoscode: [{ hoscode: '00001', activeBefore: 5, matched: 0, newRows: 2, wouldDeactivate: 5 }],
-  risk: { zeroMatchHoscodes: ['00001'], shrinkOverThreshold: true }, requiredConfirmation: 5, shrinkThreshold: 0.2,
+  matched: 0, newRows: 2, wouldDeactivate: 5, activeBefore: 5, outsideCohort: 0,
+  byHoscode: [{ hoscode: '00001', activeBefore: 5, matched: 0, newRows: 2, wouldDeactivate: 5, outsideCohort: 0 }],
+  risk: { zeroMatchHoscodes: ['00001'], shrinkOverThreshold: true, outsideCohort: false },
+  cohortBirthRange: { start: '2024-10-01', end: '2025-09-30' }, outsideCohortFiscalYear: null,
+  requiredConfirmations: { existingChildren: 5 }, shrinkThreshold: 0.2,
 };
 const safePreflight = { ...riskyPreflight, matched: 2, newRows: 0, wouldDeactivate: 0, activeBefore: 2,
-  byHoscode: [{ hoscode: '00001', activeBefore: 2, matched: 2, newRows: 0, wouldDeactivate: 0 }],
-  risk: { zeroMatchHoscodes: [], shrinkOverThreshold: false }, requiredConfirmation: null };
+  byHoscode: [{ hoscode: '00001', activeBefore: 2, matched: 2, newRows: 0, wouldDeactivate: 0, outsideCohort: 0 }],
+  risk: { zeroMatchHoscodes: [], shrinkOverThreshold: false, outsideCohort: false }, requiredConfirmations: null };
+/** Issue #136: a sync that both shrinks the existing children and has births outside the Cohort Birth Range. */
+const twoRiskPreflight = { ...riskyPreflight, outsideCohort: 2, outsideCohortFiscalYear: '2568',
+  byHoscode: [{ hoscode: '00001', activeBefore: 5, matched: 0, newRows: 2, wouldDeactivate: 5, outsideCohort: 2 }],
+  risk: { zeroMatchHoscodes: ['00001'], shrinkOverThreshold: true, outsideCohort: true },
+  requiredConfirmations: { existingChildren: 5, outsideCohort: 2 } };
 
 function stubApi(preflight: Record<string, unknown>, { confirmError }: { confirmError?: string } = {}) {
   api.fetchApi.mockImplementation(async (action: string) => {
@@ -73,15 +80,15 @@ describe('Issue #111 — preflight before any import write', () => {
     ]]);
     expect(calls('upsertEpiData')).toHaveLength(0);
     expect(result.current.status).toBe('confirming');
-    expect(result.current.preflight?.requiredConfirmation).toBe(5);
+    expect(result.current.preflight?.requiredConfirmations).toEqual({ existingChildren: 5 });
   });
 
   it('a risky import confirms the typed number, then uploads the same batch and finalizes', async () => {
     stubApi(riskyPreflight);
     const result = await preparedHook();
     const batchId = (calls('preflightEpiImport')[0] as { batchId: string }).batchId;
-    await act(async () => { await result.current.confirmUpload('5'); });
-    expect(calls('confirmEpiImport')).toEqual([{ batchId, typedNumber: '5' }]);
+    await act(async () => { await result.current.confirmUpload({ existingChildren: '5' }); });
+    expect(calls('confirmEpiImport')).toEqual([{ batchId, typedNumbers: { existingChildren: '5' } }]);
     expect(calls('upsertEpiData')).toEqual([expect.objectContaining({ batchId, chunk: rows, fiscalYear: '2569', targetTable: 'Epi_1_Year' })]);
     expect(calls('cleanupEpiData')).toEqual([expect.objectContaining({ batchId })]);
     expect(result.current.status).toBe('success');
@@ -90,7 +97,7 @@ describe('Issue #111 — preflight before any import write', () => {
   it('a confirmation the server rejects writes nothing and stays on the confirmation step', async () => {
     stubApi(riskyPreflight, { confirmError: 'Typed number does not match.' });
     const result = await preparedHook();
-    await act(async () => { await result.current.confirmUpload('4'); });
+    await act(async () => { await result.current.confirmUpload({ existingChildren: '4' }); });
     expect(calls('upsertEpiData')).toHaveLength(0);
     expect(result.current.status).toBe('confirming');
     expect(result.current.errorMsg).toMatch(/ตัวเลขยืนยันไม่ตรง/);
@@ -99,7 +106,7 @@ describe('Issue #111 — preflight before any import write', () => {
   it('a confirmation failing for another reason shows that reason, not a typing error', async () => {
     stubApi(riskyPreflight, { confirmError: 'Only the admin who ran the preflight can confirm.' });
     const result = await preparedHook();
-    await act(async () => { await result.current.confirmUpload('5'); });
+    await act(async () => { await result.current.confirmUpload({ existingChildren: '5' }); });
     expect(calls('upsertEpiData')).toHaveLength(0);
     expect(result.current.errorMsg).not.toMatch(/ตัวเลขยืนยันไม่ตรง/);
     expect(result.current.errorMsg).toContain('Only the admin who ran the preflight can confirm.');
@@ -122,5 +129,38 @@ describe('Issue #111 — preflight before any import write', () => {
     expect(calls('confirmEpiImport')).toHaveLength(0);
     expect(calls('upsertEpiData')).toHaveLength(1);
     expect(result.current.status).toBe('success');
+  });
+});
+
+describe('Issue #136 — one typed number per risk condition; no default Fiscal Year', () => {
+  it('sends the typed number of every fired condition in one confirmation', async () => {
+    stubApi(twoRiskPreflight);
+    const result = await preparedHook();
+    const batchId = (calls('preflightEpiImport')[0] as { batchId: string }).batchId;
+    await act(async () => { await result.current.confirmUpload({ existingChildren: '5', outsideCohort: '2' }); });
+    expect(calls('confirmEpiImport')).toEqual([{ batchId, typedNumbers: { existingChildren: '5', outsideCohort: '2' } }]);
+    expect(calls('upsertEpiData')).toHaveLength(1);
+  });
+
+  it('starts with no Fiscal Year and sends nothing to the server until one is chosen', async () => {
+    stubApi(safePreflight);
+    parser.parseHdcFile.mockResolvedValue({ rows, columns: Object.keys(rows[0]) });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const wrapper = ({ children }: { children?: ReactNode }) => createElement(QueryClientProvider, { client }, children);
+    const { result } = renderHook(() => useUploadManager(), { wrapper });
+    expect(result.current.fiscalYear).toBe('');
+    await act(async () => { await result.current.handleDrop([new File(['x'], 'EPI-1YEAR.xlsx')]); });
+    await act(async () => { await result.current.handleUpload(); });
+    await act(async () => { await result.current.handleSyncAll(); });
+    expect(api.fetchApi).not.toHaveBeenCalled();
+  });
+
+  it('keeps the chosen Fiscal Year after an import so the next file of the round uses it', async () => {
+    stubApi(safePreflight);
+    const result = await preparedHook();
+    await act(async () => { await result.current.confirmUpload(); });
+    await act(async () => { result.current.handleReset(); });
+    expect(result.current.file).toBeNull();
+    expect(result.current.fiscalYear).toBe('2569');
   });
 });
