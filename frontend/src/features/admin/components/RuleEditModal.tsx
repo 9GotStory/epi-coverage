@@ -3,7 +3,7 @@ import { buildDoseLabeler } from '../../../shared/utils/vaccine/rulePresentation
 import { beInputToIso, isoToBeInput } from '../../../shared/utils/vaccine/birthWindow';
 import { fetchApi } from '../../../shared/lib/api';
 import { useAuth } from '../../../shared/contexts/AuthContext';
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -39,6 +39,10 @@ import {
 import { Switch } from "../../../shared/components/ui/switch";
 import type { VaccineRule } from "../../../shared/utils/vaccine/ruleEngine";
 
+// Issue #148: same column-name rule as the server's structural validation (VaccineRules.js)
+const COLUMN_NAME_RE = /^[a-z][a-z0-9_]*_date$/;
+const columnName = z.string().trim().min(1, "ห้ามเว้นว่าง").regex(COLUMN_NAME_RE, "ชื่อคอลัมน์ต้องเป็นตัวพิมพ์เล็ก ลงท้ายด้วย _date เช่น mmr1_date");
+
 const ruleSchema = z.object({
   date_checks: z.object({
     before_birth: z.boolean(),
@@ -46,18 +50,18 @@ const ruleSchema = z.object({
     same_day_pairs: z.array(z.object({ field: z.string().min(1), other_field: z.string().min(1) })),
     ordered_pairs: z.array(z.object({ field: z.string().min(1), other_field: z.string().min(1) })),
   }),
-  display_name: z.string().min(1, "กรุณาระบุชื่อแสดงผล"),
-  vaccine_group: z.string().min(1, "กรุณาระบุกลุ่มวัคซีน (เช่น BCG, HBV)"),
+  display_name: z.string().trim().min(1, "กรุณาระบุชื่อแสดงผล"),
+  vaccine_group: z.string().trim().min(1, "กรุณาระบุกลุ่มวัคซีน (เช่น BCG, HBV)"),
   hdc_code: z.string().optional(),
   view_type: z.number().min(1).max(2),
   logic_type: z.enum(["ALL", "ANY", "BRANCH"]),
   required_fields: z
-    .array(z.object({ value: z.string().min(1, "ห้ามเว้นว่าง") }))
+    .array(z.object({ value: columnName }))
     .min(1, "ต้องมีฟิลด์บังคับอย่างน้อย 1 ฟิลด์"),
-  branch_alt_fields: z.array(z.object({ value: z.string().min(1, "ห้ามเว้นว่าง") })).optional(),
+  branch_alt_fields: z.array(z.object({ value: columnName })).optional(),
   is_active: z.boolean(),
   is_required_for_v2: z.boolean(),
-  target_age_months: z.number().nullable().optional(),
+  target_age_months: z.number().int("อายุเป้าหมายต้องเป็นจำนวนเต็ม").min(0, "อายุเป้าหมายต้องไม่ติดลบ").nullable().optional(),
   note: z.string().optional(),
   // Issue #121: Birth Window กรอกเป็น พ.ศ. วว/ดด/ปปปป ว่าง = ไม่จำกัด (backend ตรวจซ้ำและเป็นผู้ตัดสิน)
   born_on_or_after: z.string(),
@@ -135,6 +139,8 @@ export function RuleEditModal({ rule, allRules, isOpen, onClose, onSave, fiscalY
 
   const sameDay = useFieldArray({ control: form.control, name: 'date_checks.same_day_pairs' });
   const ordered = useFieldArray({ control: form.control, name: 'date_checks.ordered_pairs' });
+  const { replace: replaceSameDay } = sameDay;
+  const { replace: replaceOrdered } = ordered;
   const currentFields = [...form.watch('required_fields'), ...(form.watch('branch_alt_fields') || [])].map(f => f.value);
   const dateOptions = [...new Set([...allRules.flatMap(r => [...r.required_fields, ...(r.branch_alt_fields || [])]), ...currentFields])].filter(Boolean).sort();
   // Issue #130: ป้ายชื่อเข็มเดียวกับข้อสังเกตวันที่ (display_name ของ rule คอลัมน์เดียว หรือป้ายตามคอลัมน์)
@@ -181,6 +187,57 @@ export function RuleEditModal({ rule, allRules, isOpen, onClose, onSave, fiscalY
 
   const logicType = form.watch("logic_type");
 
+  // Issue #148: new-rule mode. Target Age is prefilled from the backend default map and date checks
+  // from the shared derivation for unconfigured rules; each follows the columns until the admin edits it.
+  const isNew = !rule;
+  const [targetAgeEdited, setTargetAgeEdited] = useState(false);
+  // A ref, not state: a pending prefill must see the edit in the very render the admin's click causes
+  const dateChecksEdited = useRef(false);
+  const enteredColumns = currentFields.map(f => (f || '').trim()).filter(Boolean);
+  const columnsKey = JSON.stringify([form.watch('required_fields').map(f => (f.value || '').trim()), (form.watch('branch_alt_fields') || []).map(f => (f.value || '').trim())]);
+  const watchedTargetAge = form.watch('target_age_months');
+  const isActive = form.watch('is_active');
+  const peerColumns = new Set(allRules.filter(r => r.rule_id !== rule?.rule_id).flatMap(r => [...r.required_fields, ...(r.branch_alt_fields || [])]));
+  const unusedColumns = isNew ? [...new Set(enteredColumns)].filter(f => !peerColumns.has(f)) : [];
+
+  useEffect(() => {
+    if (!isOpen || !isNew || targetAgeEdited) return;
+    const [required, branch] = JSON.parse(columnsKey) as [string[], string[]];
+    if (required.filter(Boolean).length === 0) return;
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetchApi('suggestRuleTargetAges', { rules: [{ rule_id: 'draft', required_fields: required.filter(Boolean), branch_alt_fields: branch.filter(Boolean) }] });
+        const suggested = res.data?.suggestions?.[0]?.target_age_months;
+        if (!cancelled) form.setValue('target_age_months', typeof suggested === 'number' ? suggested : null);
+      } catch {
+        // no suggestion: the admin enters Target Age, which the form requires
+      }
+    }, 300);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [isOpen, isNew, targetAgeEdited, columnsKey, form]);
+
+  useEffect(() => {
+    if (!isOpen || !isNew || dateChecksEdited.current) return;
+    const [required, branch] = JSON.parse(columnsKey) as [string[], string[]];
+    const draft: VaccineRule = {
+      rule_id: 'draft', fiscal_year: fiscalYear, age_group: ageGroup, view_type: 1, vaccine_group: '', display_name: '', hdc_code: '',
+      logic_type: 'ALL', is_required_for_v2: true, is_active: isActive,
+      required_fields: required.filter(Boolean), branch_alt_fields: branch.filter(Boolean),
+      target_age_months: typeof watchedTargetAge === 'number' ? watchedTargetAge : undefined,
+    };
+    // pairs through the field-array API, so the rendered pairs and later edits stay in step
+    const checks = getRuleDateChecks(draft, [...allRules, draft]);
+    form.setValue('date_checks.before_birth', checks.before_birth);
+    form.setValue('date_checks.allow_on_birth', checks.allow_on_birth);
+    replaceSameDay(checks.same_day_pairs);
+    replaceOrdered(checks.ordered_pairs);
+  }, [isOpen, isNew, columnsKey, watchedTargetAge, isActive, allRules, fiscalYear, ageGroup, form, replaceSameDay, replaceOrdered]);
+  // Any control the admin touches in the date-check section makes the section theirs.
+  const markDateChecksEdited = (event: React.SyntheticEvent) => {
+    if ((event.target as HTMLElement).closest('button, select, input')) dateChecksEdited.current = true;
+  };
+
   useEffect(() => {
     if (isOpen) {
       if (rule) {
@@ -201,21 +258,25 @@ export function RuleEditModal({ rule, allRules, isOpen, onClose, onSave, fiscalY
           born_before: isoToBeInput(rule.born_before),
         });
       } else {
+        // Issue #148: a new rule starts blank, with one column input to fill
         form.reset({
           date_checks: { before_birth: true, allow_on_birth: false, same_day_pairs: [], ordered_pairs: [] },
-      display_name: "",
+          display_name: "",
           vaccine_group: "",
           hdc_code: "",
           view_type: 1,
           logic_type: "ALL",
-          required_fields: [],
+          required_fields: [{ value: "" }],
           branch_alt_fields: [],
           is_active: true,
           is_required_for_v2: true,
+          target_age_months: null,
           note: "",
           born_on_or_after: "",
           born_before: "",
         });
+        setTargetAgeEdited(false);
+        dateChecksEdited.current = false;
       }
     }
   }, [rule, isOpen, form, allRules]);
@@ -277,11 +338,16 @@ export function RuleEditModal({ rule, allRules, isOpen, onClose, onSave, fiscalY
         return;
       }
     }
-    const isNew = !rule;
-    
+    // Issue #148: a new rule has no field-default fallback, so a too-young child is a Pending Rule only with a Target Age
+    if (isNew && (data.target_age_months === null || data.target_age_months === undefined)) {
+      form.setError('target_age_months', { message: 'กรุณาระบุอายุเป้าหมายของเกณฑ์ใหม่' });
+      return;
+    }
+
     const updatedRule: VaccineRule = {
       ...(rule || {}),
-      rule_id: rule?.rule_id || `rule_${Date.now()}`,
+      // UUID like seed and clone; the server starts its own lineage (metric_key = rule_id)
+      rule_id: rule?.rule_id || crypto.randomUUID(),
       fiscal_year: rule?.fiscal_year || fiscalYear,
       age_group: rule?.age_group || ageGroup,
       
@@ -378,10 +444,12 @@ export function RuleEditModal({ rule, allRules, isOpen, onClose, onSave, fiscalY
                   <FormItem>
                     <FormLabel>อายุเป้าหมาย (เดือน)</FormLabel>
                     <FormControl>
-                      <Input type="number" {...field} onChange={e => field.onChange(e.target.value === '' ? undefined : Number(e.target.value))} value={field.value ?? ''} />
+                      <Input type="number" {...field} onChange={e => { setTargetAgeEdited(true); field.onChange(e.target.value === '' ? null : Number(e.target.value)); }} value={field.value ?? ''} />
                     </FormControl>
                     <FormDescription>
-                      ไม่บังคับกรอก (ถ้าปล่อยว่าง: จะไม่มีสถานะ 'รอดำเนินการ' ถ้าไม่ได้ฉีดจะถือว่าขาดทันที)
+                      {isNew
+                        ? 'บังคับกรอกสำหรับเกณฑ์ใหม่ ระบบเติมค่าเริ่มต้นให้เมื่อรู้จักคอลัมน์ ตรวจทานหรือแก้ได้'
+                        : "ไม่บังคับกรอก (ถ้าปล่อยว่าง: จะไม่มีสถานะ 'รอดำเนินการ' ถ้าไม่ได้ฉีดจะถือว่าขาดทันที)"}
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
@@ -529,6 +597,14 @@ export function RuleEditModal({ rule, allRules, isOpen, onClose, onSave, fiscalY
               )}
             </div>
 
+            {unusedColumns.length > 0 && (
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800 space-y-1">
+                {unusedColumns.map(column => (
+                  <p key={column}>คอลัมน์ {column} ไม่มีในเกณฑ์อื่นของกลุ่มอายุนี้ ชื่อต้องตรงกับคอลัมน์ในไฟล์นำเข้า มิฉะนั้นเกณฑ์นี้จะประเมินไม่ได้กับเด็กทุกคน (บันทึกได้ถ้าเป็นวัคซีนใหม่จริง)</p>
+                ))}
+              </div>
+            )}
+
             {logicType === "BRANCH" && (
               <div className="space-y-3 pt-4 border-t border-slate-100">
                 <div className="flex items-center justify-between">
@@ -607,7 +683,7 @@ export function RuleEditModal({ rule, allRules, isOpen, onClose, onSave, fiscalY
               </div>
             </section>
 
-            <section className="border rounded-lg p-4 space-y-4">
+            <section className="border rounded-lg p-4 space-y-4" onClickCapture={isNew ? markDateChecksEdited : undefined} onChangeCapture={isNew ? markDateChecksEdited : undefined}>
               <div className="flex items-center justify-between gap-2">
                 <h3 className="font-semibold">ตรวจสอบข้อมูลวันที่</h3>
                 {isAdmin && (
@@ -624,7 +700,8 @@ export function RuleEditModal({ rule, allRules, isOpen, onClose, onSave, fiscalY
                   </Button>
                 )}
               </div>
-              {!rule?.date_checks && <p className="text-sm text-zinc-500">เกณฑ์เดิมยังไม่มีการตั้งค่ารายคู่ ระบบแสดงค่าเริ่มต้นให้ตรวจทาน กดบันทึกฉบับร่างและยืนยันบันทึกเพื่อใช้ค่าที่เลือก</p>}
+              {isNew && <p className="text-sm text-zinc-500">ระบบเติมค่าจากเกณฑ์อื่นในกลุ่มอายุนี้ และปรับตามคอลัมน์กับอายุเป้าหมายจนกว่าคุณจะแก้ส่วนนี้เอง ค่าที่เห็นจะถูกบันทึกกับเกณฑ์</p>}
+              {rule && !rule.date_checks && <p className="text-sm text-zinc-500">เกณฑ์เดิมยังไม่มีการตั้งค่ารายคู่ ระบบแสดงค่าเริ่มต้นให้ตรวจทาน กดบันทึกฉบับร่างและยืนยันบันทึกเพื่อใช้ค่าที่เลือก</p>}
               <p className="text-sm text-zinc-500">ใช้กับเข็มในเกณฑ์นี้ แสดงรายละเอียดในประวัติการรับวัคซีน กฎวันซ้ำเป็นการตรวจข้อมูลตามที่ผู้ดูแลกำหนด ไม่ใช่ข้อห้ามฉีดวัคซีนร่วมกันทางการแพทย์</p>
               {(['before_birth', 'allow_on_birth'] as const).map(key => <FormField key={key} control={form.control} name={`date_checks.${key}`} render={({ field }) => <FormItem className="flex items-center justify-between gap-3">
                 <FormLabel>{key === 'before_birth' ? 'เตือนเมื่อฉีดก่อนวันเกิด' : 'อนุญาตวันที่ฉีดตรงวันเกิด'}</FormLabel>

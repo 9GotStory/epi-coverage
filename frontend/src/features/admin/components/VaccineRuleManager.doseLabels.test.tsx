@@ -51,8 +51,7 @@ const renderManager = () => {
   );
 };
 const openRule = (name: string) => {
-  const row = screen.getByText(name).closest('tr')!;
-  fireEvent.click(within(row).getByRole('button'));
+  fireEvent.click(screen.getByRole('button', { name: `แก้ไขเกณฑ์ ${name}` }));
   return within(screen.getByRole('dialog'));
 };
 const optionLabels = (select: HTMLElement) => Object.fromEntries([...(select as HTMLSelectElement).options].map(option => [option.value, option.textContent]));

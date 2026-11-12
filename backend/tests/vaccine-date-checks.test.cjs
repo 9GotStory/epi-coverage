@@ -6,7 +6,7 @@ const sheetTextSource = fs.readFileSync(require('node:path').join(__dirname, '..
 const source = fs.readFileSync(require('node:path').join(__dirname, '../src/VaccineRules.js'), 'utf8');
 const headers = ['rule_id', 'fiscal_year', 'age_group', 'view_type', 'required_fields', 'branch_alt_fields', 'logic_type', 'is_active', 'hdc_code'];
 const checks = { before_birth: true, allow_on_birth: false, same_day_pairs: [{ field: 'hbv1_date', other_field: 'dtp1_date' }], ordered_pairs: [] };
-const rule = { rule_id: 'a', fiscal_year: 2569, age_group: '1yr', view_type: 1, required_fields: ['hbv1_date'], branch_alt_fields: [], logic_type: 'ALL', is_active: true, hdc_code: '041', date_checks: checks };
+const rule = { rule_id: 'a', fiscal_year: 2569, age_group: '1yr', view_type: 1, vaccine_group: 'HBV', display_name: 'HBV เข็ม 1', required_fields: ['hbv1_date'], branch_alt_fields: [], logic_type: 'ALL', is_active: true, hdc_code: '041', date_checks: checks };
 function setup() {
   const cells = [headers.slice(), ['old', 2568, '1yr', 1, '["bcg_date"]', '[]', 'ALL', true, '010']];
   const sheet = {

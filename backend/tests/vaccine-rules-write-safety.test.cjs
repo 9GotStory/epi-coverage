@@ -132,8 +132,9 @@ test('#76a batch save replaces one age group via one padded rectangular write �
 
   // Shrinking batch: 2 rules replace 4 — the stale tail must be blanked by the same write.
   // (Issue #80: distinct display_names — duplicate ACTIVE names in one view are now rejected.)
+  // (Issue #148: the four stored rules are removed only because the request names them.)
   const two = [baseRule({ rule_id: 'r-a', display_name: 'HBV เข็ม A' }), baseRule({ rule_id: 'r-b', display_name: 'HBV เข็ม B' })];
-  assert.equal(h.context.batchSaveRules(2569, '1yr', two, 'admin').success, true);
+  assert.equal(h.context.batchSaveRules(2569, '1yr', two, 'admin', ['r-1', 'r-2', 'r-3', 'r-4']).success, true);
   assert.equal(h.ops.clearContent, 0, 'still zero clearContent while shrinking');
   assert.equal(h.ops.deleteRow, 0, 'still zero deleteRow while shrinking');
   assert.equal(h.readRules(2569, '1yr').length, 2);

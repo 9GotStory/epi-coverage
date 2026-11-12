@@ -1,7 +1,7 @@
 import { getRuleDateChecks } from '../../../shared/utils/vaccine/dateWarnings';
 import { buildDoseLabeler } from '../../../shared/utils/vaccine/rulePresentation';
 import { describeBirthWindow, hasBirthWindow } from '../../../shared/utils/vaccine/birthWindow';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../../shared/components/ui/card';
 import { Button } from '../../../shared/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../../shared/components/ui/select';
@@ -18,7 +18,7 @@ import { useAuth } from '../../../shared/contexts/AuthContext';
 import { fetchApi } from '../../../shared/lib/api';
 import { toast } from 'sonner';
 import { RuleEditModal } from './RuleEditModal';
-import { Pencil, ArrowRight, Wand2, ChevronDown, SlidersHorizontal } from 'lucide-react';
+import { Pencil, ArrowRight, Wand2, ChevronDown, SlidersHorizontal, Plus, Trash2, Undo2 } from 'lucide-react';
 import type { VaccineRule } from '../../../shared/utils/vaccine/ruleEngine';
 import { getCurrentFiscalYear } from '../../../shared/utils/dateUtils';
 import { useAvailableYears } from '../../../shared/hooks/useAvailableYears';
@@ -56,6 +56,9 @@ export const VaccineRuleManager = ({ onDirtyChange }: VaccineRuleManagerProps) =
   const [ageGroup, setAgeGroup] = useState<string>('1yr');
   const [isProcessing, setIsProcessing] = useState(false);
   const [editingRule, setEditingRule] = useState<VaccineRule | null>(null);
+  const [isAddingRule, setIsAddingRule] = useState(false);
+  // Issue #148: rules marked "จะถูกลบ" in the draft, sent as deleted_rule_ids on Batch Save
+  const [deletedRuleIds, setDeletedRuleIds] = useState<string[]>([]);
   const [hasUnsavedChangesState, setHasUnsavedChangesState] = useState(false);
   const [draftRules, setDraftRules] = useState<VaccineRule[] | null>(null);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -75,9 +78,16 @@ export const VaccineRuleManager = ({ onDirtyChange }: VaccineRuleManagerProps) =
   
   const modifiedRuleDiffs = draftRules ? draftRules.filter(draft => {
     const original = rules.find(r => r.rule_id === draft.rule_id);
-    if (!original) return false;
+    if (!original || deletedRuleIds.includes(draft.rule_id)) return false;
     return JSON.stringify(original) !== JSON.stringify(draft);
   }) : [];
+  // Issue #148: a draft rule with no stored original is an addition
+  const addedRules = displayRules.filter(draft => !rules.some(r => r.rule_id === draft.rule_id));
+  const deletedRules = rules.filter(r => deletedRuleIds.includes(r.rule_id));
+  // The rule set as it will be saved; memoized so the open rule form is not reset on every render
+  const remainingRules = useMemo(() => displayRules.filter(r => !deletedRuleIds.includes(r.rule_id)), [displayRules, deletedRuleIds]);
+  const remainingRuleCount = remainingRules.length;
+  const hasReviewChanges = modifiedRuleDiffs.length + addedRules.length + deletedRules.length > 0;
   
   const modifiedRuleNames = modifiedRuleDiffs.map(r => r.display_name);
 
@@ -102,6 +112,7 @@ export const VaccineRuleManager = ({ onDirtyChange }: VaccineRuleManagerProps) =
     }
     setHasUnsavedChanges(false);
     setDraftRules(null);
+    setDeletedRuleIds([]);
     setFiscalYear(Number(v));
   };
 
@@ -111,6 +122,7 @@ export const VaccineRuleManager = ({ onDirtyChange }: VaccineRuleManagerProps) =
     }
     setHasUnsavedChanges(false);
     setDraftRules(null);
+    setDeletedRuleIds([]);
     setAgeGroup(v);
   };
 
@@ -139,6 +151,7 @@ export const VaccineRuleManager = ({ onDirtyChange }: VaccineRuleManagerProps) =
       if (res.data?.success) {
         toast.success(`คืนค่าเริ่มต้นสำหรับปี ${fiscalYear} สำเร็จ`);
         setDraftRules(null);
+        setDeletedRuleIds([]);
         setHasUnsavedChanges(false);
         queryClient.invalidateQueries({ queryKey: ['vaccineRules'] });
       } else {
@@ -170,10 +183,24 @@ export const VaccineRuleManager = ({ onDirtyChange }: VaccineRuleManagerProps) =
 
   const handleSaveModal = (updatedRule: VaccineRule) => {
     const currentRules = draftRules || rules;
-    const newRules = currentRules.map(r => r.rule_id === updatedRule.rule_id ? updatedRule : r);
+    const newRules = currentRules.some(r => r.rule_id === updatedRule.rule_id)
+      ? currentRules.map(r => r.rule_id === updatedRule.rule_id ? updatedRule : r)
+      : [...currentRules, updatedRule];
     setDraftRules(newRules);
     setHasUnsavedChanges(true);
     setEditingRule(null);
+    setIsAddingRule(false);
+  };
+
+  // Issue #148: a stored rule is only marked (undoable until Batch Save); a draft-only addition is
+  // simply dropped, since the server has nothing to delete
+  const handleToggleDelete = (rule: VaccineRule) => {
+    if (!rules.some(r => r.rule_id === rule.rule_id)) {
+      setDraftRules(displayRules.filter(r => r.rule_id !== rule.rule_id));
+    } else {
+      setDeletedRuleIds(ids => ids.includes(rule.rule_id) ? ids.filter(id => id !== rule.rule_id) : [...ids, rule.rule_id]);
+    }
+    setHasUnsavedChanges(true);
   };
 
   const handleAutoSetTargetAge = async () => {
@@ -260,12 +287,14 @@ export const VaccineRuleManager = ({ onDirtyChange }: VaccineRuleManagerProps) =
       const res = await fetchApi('batchSaveRules', { 
         fiscalYear, 
         ageGroup, 
-        rules: draftRules || rules 
+        rules: remainingRules,
+        deleted_rule_ids: deletedRuleIds,
       });
       if (res.data?.success) {
         toast.success('บันทึกเกณฑ์วัคซีนทั้งหมดลงฐานข้อมูลสำเร็จ!');
         setHasUnsavedChanges(false);
         setDraftRules(null);
+        setDeletedRuleIds([]);
         setShowConfirmModal(false);
         setNeedsResync(true);
         queryClient.invalidateQueries({ queryKey: ['vaccineRules'] });
@@ -307,16 +336,20 @@ export const VaccineRuleManager = ({ onDirtyChange }: VaccineRuleManagerProps) =
               <h4 className="font-semibold text-amber-800">มีการเปลี่ยนแปลงที่ยังไม่ได้บันทึก (Draft)</h4>
               <p className="text-sm text-amber-700 mt-1">ตารางด้านล่างแสดงผลฉบับร่าง กรุณากดปุ่ม <strong>"บันทึกการแก้ไขทั้งหมด"</strong> ด้านบนขวา เพื่อบันทึกลงฐานข้อมูลจริง</p>
               
-              {modifiedRuleNames.length > 0 && (
-                <div className="mt-3 p-3 bg-white/60 rounded border border-amber-100">
-                  <span className="text-xs font-semibold text-amber-800 mb-1 block">รายการเกณฑ์วัคซีนที่ถูกแก้ไข:</span>
+              {([
+                { title: 'รายการเกณฑ์วัคซีนที่ถูกแก้ไข:', names: modifiedRuleNames },
+                { title: 'เกณฑ์ที่เพิ่มใหม่:', names: addedRules.map(r => r.display_name) },
+                { title: 'เกณฑ์ที่จะถูกลบ:', names: deletedRules.map(r => r.display_name) },
+              ]).filter(group => group.names.length > 0).map(group => (
+                <div key={group.title} className="mt-3 p-3 bg-white/60 rounded border border-amber-100">
+                  <span className="text-xs font-semibold text-amber-800 mb-1 block">{group.title}</span>
                   <ul className="list-disc list-inside text-sm text-amber-700 space-y-0.5">
-                    {modifiedRuleNames.map((name, i) => (
+                    {group.names.map((name, i) => (
                       <li key={i}>{name}</li>
                     ))}
                   </ul>
                 </div>
-              )}
+              ))}
             </div>
           </div>
         )}
@@ -371,7 +404,12 @@ export const VaccineRuleManager = ({ onDirtyChange }: VaccineRuleManagerProps) =
           </div>
           
           {isAdmin && displayRules.length > 0 && (
-            <div className="flex items-end mb-1">
+            <div className="flex items-end gap-2 mb-1">
+              {/* Issue #148: only beside existing rules — an empty fiscal year starts from seed or clone */}
+              <Button variant="outline" className="bg-white" onClick={() => setIsAddingRule(true)} disabled={isProcessing}>
+                <Plus className="w-4 h-4 mr-2" />
+                เพิ่มเกณฑ์
+              </Button>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" className="bg-white" disabled={isProcessing}>
@@ -447,10 +485,17 @@ export const VaccineRuleManager = ({ onDirtyChange }: VaccineRuleManagerProps) =
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {displayRules.map(rule => (
-                  <tr key={rule.rule_id} className="hover:bg-slate-50/50">
+                {displayRules.map(rule => {
+                  const isDeleted = deletedRuleIds.includes(rule.rule_id);
+                  const isLastRemaining = !isDeleted && remainingRuleCount <= 1;
+                  return (
+                  <tr key={rule.rule_id} className={isDeleted ? 'bg-rose-50/60' : 'hover:bg-slate-50/50'}>
                     <td className="py-3 px-4">
-                      <div className="font-medium text-slate-800">{rule.display_name}</div>
+                      <div className={`font-medium flex items-center gap-2 ${isDeleted ? 'text-slate-400 line-through' : 'text-slate-800'}`}>
+                        {rule.display_name}
+                        {isDeleted && <span className="no-underline px-2 py-0.5 bg-rose-100 text-rose-700 text-[10px] font-bold rounded-full">จะถูกลบ</span>}
+                        {addedRules.includes(rule) && <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 text-[10px] font-bold rounded-full">เพิ่มใหม่</span>}
+                      </div>
                       <div className="text-xs text-slate-500">{rule.vaccine_group} • HDC: {rule.hdc_code || '-'}</div>
                       {hasBirthWindow(rule) && <div className="text-xs text-slate-600">{describeBirthWindow(rule)}</div>}
                     </td>
@@ -479,25 +524,47 @@ export const VaccineRuleManager = ({ onDirtyChange }: VaccineRuleManagerProps) =
                         <span className="text-slate-400">Inactive</span>
                       )}
                     </td>
-                    <td className="py-3 px-4 text-right">
-                      <Button variant="ghost" size="icon" onClick={() => setEditingRule(rule)}>
-                        <Pencil className="w-4 h-4 text-slate-500" />
-                      </Button>
+                    <td className="py-3 px-4 text-right whitespace-nowrap">
+                      {isDeleted ? (
+                        <Button variant="ghost" size="sm" aria-label={`ยกเลิกการลบ ${rule.display_name}`} onClick={() => handleToggleDelete(rule)}>
+                          <Undo2 className="w-4 h-4 mr-1 text-slate-500" />
+                          ยกเลิกการลบ
+                        </Button>
+                      ) : (
+                        <>
+                          <Button variant="ghost" size="icon" aria-label={`แก้ไขเกณฑ์ ${rule.display_name}`} onClick={() => setEditingRule(rule)}>
+                            <Pencil className="w-4 h-4 text-slate-500" />
+                          </Button>
+                          {isAdmin && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              aria-label={`ลบเกณฑ์ ${rule.display_name}`}
+                              title={isLastRemaining ? 'ลบไม่ได้: กลุ่มอายุต้องเหลือเกณฑ์อย่างน้อย 1 รายการ — ใช้ปิดใช้งานแทน' : 'ลบเกณฑ์ (ยกเลิกได้ก่อน Batch Save)'}
+                              disabled={isLastRemaining}
+                              onClick={() => handleToggleDelete(rule)}
+                            >
+                              <Trash2 className="w-4 h-4 text-rose-500" />
+                            </Button>
+                          )}
+                        </>
+                      )}
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
         )}
       </CardContent>
 
-      {editingRule && (
+      {(editingRule || isAddingRule) && (
         <RuleEditModal
-          allRules={displayRules}
+          allRules={remainingRules}
           rule={editingRule}
-          isOpen={!!editingRule}
-          onClose={() => setEditingRule(null)}
+          isOpen={!!editingRule || isAddingRule}
+          onClose={() => { setEditingRule(null); setIsAddingRule(false); }}
           onSave={handleSaveModal}
           fiscalYear={fiscalYear}
           ageGroup={ageGroup}
@@ -544,12 +611,15 @@ export const VaccineRuleManager = ({ onDirtyChange }: VaccineRuleManagerProps) =
             </p>
             
             <div className="overflow-y-auto pr-2 flex-1 min-h-[100px]">
-              {modifiedRuleDiffs.length === 0 ? (
+              {!hasReviewChanges ? (
                 <div className="text-center py-12 bg-slate-50 rounded-lg border border-dashed border-slate-200">
                   <p className="text-slate-500 font-medium">ไม่มีการเปลี่ยนแปลงข้อมูล</p>
                 </div>
               ) : (
                 <div className="space-y-6">
+                  {modifiedRuleDiffs.length > 0 && (
+                  <section className="space-y-4">
+                    <h4 className="font-semibold text-slate-700">แก้ไข <span className="text-slate-400 font-normal">({modifiedRuleDiffs.length})</span></h4>
                   {modifiedRuleDiffs.map(draft => {
                     const original = rules.find(r => r.rule_id === draft.rule_id)!;
                     const hasNameChange = original.display_name !== draft.display_name;
@@ -625,6 +695,75 @@ export const VaccineRuleManager = ({ onDirtyChange }: VaccineRuleManagerProps) =
                       </div>
                     );
                   })}
+                  </section>
+                  )}
+
+                  {/* Issue #148: a new rule is shown with every field, since it has no original to diff */}
+                  {addedRules.length > 0 && (
+                    <section className="space-y-4">
+                      <h4 className="font-semibold text-emerald-700">เพิ่มใหม่ <span className="text-emerald-500 font-normal">({addedRules.length})</span></h4>
+                      {addedRules.map(added => {
+                        const fields: [string, string | string[]][] = [
+                          ['ชื่อเกณฑ์', added.display_name],
+                          ['กลุ่มวัคซีน', added.vaccine_group],
+                          ['รหัส HDC', added.hdc_code || '-'],
+                          ['มุมมอง (View)', `View ${added.view_type}`],
+                          ['เงื่อนไข (Logic)', added.logic_type],
+                          ['ฟิลด์ที่ต้องการ', added.required_fields],
+                          ...(added.logic_type === 'BRANCH' ? [['ฟิลด์ทางเลือก', added.branch_alt_fields || []] as [string, string[]]] : []),
+                          ['อายุเป้าหมาย (เดือน)', String(added.target_age_months ?? '-')],
+                          ['สถานะ', added.is_active ? 'Active' : 'Inactive'],
+                          ['บังคับใช้ View 2', added.is_required_for_v2 ? 'ใช่' : 'ไม่ใช่'],
+                          ['ตรวจสอบข้อมูลวันที่', describeDateChecks(added, remainingRules)],
+                          ['หมายเหตุ', added.note || '-'],
+                          ['ช่วงวันเกิด (Birth Window)', describeBirthWindow(added) || 'ไม่จำกัด'],
+                        ];
+                        return (
+                          <div key={added.rule_id} className="bg-white border border-emerald-200 rounded-xl shadow-sm overflow-hidden">
+                            <div className="bg-emerald-50 px-4 py-3 border-b border-emerald-100 flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center shrink-0">
+                                <Plus className="w-4 h-4 text-emerald-600" />
+                              </div>
+                              <div className="text-xs text-slate-500">รหัส: <code className="bg-white px-1 py-0.5 rounded text-slate-700 font-mono">{added.rule_id}</code></div>
+                            </div>
+                            <dl className="p-3 divide-y divide-slate-50">
+                              {fields.map(([label, value]) => (
+                                <div key={label} className="grid grid-cols-[160px_1fr] gap-4 py-2 text-sm">
+                                  <dt className="text-slate-500 font-medium">{label}:</dt>
+                                  <dd className="text-slate-800 flex flex-wrap gap-1.5">
+                                    {Array.isArray(value)
+                                      ? value.map(field => <span key={field} className="px-2 py-0.5 bg-emerald-50 text-emerald-800 text-xs rounded-full border border-emerald-200">{field}</span>)
+                                      : <span>{value}</span>}
+                                  </dd>
+                                </div>
+                              ))}
+                            </dl>
+                          </div>
+                        );
+                      })}
+                    </section>
+                  )}
+
+                  {deletedRules.length > 0 && (
+                    <section className="space-y-3">
+                      <h4 className="font-semibold text-rose-700">ลบ <span className="text-rose-400 font-normal">({deletedRules.length})</span></h4>
+                      <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-sm text-rose-800 space-y-1">
+                        <p>การลบทำให้ความต่อเนื่องข้ามปีของตัวชี้วัดนี้สิ้นสุดที่ปีงบประมาณนี้ในหน้าเปรียบเทียบ เกณฑ์ชื่อเดียวกันที่เพิ่มภายหลังจะเป็นตัวชี้วัดใหม่ ส่วนผลสรุป Dashboard ที่บันทึกไว้แล้วไม่เปลี่ยน</p>
+                        <p>ถ้าต้องการหยุดใช้เกณฑ์ชั่วคราว ให้ปิดใช้งาน (Inactive) แทนการลบ เกณฑ์ที่ปิดใช้งานยังอยู่ในการตั้งค่าและถูกคัดลอกไปปีถัดไป</p>
+                      </div>
+                      <ul className="space-y-2">
+                        {deletedRules.map(deleted => (
+                          <li key={deleted.rule_id} className="flex items-center gap-3 px-4 py-3 bg-white border border-rose-200 rounded-xl">
+                            <Trash2 className="w-4 h-4 text-rose-500 shrink-0" />
+                            <div>
+                              <div className="font-medium text-slate-800">{deleted.display_name}</div>
+                              <div className="text-xs text-slate-500">รหัส: <code className="bg-slate-100 px-1 py-0.5 rounded text-slate-700 font-mono">{deleted.rule_id}</code></div>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    </section>
+                  )}
                 </div>
               )}
             </div>
@@ -633,7 +772,7 @@ export const VaccineRuleManager = ({ onDirtyChange }: VaccineRuleManagerProps) =
               <Button variant="outline" size="lg" onClick={() => setShowConfirmModal(false)} className="font-medium" disabled={isProcessing}>
                 ยกเลิก
               </Button>
-              <Button size="lg" className="bg-blue-600 hover:bg-blue-700 text-white font-medium" onClick={executeBatchSave} disabled={isProcessing || modifiedRuleDiffs.length === 0}>
+              <Button size="lg" className="bg-blue-600 hover:bg-blue-700 text-white font-medium" onClick={executeBatchSave} disabled={isProcessing || !hasReviewChanges}>
                 {isProcessing ? 'กำลังบันทึก...' : 'ยืนยันการบันทึก'}
               </Button>
             </div>

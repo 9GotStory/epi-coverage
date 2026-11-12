@@ -424,6 +424,38 @@ function findDuplicateActiveDisplayName_(rules) {
 }
 
 /**
+ * Issue #148: โครงสร้างของ rule ตรวจที่ server ทุกเส้นทางเขียน (saveVaccineRule, batchSaveRules)
+ * ก่อนเขียนใด ๆ แบบ fail closed — ฟอร์มหน้าเว็บไม่ใช่ผู้ตัดสิน
+ * target_age_months ไม่บังคับ (rule เดิมอาศัยค่าตั้งต้นราย field ได้) แต่ถ้ามีต้องเป็นจำนวนเต็มไม่ติดลบ
+ * @throws {Error} ข้อความระบุ rule ที่ผิด
+ */
+const RULE_FIELD_NAME_RE_ = /^[a-z][a-z0-9_]*_date$/;
+const RULE_LOGIC_TYPES_ = ['ALL', 'ANY', 'BRANCH'];
+function hasTargetAge_(value) {
+  return value !== undefined && value !== null && value !== '';
+}
+function validateRuleStructure_(rule) {
+  const fail = message => { throw new Error(`rule ${rule && rule.rule_id}: ${message}`); };
+  if (!rule || typeof rule !== 'object' || typeof rule.rule_id !== 'string' || rule.rule_id.trim() === '') fail('rule_id is required');
+  if (typeof rule.display_name !== 'string' || rule.display_name.trim() === '') fail('display_name is required');
+  if (typeof rule.vaccine_group !== 'string' || rule.vaccine_group.trim() === '') fail('vaccine_group is required');
+  if (rule.view_type !== 1 && rule.view_type !== 2) fail('view_type must be 1 or 2');
+  if (!RULE_LOGIC_TYPES_.includes(rule.logic_type)) fail(`logic_type must be one of: ${RULE_LOGIC_TYPES_.join(', ')}`);
+  const fieldList = (value, name) => {
+    if (value !== undefined && !Array.isArray(value)) fail(`${name} must be an array`);
+    for (const field of value || []) {
+      if (typeof field !== 'string' || !RULE_FIELD_NAME_RE_.test(field)) fail(`${name} entry "${field}" must match ${RULE_FIELD_NAME_RE_.source}`);
+    }
+    return value || [];
+  };
+  if (fieldList(rule.required_fields, 'required_fields').length === 0) fail('required_fields needs at least one column');
+  if (fieldList(rule.branch_alt_fields, 'branch_alt_fields').length === 0 && rule.logic_type === 'BRANCH') fail('a BRANCH rule needs at least one branch_alt_fields column');
+  if (hasTargetAge_(rule.target_age_months) && !(Number.isInteger(rule.target_age_months) && rule.target_age_months >= 0)) {
+    fail('target_age_months must be a non-negative whole number');
+  }
+}
+
+/**
  * บันทึก Vaccine Rule (Insert หรือ Update)
  * @param {object} rule - Rule object ที่ต้องการบันทึก
  * @param {string} adminEmail - Email ของ Admin ที่แก้ไข
@@ -432,11 +464,9 @@ function saveVaccineRule(rule, adminEmail) {
   if (!rule || !rule.rule_id) {
     return { success: false, error: 'rule and rule_id are required' };
   }
-
-  const validLogicTypes = ['ALL', 'ANY', 'BRANCH'];
-  if (!validLogicTypes.includes(rule.logic_type)) {
-    return { success: false, error: `logic_type must be one of: ${validLogicTypes.join(', ')}` };
-  }
+  try {
+    validateRuleStructure_(rule);
+  } catch (error) { return { success: false, error: error.message }; }
 
   const ss = getSpreadsheet();
   const sheet = ss.getSheetByName(VACCINE_RULES_SHEET);
@@ -530,7 +560,7 @@ function saveVaccineRule(rule, adminEmail) {
         case 'branch_alt_fields': return branchAltFieldsJson;
         case 'is_required_for_v2': return rule.is_required_for_v2 !== false;
         case 'is_active': return rule.is_active !== false;
-        case 'target_age_months': return rule.target_age_months !== undefined ? rule.target_age_months : '';
+        case 'target_age_months': return hasTargetAge_(rule.target_age_months) ? rule.target_age_months : '';
         case 'date_checks': return rule.date_checks === undefined ? (existingRowIndex > 0 ? data[existingRowIndex - 1][headers.indexOf('date_checks')] || '' : '') : JSON.stringify(rule.date_checks);
         case 'note': return rule.note || '';
         case 'born_on_or_after':
@@ -560,11 +590,18 @@ function saveVaccineRule(rule, adminEmail) {
 
 /**
  * บันทึก Vaccine Rules ทั้งหมดสำหรับกลุ่มอายุและปีงบประมาณนั้นๆ
- * โดยใช้วิธีลบของเดิมแล้ว Insert ใหม่ เพื่อความรวดเร็วและป้องกัน Rule ขยะ
+ * โดยแทนที่ชุดของ (fiscal_year, age_group) ทั้งชุดด้วยการเขียนสี่เหลี่ยมเดียว
+ * Issue #148: rule ที่ไม่มีในชีตคือการเพิ่ม และการลบต้องระบุชื่อใน deletedRuleIds เท่านั้น —
+ * rule ที่เก็บไว้แต่หายจาก request โดยไม่ถูกระบุ ทำให้ทั้ง request ถูกปฏิเสธ (ไม่มีการลบเงียบ)
+ * @param {string[]} [deletedRuleIds] - rule_id ที่จะลบ (ไม่ส่ง = ไม่ลบ)
  */
-function batchSaveRules(fiscalYear, ageGroup, rules, adminEmail) {
+function batchSaveRules(fiscalYear, ageGroup, rules, adminEmail, deletedRuleIds) {
   if (!fiscalYear || !ageGroup || !rules || !Array.isArray(rules)) {
     return { success: false, error: 'fiscalYear, ageGroup, and rules array are required' };
+  }
+  const deletedIds = deletedRuleIds === undefined || deletedRuleIds === null ? [] : deletedRuleIds;
+  if (!Array.isArray(deletedIds) || deletedIds.some(id => typeof id !== 'string' || id === '')) {
+    return { success: false, error: 'deleted_rule_ids must be an array of rule ids' };
   }
 
   // Issue #76: ทั้ง lifecycle (อ่าน keptRows, ตัดสิน metric_key, commit) เกิดภายใต้ lock
@@ -576,6 +613,12 @@ function batchSaveRules(fiscalYear, ageGroup, rules, adminEmail) {
 
     try {
       const incoming = rules;
+      incoming.forEach(validateRuleStructure_);
+      const seenIds = new Set();
+      for (const rule of incoming) {
+        if (seenIds.has(rule.rule_id)) return { success: false, error: `rule ${rule.rule_id}: appears more than once in the request` };
+        seenIds.add(rule.rule_id);
+      }
       const known = new Set(Object.keys(TARGET_AGE_MONTHS_BY_FIELD));
       const peers = getVaccineRules(incoming[0]?.fiscal_year || fiscalYear, incoming[0]?.age_group || ageGroup);
       [...incoming, ...peers].forEach(r => [...(r.required_fields || []), ...(r.branch_alt_fields || [])].forEach(f => {
@@ -600,11 +643,30 @@ function batchSaveRules(fiscalYear, ageGroup, rules, adminEmail) {
     const idColIndex = snapshotHeaders.indexOf('rule_id');
     const metricKeyColIndex = snapshotHeaders.indexOf('metric_key');
     const storedKeyByRuleId = new Map();
+    const storedNameByRuleId = new Map();
     for (let i = 1; i < snapshot.length; i++) {
-      if (String(arrayToObj(snapshotHeaders, snapshot[i]).fiscal_year) === String(fiscalYear) && arrayToObj(snapshotHeaders, snapshot[i]).age_group === ageGroup) {
+      const stored = arrayToObj(snapshotHeaders, snapshot[i]);
+      if (String(stored.fiscal_year) === String(fiscalYear) && stored.age_group === ageGroup) {
         storedKeyByRuleId.set(snapshot[i][idColIndex], metricKeyColIndex !== -1 ? snapshot[i][metricKeyColIndex] : undefined);
+        storedNameByRuleId.set(snapshot[i][idColIndex], stored.display_name);
       }
     }
+
+    // Issue #148: every deletion is named, against the same snapshot that is written
+    const incomingIds = new Set(rules.map(rule => rule.rule_id));
+    for (const id of deletedIds) {
+      if (!storedKeyByRuleId.has(id)) return { success: false, error: `deleted rule ${id} is not a stored rule of fiscal_year=${fiscalYear}, age_group=${ageGroup}` };
+      if (incomingIds.has(id)) return { success: false, error: `rule ${id} is both saved and deleted in one request` };
+    }
+    for (const id of storedKeyByRuleId.keys()) {
+      if (!incomingIds.has(id) && !deletedIds.includes(id)) {
+        return { success: false, error: `stored rule ${id} is missing from the request and not listed in deleted_rule_ids` };
+      }
+    }
+    if (rules.length === 0) {
+      return { success: false, error: `the save would leave fiscal_year=${fiscalYear}, age_group=${ageGroup} with no rules; deactivate a rule instead` };
+    }
+
     const resolvedMetricKeys = new Map();
     for (const rule of rules) {
       const resolution = resolveMetricKeyForSave_(rule, storedKeyByRuleId.get(rule.rule_id));
@@ -659,7 +721,7 @@ function batchSaveRules(fiscalYear, ageGroup, rules, adminEmail) {
           case 'branch_alt_fields': return JSON.stringify(rule.branch_alt_fields || []);
           case 'is_required_for_v2': return rule.is_required_for_v2 !== false;
           case 'is_active': return rule.is_active !== false;
-          case 'target_age_months': return rule.target_age_months !== undefined ? rule.target_age_months : '';
+          case 'target_age_months': return hasTargetAge_(rule.target_age_months) ? rule.target_age_months : '';
           case 'date_checks': return rule.date_checks === undefined ? (data.slice(1).find(row => row[headers.indexOf('rule_id')] === rule.rule_id)?.[headers.indexOf('date_checks')] || '') : JSON.stringify(rule.date_checks);
           case 'metric_key': return resolvedMetricKeys.get(rule.rule_id);
           case 'born_on_or_after':
@@ -687,8 +749,13 @@ function batchSaveRules(fiscalYear, ageGroup, rules, adminEmail) {
       };
     }
 
+    // Issue #148: configuration only (rule_id, display_name) — no individual-level data
+    const added = rules.filter(rule => !storedKeyByRuleId.has(rule.rule_id))
+      .map(rule => ({ rule_id: rule.rule_id, display_name: rule.display_name }));
+    const deleted = deletedIds.map(id => ({ rule_id: id, display_name: storedNameByRuleId.get(id) }));
     logAction('SYSTEM', adminEmail, 'batch_save_rules',
-      `Batch saved ${newRows.length} rules for fiscal_year=${fiscalYear}, age_group=${ageGroup}`);
+      `Batch saved ${newRows.length} rules for fiscal_year=${fiscalYear}, age_group=${ageGroup}; ` +
+      `added=${JSON.stringify(added)}; deleted=${JSON.stringify(deleted)}`);
 
     return { success: true, saved_count: newRows.length };
   });
