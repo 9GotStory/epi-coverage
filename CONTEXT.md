@@ -535,6 +535,7 @@ Preferred examples:
 - Summary Regeneration for recomputing Dashboard Summaries, never "Sync Summaries" or "sync"
 - View 2 Pending for the record-level not-yet-due state, never bare "pending" (which is an Approval Status)
 - Inapplicable Rule for a rule outside the child's Birth Window, never "not applicable" for a rule that is pending or not evaluable
+- Cohort Birth Range for the birth dates an Age Group reports on in a Fiscal Year, never "Birth Window" (which belongs to one Vaccine Rule)
 - HDC Result Mismatch for a disagreement between the rule result and the HDC `result`, never "HDC override"
 - "ตรวจสอบประวัติ" (review history, code `REVIEW` / `review*`) for a rule or record held back only by a date-check warning (§23), never "missing" or "ไม่ผ่าน"
 
@@ -638,3 +639,14 @@ A Dashboard Summary is a measurement of data that exists. An Age Group with no A
 **Summary Regeneration** recomputes the Dashboard Summaries (§44) of one Fiscal Year from the Active Records already stored, without a new Import (§27). Thai UI wording: "ประมวลผล Dashboard ใหม่".
 
 It is not a sync. "Sync" in this project means Full-File Sync (§29), which can deactivate records. Summary Regeneration never changes Individual EPI Records.
+
+---
+
+## 46. Cohort Birth Range
+
+The **Cohort Birth Range** is the range of birth dates of the children that one Age Group (§9) reports on for one Fiscal Year (§10) (Issue #136). Thai UI wording: "กลุ่มเกิดของปีงบประมาณ"; a child born outside it is "ไม่อยู่ในกลุ่มเกิด".
+
+- It runs from 1 October to 30 September, inclusive at both ends, shifted back from the Fiscal Year by the Age Group's age. For example, the 2-year Cohort Birth Range of Fiscal Year 2570 is 1 Oct 2567 to 30 Sep 2568 (2024-10-01..2025-09-30).
+- A quarter's cohort is the matching three months of that range.
+
+Do not confuse it with a Birth Window (§41), whose Thai wording is "ช่วงวันเกิด". A Birth Window is an optional per-rule range that decides whether one Vaccine Rule applies to a child. A Cohort Birth Range decides which children an Age Group and Fiscal Year report on at all.

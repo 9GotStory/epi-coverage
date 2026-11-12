@@ -2,6 +2,7 @@
 /**
  * Issue #134 (#115) — the upload page must make the Summary Regeneration scope visible before
  * anything is written, and must say when an import wrote no Dashboard Summary.
+ * Issue #136 — the page preselects no Fiscal Year; nothing can start until the admin chooses one.
  *
  * Seam: the rendered page with the real `useUploadManager`; only external boundaries are mocked
  * (`fetchApi`, the file parser, `sonner`). All records are synthetic.
@@ -27,11 +28,11 @@ afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 describe('Issue #134 — Summary Regeneration confirmation', () => {
   it('the dialog title names the selected Fiscal Year and the description lists the four Age Groups', async () => {
-    // Pin today (default year FY2570, options 2567–2571); only Date is faked so the dialog's timers still run.
+    // Pin today (options 2567–2571); only Date is faked so the dialog's timers still run.
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-11-12T09:00:00+07:00'));
     renderPage();
-    // A year other than the default, so the title is shown to follow the selector.
+    // A year other than the current one, so the title is shown to follow the selector.
     fireEvent.change(screen.getByRole('combobox', { name: 'ปีงบประมาณ' }), { target: { value: '2569' } });
 
     fireEvent.click(screen.getByRole('button', { name: 'ประมวลผล Dashboard ใหม่ทั้งหมด' }));
@@ -56,9 +57,11 @@ describe('Issue #134 — import result when no summary was created', () => {
     api.fetchApi.mockImplementation(async (action: string) => {
       if (action === 'preflightEpiImport') return { data: {
         success: true, batchId: 'server-echo', targetTable: 'Epi_1_Year', fiscalYear: '2569', mode: 'sync',
-        matched: 1, newRows: 0, wouldDeactivate: 0, activeBefore: 1,
-        byHoscode: [{ hoscode: '00001', activeBefore: 1, matched: 1, newRows: 0, wouldDeactivate: 0 }],
-        risk: { zeroMatchHoscodes: [], shrinkOverThreshold: false }, requiredConfirmation: null, shrinkThreshold: 0.2,
+        matched: 1, newRows: 0, wouldDeactivate: 0, activeBefore: 1, outsideCohort: 0,
+        byHoscode: [{ hoscode: '00001', activeBefore: 1, matched: 1, newRows: 0, wouldDeactivate: 0, outsideCohort: 0 }],
+        risk: { zeroMatchHoscodes: [], shrinkOverThreshold: false, outsideCohortBirthRange: false },
+        cohortBirthRange: { start: '2024-10-01', end: '2025-09-30' }, outsideCohortFiscalYear: null,
+        requiredConfirmations: null, shrinkThreshold: 0.2,
       } };
       if (action === 'upsertEpiData') return { data: { success: true, inserted: 0, updated: 1 } };
       if (action === 'cleanupEpiData') return { data: { success: true, deactivated: 0 } };
@@ -66,6 +69,7 @@ describe('Issue #134 — import result when no summary was created', () => {
       return { data: { success: true } };
     });
     const { container } = renderPage();
+    fireEvent.change(screen.getByRole('combobox', { name: 'ปีงบประมาณ' }), { target: { value: '2569' } });
 
     const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
     fireEvent.change(fileInput, { target: { files: [new File(['x'], 'EPI-1YEAR.json', { type: 'application/json' })] } });
@@ -75,5 +79,32 @@ describe('Issue #134 — import result when no summary was created', () => {
     await screen.findByText('นำเข้าข้อมูลสำเร็จ');
     expect(screen.getByText('ไม่ได้สร้างสรุปเพราะไม่มีรายการที่เปิดใช้งาน')).toBeTruthy();
     await waitFor(() => expect(api.fetchApi).not.toHaveBeenCalledWith('saveDashboardSummary', expect.anything()));
+  });
+});
+
+describe('Issue #136 — no default Fiscal Year on the upload page', () => {
+  const chooseFile = (container: HTMLElement) => fireEvent.change(container.querySelector('input[type="file"]') as HTMLInputElement,
+    { target: { files: [new File(['x'], 'EPI-1YEAR.json', { type: 'application/json' })] } });
+
+  it('starts with no Fiscal Year selected', () => {
+    renderPage();
+    const select = screen.getByRole('combobox', { name: 'ปีงบประมาณ' }) as HTMLSelectElement;
+    expect(select.value).toBe('');
+    expect(select.selectedOptions[0].textContent).toBe('เลือกปีงบประมาณ');
+  });
+
+  it('accepts no file and offers no Summary Regeneration until a year is chosen', async () => {
+    parser.parseHdcFile.mockResolvedValue({ rows: [], columns: [] });
+    const { container } = renderPage();
+    const regenerate = screen.getByRole('button', { name: 'ประมวลผล Dashboard ใหม่ทั้งหมด' }) as HTMLButtonElement;
+    expect(regenerate.disabled).toBe(true);
+    chooseFile(container);
+    expect(parser.parseHdcFile).not.toHaveBeenCalled();
+    expect(screen.getByText('เลือกปีงบประมาณก่อนอัปโหลดไฟล์')).toBeTruthy();
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'ปีงบประมาณ' }), { target: { value: '2569' } });
+    expect(regenerate.disabled).toBe(false);
+    chooseFile(container);
+    await waitFor(() => expect(parser.parseHdcFile).toHaveBeenCalledTimes(1));
   });
 });

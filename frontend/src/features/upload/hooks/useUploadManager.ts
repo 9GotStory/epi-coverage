@@ -70,6 +70,13 @@ async function writeTableSummaries(targetTable: TargetTable, fiscalYear: string)
 }
 export type UploadStatus = 'idle' | 'parsing' | 'preflighting' | 'confirming' | 'uploading' | 'cleaning' | 'generating_summary' | 'success' | 'error';
 
+/**
+ * Issue #136: each risk condition has its own typed number. `existingChildren` is the #111 zero-match / shrink
+ * number; `outsideCohort` counts file rows born outside the selected Cohort Birth Range (CONTEXT.md §46).
+ */
+export type RiskConfirmation = 'existingChildren' | 'outsideCohort';
+export type TypedConfirmations = Partial<Record<RiskConfirmation, string>>;
+
 /** Issue #111: server-side preview of an import — counts and facility codes only, never identities. */
 export interface ImportPreflight {
   batchId: string;
@@ -80,10 +87,15 @@ export interface ImportPreflight {
   newRows: number;
   wouldDeactivate: number;
   activeBefore: number;
-  byHoscode: Array<{ hoscode: string; activeBefore: number; matched: number; newRows: number; wouldDeactivate: number }>;
-  risk: { zeroMatchHoscodes: string[]; shrinkOverThreshold: boolean };
-  /** The number the admin must type before the server accepts any write; null when the import is safe. */
-  requiredConfirmation: number | null;
+  outsideCohort: number;
+  byHoscode: Array<{ hoscode: string; activeBefore: number; matched: number; newRows: number; wouldDeactivate: number; outsideCohort: number }>;
+  risk: { zeroMatchHoscodes: string[]; shrinkOverThreshold: boolean; outsideCohortBirthRange: boolean };
+  /** The selected Age Group and Fiscal Year's Cohort Birth Range, CE `yyyy-MM-dd`, inclusive. */
+  cohortBirthRange: { start: string; end: string };
+  /** The one Fiscal Year (same Age Group) every out-of-range birth matches; null when none or several. */
+  outsideCohortFiscalYear: string | null;
+  /** The numbers the admin must type, one per fired condition, before the server accepts any write; null when the import is safe. */
+  requiredConfirmations: Partial<Record<RiskConfirmation, number>> | null;
   /** The sync shrink ratio the server applied (single source: backend EPI_SYNC_SHRINK_THRESHOLD). */
   shrinkThreshold: number;
 }
@@ -100,9 +112,8 @@ export function useUploadManager() {
   const [file, setFile] = useState<File | null>(null);
   const [previewData, setPreviewData] = useState<any[]>([]);
   const [totalRows, setTotalRows] = useState(0);
-  const [fiscalYear, setFiscalYear] = useState<string>(
-    String(new Date().getFullYear() + 543 + (new Date().getMonth() >= 9 ? 1 : 0))
-  );
+  // Issue #136: no default — a preselected current year caused a wrong-year import; the admin must choose.
+  const [fiscalYear, setFiscalYear] = useState<string>('');
   const [targetTable, setTargetTable] = useState<TargetTable>('Epi_1_Year');
   
   const [isUploading, setIsUploading] = useState(false);
@@ -143,7 +154,7 @@ export function useUploadManager() {
 
   /** Phase 1 (Issue #111): read-only server preflight. Nothing is written until confirmUpload(). */
   const handleUpload = useCallback(async () => {
-    if (!file || isUploading || status === 'parsing' || status === 'confirming') return;
+    if (!file || !fiscalYear || isUploading || status === 'parsing' || status === 'confirming') return;
     setIsUploading(true);
     setStatus('preflighting');
     setErrorMsg('');
@@ -175,15 +186,15 @@ export function useUploadManager() {
     setStatus('idle');
   }, []);
 
-  /** Phase 2: typed confirmation (server-checked) when the preflight requires it, then the import itself. */
-  const confirmUpload = useCallback(async (typedNumber?: string) => {
+  /** Phase 2: typed confirmation (server-checked, one number per fired condition) when required, then the import itself. */
+  const confirmUpload = useCallback(async (typedNumbers?: TypedConfirmations) => {
     const pending = pendingRef.current;
     if (!pending || !preflight || isUploading) return;
     setIsUploading(true);
     setErrorMsg('');
-    if (preflight.requiredConfirmation != null) {
+    if (preflight.requiredConfirmations != null) {
       try {
-        const res = await fetchApi('confirmEpiImport', { batchId: pending.batchId, typedNumber });
+        const res = await fetchApi('confirmEpiImport', { batchId: pending.batchId, typedNumbers });
         if (res.data?.error || res.data?.success === false) throw new Error(res.data?.error || 'ยืนยันไม่สำเร็จ');
       } catch (err: any) {
         console.error(err);
@@ -273,6 +284,7 @@ export function useUploadManager() {
   }, []);
 
   const handleSyncAll = useCallback(async () => {
+    if (!fiscalYear) return; // Issue #136: never regenerate a year the admin did not choose
     setIsSyncing(true);
     // Issue #134: refresh unless the run certainly wrote nothing; a failure part-way may follow saved tables.
     let wroteNothing = false;

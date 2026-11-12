@@ -79,7 +79,7 @@ function handleRequest(method, e) {
       case 'setupOpenDataTrigger': return responseJson(setupOpenDataTrigger());
       // Issue #111: mandatory read-only preflight + server-checked typed confirmation before any EPI write
       case 'preflightEpiImport': return responseJson(preflightEpiImport(body.keyChunks, body.batchId, authResult, body.fiscalYear, body.targetTable, body.mode));
-      case 'confirmEpiImport': return responseJson(confirmEpiImport(body.batchId, body.typedNumber, authResult));
+      case 'confirmEpiImport': return responseJson(confirmEpiImport(body.batchId, body.typedNumbers, authResult));
       case 'upsertEpiData': return responseJson(upsertEpiData(body.chunk, body.batchId, authResult, body.fiscalYear, body.targetTable, body.options));
       case 'cleanupEpiData': return responseJson(cleanupEpiData(body.batchId, body.touchedHoscodes, authResult.email, body.fiscalYear, body.targetTable));
 

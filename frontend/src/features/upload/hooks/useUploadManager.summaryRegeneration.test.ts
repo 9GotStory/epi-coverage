@@ -53,9 +53,11 @@ function stubApi(activeRecords: Partial<Record<Table, Record<string, unknown>[]>
 
 const safePreflight = {
   success: true, batchId: 'server-echo', targetTable: 'Epi_1_Year', fiscalYear: '2569', mode: 'sync',
-  matched: 2, newRows: 0, wouldDeactivate: 0, activeBefore: 2,
-  byHoscode: [{ hoscode: '00001', activeBefore: 2, matched: 2, newRows: 0, wouldDeactivate: 0 }],
-  risk: { zeroMatchHoscodes: [], shrinkOverThreshold: false }, requiredConfirmation: null, shrinkThreshold: 0.2,
+  matched: 2, newRows: 0, wouldDeactivate: 0, activeBefore: 2, outsideCohort: 0,
+  byHoscode: [{ hoscode: '00001', activeBefore: 2, matched: 2, newRows: 0, wouldDeactivate: 0, outsideCohort: 0 }],
+  risk: { zeroMatchHoscodes: [], shrinkOverThreshold: false, outsideCohortBirthRange: false },
+  cohortBirthRange: { start: '2024-10-01', end: '2025-09-30' }, outsideCohortFiscalYear: null,
+  requiredConfirmations: null, shrinkThreshold: 0.2,
 };
 
 let client: QueryClient;

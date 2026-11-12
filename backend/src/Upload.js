@@ -88,11 +88,38 @@ function epiRecordIdentityValid(record) {
     /^\d{4}-\d{2}-\d{2}$/.test(record.birth || '');
 }
 
-/** Counts-only audit text (Issue #111 Q11) — never identities. */
+/** Issue #136: the Age Group (in years) an EPI table reports on, e.g. 'Epi_2_Year' → 2. */
+function epiTableAge(targetTable) {
+  return Number(/^Epi_(\d)_Year$/.exec(targetTable)[1]);
+}
+
+/**
+ * Issue #136: the Cohort Birth Range (CONTEXT.md §46) of an Age Group for a Fiscal Year (BE): 1 Oct to 30 Sep,
+ * inclusive, shifted back by the age. CE `yyyy-MM-dd`, so a validated birth compares as a string.
+ */
+function epiCohortBirthRange(fiscalYear, age) {
+  const endYear = Number(fiscalYear) - 543 - age;
+  return { start: `${endYear - 1}-10-01`, end: `${endYear}-09-30` };
+}
+
+/** Issue #136: the Fiscal Year (BE) whose Cohort Birth Range for this age contains a `yyyy-MM-dd` birth. */
+function epiCohortFiscalYear(birth, age) {
+  return String(Number(birth.slice(0, 4)) + 543 + age + (Number(birth.slice(5, 7)) >= 10 ? 1 : 0));
+}
+
+/** Audit label of each risk condition's typed number (Issue #136), keyed like `requiredConfirmations`. */
+const EPI_CONFIRMATION_AUDIT_LABEL = { existingChildren: 'existing children', outsideCohort: 'outside cohort' };
+
+/** Counts-only audit text (Issue #111 Q11, #136) — never identities. */
 function epiPreflightAuditText(preflight) {
-  const confirmation = preflight.requiredConfirmation == null ? 'confirmation not required' : `typed ${preflight.requiredConfirmation}`;
+  const required = preflight.requiredConfirmations;
+  const confirmation = required == null ? 'confirmation not required'
+    : 'typed ' + Object.entries(required).map(([name, count]) => `${EPI_CONFIRMATION_AUDIT_LABEL[name]} ${count}`).join(', ');
+  const range = preflight.cohortBirthRange;
+  const outside = `outside cohort birth range ${range.start}..${range.end}: ${preflight.outsideCohort}` +
+    (preflight.outsideCohortFiscalYear ? ` (births match FY ${preflight.outsideCohortFiscalYear})` : '');
   return `preflight: matched ${preflight.matched}, new ${preflight.newRows}, would deactivate ${preflight.wouldDeactivate} of ${preflight.activeBefore} active; ` +
-    `zero-match facilities [${preflight.risk.zeroMatchHoscodes.join(', ')}], shrink over threshold ${preflight.risk.shrinkOverThreshold}; ${confirmation}`;
+    `zero-match facilities [${preflight.risk.zeroMatchHoscodes.join(', ')}], shrink over threshold ${preflight.risk.shrinkOverThreshold}; ${outside}; ${confirmation}`;
 }
 
 function epiChunkKeyFingerprint(records, fiscalYear, timeZone) {
@@ -127,10 +154,10 @@ function preflightEpiImport(keyChunks, batchId, auth, fiscalYear, targetTable = 
     const receipts = batches.getDataRange().getValues();
     if (receipts.some((row, i) => i > 0 && row[0] === batchId)) return { success: false, error: 'Batch already exists. Start a new import.' };
 
-    const incoming = new Map(); // import key → hoscode
-    keyChunks.flat().forEach(key => incoming.set(epiImportKey(key, fiscalYear, timeZone), key.hoscode));
-    const hoscodes = [...new Set(incoming.values())].sort();
-    const facility = Object.fromEntries(hoscodes.map(code => [code, { hoscode: code, activeBefore: 0, matched: 0, newRows: 0, wouldDeactivate: 0 }]));
+    const incoming = new Map(); // import key → Record Identity fields
+    keyChunks.flat().forEach(key => incoming.set(epiImportKey(key, fiscalYear, timeZone), key));
+    const hoscodes = [...new Set([...incoming.values()].map(key => key.hoscode))].sort();
+    const facility = Object.fromEntries(hoscodes.map(code => [code, { hoscode: code, activeBefore: 0, matched: 0, newRows: 0, wouldDeactivate: 0, outsideCohort: 0 }]));
     const existing = new Set();
     const existingActive = new Set(); // only these count as "matching a current child" for the zero-match risk
     const sheet = ss.getSheetByName(targetTable); // never created here: preflight is read-only for EPI data
@@ -146,25 +173,41 @@ function preflightEpiImport(keyChunks, batchId, auth, fiscalYear, targetTable = 
         if (mode === 'sync' && !incoming.has(key)) stats.wouldDeactivate++;
       });
     }
+    const age = epiTableAge(targetTable);
+    const cohortBirthRange = epiCohortBirthRange(fiscalYear, age);
+    const outsideYears = new Set();
     const matchedActive = Object.fromEntries(hoscodes.map(code => [code, 0]));
-    incoming.forEach((code, key) => {
-      if (existing.has(key)) facility[code].matched++; else facility[code].newRows++;
-      if (existingActive.has(key)) matchedActive[code]++;
+    incoming.forEach((identity, key) => {
+      const stats = facility[identity.hoscode];
+      if (existing.has(key)) stats.matched++; else stats.newRows++;
+      if (existingActive.has(key)) matchedActive[identity.hoscode]++;
+      // Issue #136: a correct file has every child inside the selected Cohort Birth Range.
+      if (identity.birth < cohortBirthRange.start || identity.birth > cohortBirthRange.end) {
+        stats.outsideCohort++;
+        outsideYears.add(epiCohortFiscalYear(identity.birth, age));
+      }
     });
 
     const byHoscode = hoscodes.map(code => facility[code]);
     const sum = field => byHoscode.reduce((total, stats) => total + stats[field], 0);
-    const counts = { matched: sum('matched'), newRows: sum('newRows'), wouldDeactivate: sum('wouldDeactivate'), activeBefore: sum('activeBefore') };
+    const counts = { matched: sum('matched'), newRows: sum('newRows'), wouldDeactivate: sum('wouldDeactivate'), activeBefore: sum('activeBefore'),
+      outsideCohort: sum('outsideCohort') };
     const risk = {
       // A match against an already-deactivated row would silently reactivate it, so it is not a reassuring match.
       zeroMatchHoscodes: byHoscode.filter(stats => stats.activeBefore > 0 && matchedActive[stats.hoscode] === 0).map(stats => stats.hoscode),
       shrinkOverThreshold: mode === 'sync' && counts.activeBefore > 0 && counts.wouldDeactivate / counts.activeBefore > EPI_SYNC_SHRINK_THRESHOLD,
+      outsideCohortBirthRange: counts.outsideCohort > 0,
     };
-    const risky = risk.zeroMatchHoscodes.length > 0 || risk.shrinkOverThreshold;
+    // Each risk condition has its own typed number, so one warning can never hide another (Issue #136).
     // Sync: children that would be deactivated. Merge: file rows that do not match a current child (new rows + reactivations).
     const notMatchingActive = incoming.size - Object.values(matchedActive).reduce((total, count) => total + count, 0);
-    const requiredConfirmation = risky ? (mode === 'sync' ? counts.wouldDeactivate : notMatchingActive) : null;
-    const summary = { ...counts, byHoscode, risk, requiredConfirmation, shrinkThreshold: EPI_SYNC_SHRINK_THRESHOLD };
+    const required = {
+      ...(risk.zeroMatchHoscodes.length > 0 || risk.shrinkOverThreshold ? { existingChildren: mode === 'sync' ? counts.wouldDeactivate : notMatchingActive } : {}),
+      ...(risk.outsideCohortBirthRange ? { outsideCohort: counts.outsideCohort } : {}),
+    };
+    const summary = { ...counts, byHoscode, risk, cohortBirthRange,
+      outsideCohortFiscalYear: outsideYears.size === 1 ? [...outsideYears][0] : null,
+      requiredConfirmations: Object.keys(required).length ? required : null, shrinkThreshold: EPI_SYNC_SHRINK_THRESHOLD };
     const record = { ...summary, hoscodes, preflightAt: new Date().toISOString(), preflightBy: auth && auth.email, confirmedAt: null,
       chunkKeyFingerprints: keyChunks.map(chunk => epiChunkKeyFingerprint(chunk, fiscalYear, timeZone)),
       overlapSnapshot: epiOverlapSnapshot(receipts, batchId, targetTable, fiscalYear, hoscodes) };
@@ -175,8 +218,11 @@ function preflightEpiImport(keyChunks, batchId, auth, fiscalYear, targetTable = 
   });
 }
 
-/** Issue #111: the uploading admin types the number the preflight computed; only the server-side count counts. */
-function confirmEpiImport(batchId, typedNumber, auth) {
+/**
+ * Issue #111/#136: the uploading admin types each number the preflight computed, keyed like `requiredConfirmations`;
+ * only the server-side counts count. A single number (the pre-#136 format) is not a confirmation.
+ */
+function confirmEpiImport(batchId, typedNumbers, auth) {
   return withEpiImportLock(() => {
     const ss = getSpreadsheet();
     const batches = epiBatchSheet(ss);
@@ -184,9 +230,13 @@ function confirmEpiImport(batchId, typedNumber, auth) {
     const receipt = receipts.find((row, i) => i > 0 && row[0] === batchId);
     if (!receipt || receipt[7] !== 'preflight' || !receipt[9]) return { success: false, error: 'No pending preflight for this batch.' };
     const preflight = JSON.parse(receipt[9]);
-    if (preflight.requiredConfirmation == null) return { success: true, required: false };
+    // Issue #136: the Cohort Birth Range check never ran on a pre-#136 receipt, so it cannot be confirmed either.
+    if (!preflight.cohortBirthRange) return { success: false, error: 'Preflight is out of date. Start a new import.' };
+    const required = preflight.requiredConfirmations;
+    if (required == null) return { success: true, required: false };
     if ((auth && auth.email) !== preflight.preflightBy) return { success: false, error: 'Only the admin who ran the preflight can confirm.' };
-    if (String(typedNumber == null ? '' : typedNumber).trim() !== String(preflight.requiredConfirmation)) {
+    const typed = typedNumbers && typeof typedNumbers === 'object' && !Array.isArray(typedNumbers) ? typedNumbers : {};
+    if (Object.keys(required).some(name => String(typed[name] == null ? '' : typed[name]).trim() !== String(required[name]))) {
       return { success: false, error: 'Typed number does not match.' };
     }
     preflight.confirmedAt = new Date().toISOString();
@@ -244,7 +294,9 @@ function upsertEpiData(chunk, batchId, auth, fiscalYear, targetTable = 'Epi_1_Ye
     if (!['preflight', 'uploading'].includes(receipt[7])) return { success: false, error: 'Batch is already finalized.' };
     const preflight = receipt[9] ? JSON.parse(receipt[9]) : null;
     if (!preflight) return { success: false, error: 'Run the import preflight first.' };
-    if (preflight.requiredConfirmation != null && !preflight.confirmedAt) return { success: false, error: 'Typed confirmation required.' };
+    // Issue #136: the Cohort Birth Range check never ran on a pre-#136 receipt. Refuse only its first write, so an import already writing finishes.
+    if (receipt[7] === 'preflight' && !preflight.cohortBirthRange) return { success: false, error: 'Preflight is out of date. Start a new import.' };
+    if (preflight.requiredConfirmations != null && !preflight.confirmedAt) return { success: false, error: 'Typed confirmation required.' };
     if (epiChunkKeyFingerprint(chunk, fiscalYear, timeZone) !== preflight.chunkKeyFingerprints[index]) {
       return { success: false, error: 'Chunk does not match the preflighted file.' };
     }

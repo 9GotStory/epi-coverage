@@ -42,7 +42,8 @@ export function UploadDashboard() {
       'application/vnd.ms-excel': ['.xls'],
       'application/json': ['.json']
     },
-    disabled: isUploading || status === 'parsing',
+    // Issue #136: a file locks the year selector, so no file is accepted before a year is chosen.
+    disabled: !fiscalYear || isUploading || status === 'parsing',
     maxFiles: 1
   });
 
@@ -76,6 +77,8 @@ export function UploadDashboard() {
               onChange={(e) => setFiscalYear(e.target.value)}
               disabled={!!file || status === 'success' || isUploading}
             >
+              {/* Issue #136: no default year; the admin must choose one */}
+              <option value="" disabled>เลือกปีงบประมาณ</option>
               {Array.from({ length: 5 }, (_, i) => {
                 const y = (new Date().getFullYear() + 543) - 2 + i;
                 return (
@@ -185,10 +188,13 @@ export function UploadDashboard() {
           <h3 className="text-[17px] font-semibold tracking-[-0.374px] text-[#1d1d1f] ml-2">3. อัปโหลดไฟล์ HDC</h3>
           <div
             {...getRootProps()}
-            className={`border border-[#e0e0e0] rounded-[32px] p-16 text-center cursor-pointer transition-all duration-300 ease-in-out
-              ${isDragActive 
-                ? 'bg-[#f0f8ff] border-[#0066cc] scale-[1.02]' 
-                : 'bg-[#fafafc] hover:bg-white hover:shadow-[0_4px_24px_rgba(0,0,0,0.04)] hover:scale-[1.01]'}`}
+            aria-disabled={!fiscalYear}
+            className={`border border-[#e0e0e0] rounded-[32px] p-16 text-center transition-all duration-300 ease-in-out
+              ${!fiscalYear
+                ? 'bg-[#fafafc] opacity-50 cursor-not-allowed'
+                : isDragActive
+                ? 'bg-[#f0f8ff] border-[#0066cc] scale-[1.02] cursor-pointer'
+                : 'bg-[#fafafc] cursor-pointer hover:bg-white hover:shadow-[0_4px_24px_rgba(0,0,0,0.04)] hover:scale-[1.01]'}`}
           >
           <input {...getInputProps()} />
           <UploadCloud className={`mx-auto h-16 w-16 mb-6 transition-colors duration-300 ${isDragActive ? 'text-[#0066cc] animate-bounce' : 'text-[#cccccc]'}`} />
@@ -196,7 +202,7 @@ export function UploadDashboard() {
             ลากไฟล์ Excel หรือ JSON มาวางที่นี่
           </h3>
           <p className="text-[17px] font-normal text-[#7a7a7a] tracking-[-0.374px]">
-            หรือคลิกเพื่อเลือกไฟล์ (รองรับ .xlsx, .xls และ .json)
+            {fiscalYear ? 'หรือคลิกเพื่อเลือกไฟล์ (รองรับ .xlsx, .xls และ .json)' : 'เลือกปีงบประมาณก่อนอัปโหลดไฟล์'}
           </p>
           </div>
         </div>
@@ -317,7 +323,7 @@ export function UploadDashboard() {
             เครื่องมือขั้นสูง: ประมวลผล Dashboard ใหม่ (Summary Regeneration)
           </h3>
           <p className="text-sm text-slate-500 mb-4">
-            ใช้ปุ่มนี้เพื่อคำนวณและสร้าง Cache สำหรับหน้า Dashboard ใหม่ทั้งหมด (ทั้ง 4 กลุ่มอายุ) สำหรับปีงบประมาณ {fiscalYear}
+            ใช้ปุ่มนี้เพื่อคำนวณและสร้าง Cache สำหรับหน้า Dashboard ใหม่ทั้งหมด (ทั้ง 4 กลุ่มอายุ) สำหรับปีงบประมาณ {fiscalYear || 'ที่เลือกในข้อ 1'}
             โดยดึงข้อมูลล่าสุดจากฐานข้อมูล (ใช้ในกรณีที่ข้อมูลหน้า Dashboard ไม่ตรงกับฐานข้อมูล)
           </p>
           {/* Issue #134: the year and the four Age Groups are named before anything is written. */}
@@ -329,7 +335,7 @@ export function UploadDashboard() {
           >
             <Button 
               variant="outline" 
-              disabled={isSyncing || isUploading}
+              disabled={!fiscalYear || isSyncing || isUploading}
               className="font-medium"
             >
               {isSyncing ? (
