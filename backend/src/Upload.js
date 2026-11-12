@@ -297,7 +297,15 @@ function upsertEpiData(chunk, batchId, auth, fiscalYear, targetTable = 'Epi_1_Ye
     if (replay) {
       if (replay.fingerprint !== fingerprint) return { success: false, error: 'Chunk contents differ from the original submission.' };
       ensureUploadAudit(batchId, index, replay.audit); // repair a missing audit from ORIGINAL metadata; never duplicate an existing one
-      return { success: true, inserted: 0, updated: 0, replayed: true, batch_id: batchId };
+      const replayed = { success: true, inserted: 0, updated: 0, replayed: true, batch_id: batchId };
+      if (receipt[7] === 'complete') return { ...replayed, finalized: true, deactivated: epiRecordedDeactivations(receipt) };
+      // Issue #144 (ADR-0011): every chunk is written but the finalize was cut off, so resending a chunk finishes it.
+      if (receipt[7] === 'uploading' && completed.length === total) {
+        const finalized = epiFinalizeBatch(ss, batches, receipts, receiptIndex, auth && auth.email);
+        if (!finalized.success) return finalized;
+        return { ...replayed, finalized: true, deactivated: finalized.deactivated };
+      }
+      return { ...replayed, finalized: false };
     }
     if (!['preflight', 'uploading'].includes(receipt[7])) return { success: false, error: 'Batch is already finalized.' };
     const preflight = receipt[9] ? JSON.parse(receipt[9]) : null;
@@ -363,7 +371,11 @@ function upsertEpiData(chunk, batchId, auth, fiscalYear, targetTable = 'Epi_1_Ye
     receipt[8] = new Date().toISOString();
     writeEpiRows(batches, receipts[0], receipts);
     ensureUploadAudit(batchId, index, auditMeta); // after the receipt is durable; a failure here surfaces instead of a false audited success
-    return { success: true, batch_id: batchId, inserted, updated };
+    if (completed.length !== total) return { success: true, batch_id: batchId, inserted, updated, finalized: false };
+    // Issue #144 (ADR-0011): the chunk that completes the batch finalizes it, so no client step sits between writing and finalizing.
+    const finalized = epiFinalizeBatch(ss, batches, receipts, receiptIndex, auth && auth.email);
+    if (!finalized.success) return finalized;
+    return { success: true, batch_id: batchId, inserted, updated, finalized: true, deactivated: finalized.deactivated };
   });
 }
 
@@ -377,41 +389,59 @@ function cleanupEpiData(batchId, touchedHoscodes, adminEmail, fiscalYear, target
     if (receiptIndex < 1) return { success: false, error: 'Import batch not found.' };
     const receipt = receipts[receiptIndex];
     if (receipt[1] !== targetTable || String(receipt[2]) !== String(fiscalYear)) return { success: false, error: 'Batch scope mismatch.' };
-    if (receipt[7] === 'complete') return { success: true, deactivated: 0, replayed: true };
-    if (['undoing', 'undone'].includes(receipt[7])) return { success: false, error: 'This import was undone.' }; // Issue #139/#140: never finalize it again
-    if (!receipt[9]) return { success: false, error: 'Run the import preflight first.' }; // Issue #111: legacy receipts cannot finalize
-    if (JSON.parse(receipt[5]).length !== Number(receipt[4])) return { success: false, error: 'Cannot finalize an incomplete batch.' };
-    const facilities = JSON.parse(receipt[6]); // Scope comes from validated records, never caller input.
-    if (receipt[3] === 'sync' && receipts.slice(receiptIndex + 1).some(row => row[1] === targetTable &&
-        String(row[2]) === String(fiscalYear) && JSON.parse(row[6]).some(code => facilities.includes(code)))) {
-      return { success: false, error: 'A newer import overlaps this batch. Import a fresh full file before syncing.' };
-    }
-    let deactivated = 0;
-    if (receipt[3] === 'sync') {
-      syncAllSchemasToExistingSheets(ss, { [targetTable]: getEpiSchemas()[targetTable] }); // a batch written before Issue #139 lacks the column
-      const sheet = ss.getSheetByName(targetTable);
-      const rows = sheet.getDataRange().getValues();
-      const headers = rows[0];
-      const activeIndex = headers.indexOf('is_active');
-      const deactivatedByIndex = headers.indexOf('deactivated_by_batch');
-      rows.slice(1).forEach(row => {
-        const record = arrayToObj(headers, row);
-        if (String(record.fiscal_year) === String(fiscalYear) && facilities.includes(String(record.hoscode)) &&
-            record.last_seen_batch !== batchId && String(record.is_active).toLowerCase() === 'true') {
-          row[activeIndex] = false; row[deactivatedByIndex] = batchId; deactivated++;
-        }
-      });
-      if (deactivated) writeEpiRows(sheet, headers, rows);
-    }
-    receipt[7] = 'complete'; receipt[8] = new Date().toISOString();
-    // Issue #139: the marker that this batch's deactivations are recorded row by row, which Import Undo requires.
-    receipt[10] = JSON.stringify({ at: receipt[8], deactivated, deactivationRecorded: true });
-    writeEpiRows(batches, receipts[0], receipts);
-    // Issue #80: Router ส่งอีเมลจาก session ที่ตรวจสอบแล้วเสมอ — fallback 'unknown' แทน
-    // ชื่อ 'Admin' แบบ generic เมื่อบัญชีไม่มีอีเมล
-    logAction('SYSTEM', adminEmail || 'unknown', 'cleanup_epi_data', `Batch ${batchId}: ${deactivated} deactivated (${receipt[3]}).`);
-    return { success: true, deactivated };
+    // Issue #144 (ADR-0011): the last chunk already finalized it; this endpoint is a replay for the previous frontend.
+    if (receipt[7] === 'complete') return { success: true, deactivated: epiRecordedDeactivations(receipt), replayed: true };
+    return epiFinalizeBatch(ss, batches, receipts, receiptIndex, adminEmail);
   });
+}
+
+/** Issue #144: the count the finalize recorded; a receipt finalized before Issue #139 has no marker. */
+function epiRecordedDeactivations(receipt) {
+  return receipt[10] ? Number(JSON.parse(receipt[10]).deactivated) || 0 : 0;
+}
+
+/**
+ * Issue #144 (ADR-0011): finalize a batch whose chunks are all written, under the caller's import lock.
+ * Repeatable: a finalize cut off after its row write is finished, and the count is every row this batch deactivated.
+ */
+function epiFinalizeBatch(ss, batches, receipts, receiptIndex, adminEmail) {
+  const receipt = receipts[receiptIndex];
+  const [batchId, targetTable, fiscalYear, mode] = receipt;
+  if (['undoing', 'undone'].includes(receipt[7])) return { success: false, error: 'This import was undone.' }; // Issue #139/#140: never finalize it again
+  if (!receipt[9]) return { success: false, error: 'Run the import preflight first.' }; // Issue #111: legacy receipts cannot finalize
+  if (JSON.parse(receipt[5]).length !== Number(receipt[4])) return { success: false, error: 'Cannot finalize an incomplete batch.' };
+  const facilities = JSON.parse(receipt[6]); // Scope comes from validated records, never caller input.
+  if (mode === 'sync' && receipts.slice(receiptIndex + 1).some(row => row[1] === targetTable &&
+      String(row[2]) === String(fiscalYear) && JSON.parse(row[6]).some(code => facilities.includes(code)))) {
+    return { success: false, error: 'A newer import overlaps this batch. Import a fresh full file before syncing.' };
+  }
+  let deactivated = 0;
+  if (mode === 'sync') {
+    syncAllSchemasToExistingSheets(ss, { [targetTable]: getEpiSchemas()[targetTable] }); // a batch written before Issue #139 lacks the column
+    const sheet = ss.getSheetByName(targetTable);
+    const rows = sheet.getDataRange().getValues();
+    const headers = rows[0];
+    const activeIndex = headers.indexOf('is_active');
+    const deactivatedByIndex = headers.indexOf('deactivated_by_batch');
+    let changed = false;
+    rows.slice(1).forEach(row => {
+      const record = arrayToObj(headers, row);
+      if (String(record.fiscal_year) !== String(fiscalYear) || !facilities.includes(String(record.hoscode))) return;
+      if (record.last_seen_batch !== batchId && String(record.is_active).toLowerCase() === 'true') {
+        row[activeIndex] = false; row[deactivatedByIndex] = batchId; changed = true;
+      }
+      if (row[deactivatedByIndex] === batchId) deactivated++;
+    });
+    if (changed) writeEpiRows(sheet, headers, rows);
+  }
+  receipt[7] = 'complete'; receipt[8] = new Date().toISOString();
+  // Issue #139: the marker that this batch's deactivations are recorded row by row, which Import Undo requires.
+  receipt[10] = JSON.stringify({ at: receipt[8], deactivated, deactivationRecorded: true });
+  writeEpiRows(batches, receipts[0], receipts);
+  // Issue #80: Router ส่งอีเมลจาก session ที่ตรวจสอบแล้วเสมอ — fallback 'unknown' แทน
+  // ชื่อ 'Admin' แบบ generic เมื่อบัญชีไม่มีอีเมล
+  logAction('SYSTEM', adminEmail || 'unknown', 'cleanup_epi_data', `Batch ${batchId}: ${deactivated} deactivated (${mode}).`);
+  return { success: true, deactivated };
 }
 
 /** Issue #139: Thai-free reason codes; the client words them (ADR-0009). */

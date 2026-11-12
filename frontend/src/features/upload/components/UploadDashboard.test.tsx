@@ -63,8 +63,7 @@ describe('Issue #134 — import result when no summary was created', () => {
         cohortBirthRange: { start: '2024-10-01', end: '2025-09-30' }, outsideCohortFiscalYear: null,
         requiredConfirmations: null, shrinkThreshold: 0.2,
       } };
-      if (action === 'upsertEpiData') return { data: { success: true, inserted: 0, updated: 1 } };
-      if (action === 'cleanupEpiData') return { data: { success: true, deactivated: 0 } };
+      if (action === 'upsertEpiData') return { data: { success: true, inserted: 0, updated: 1, finalized: true, deactivated: 0 } }; // Issue #144: the last chunk finalizes
       if (action === 'getEpiData') return { data: [] };
       return { data: { success: true } };
     });

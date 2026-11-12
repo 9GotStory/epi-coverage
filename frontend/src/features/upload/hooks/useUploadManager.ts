@@ -68,7 +68,7 @@ async function writeTableSummaries(targetTable: TargetTable, fiscalYear: string)
   }
   return true;
 }
-export type UploadStatus = 'idle' | 'parsing' | 'preflighting' | 'confirming' | 'uploading' | 'cleaning' | 'generating_summary' | 'success' | 'error';
+export type UploadStatus = 'idle' | 'parsing' | 'preflighting' | 'confirming' | 'uploading' | 'generating_summary' | 'success' | 'error';
 
 /**
  * Issue #136: each risk condition has its own typed number. `existingChildren` is the #111 zero-match / shrink
@@ -259,10 +259,10 @@ export function useUploadManager() {
     const { batchId, rows: allRows, fiscalYear, targetTable, importMode } = pending;
 
     try {
-      const touchedHoscodes = Array.from(new Set(allRows.map(r => r.hoscode).filter(Boolean))) as string[];
-      
       let inserted = 0;
       let updated = 0;
+      let finalized = false;
+      let deactivated = 0;
 
       // Chunking
       for (let i = 0; i < allRows.length; i += CHUNK_SIZE) {
@@ -274,18 +274,17 @@ export function useUploadManager() {
         if (payload.error) throw new Error(importRefusalText(payload, targetTable, fiscalYear, payload.error));
         inserted += payload.inserted || 0;
         updated += payload.updated || 0;
+        finalized = payload.finalized === true;
+        deactivated = payload.deactivated || 0;
         setResults({ inserted, updated, deactivated: 0 });
         
         const currentProgress = Math.floor(((i + chunk.length) / allRows.length) * 80); // 80% for upload phase
         setProgress(currentProgress);
       }
 
-      // Cleanup Phase
-      setStatus('cleaning');
-      const cleanupRes = await fetchApi('cleanupEpiData', { batchId, touchedHoscodes, fiscalYear, targetTable });
-      const cleanupPayload = cleanupRes.data;
-      if (cleanupPayload.error) throw new Error(cleanupPayload.error);
-      
+      // Issue #144 (ADR-0011): the server finalizes the batch with its last chunk; there is no separate cleanup request.
+      if (!finalized) throw new Error('ระบบยังไม่ปิดการนำเข้าชุดนี้ กรุณานำเข้าไฟล์ใหม่อีกครั้ง');
+
       // Generate and Save Dashboard Summary
       setStatus('generating_summary');
       setProgress(90);
@@ -293,7 +292,7 @@ export function useUploadManager() {
       setSummarySkipped(!(await writeTableSummaries(targetTable, fiscalYear)));
 
       setProgress(100);
-      setResults({ inserted, updated, deactivated: cleanupPayload.deactivated || 0 });
+      setResults({ inserted, updated, deactivated });
       setStatus('success');
       
       // Invalidate relevant queries to force dashboard and rules refresh

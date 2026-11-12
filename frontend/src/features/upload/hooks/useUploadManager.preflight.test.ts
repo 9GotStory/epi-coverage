@@ -45,8 +45,8 @@ function stubApi(preflight: Record<string, unknown>, { confirmError }: { confirm
   api.fetchApi.mockImplementation(async (action: string) => {
     if (action === 'preflightEpiImport') return { data: preflight };
     if (action === 'confirmEpiImport') return { data: confirmError ? { success: false, error: confirmError } : { success: true, required: true } };
-    if (action === 'upsertEpiData') return { data: { success: true, inserted: 2, updated: 0 } };
-    if (action === 'cleanupEpiData') return { data: { success: true, deactivated: 5 } };
+    // Issue #144 (ADR-0011): the last chunk finalizes the batch and reports its deactivations.
+    if (action === 'upsertEpiData') return { data: { success: true, inserted: 2, updated: 0, finalized: true, deactivated: 5 } };
     if (action === 'getEpiData') return { data: [] };
     if (action === 'getVaccineRules') return { data: [] };
     return { data: { success: true } };
@@ -83,14 +83,13 @@ describe('Issue #111 — preflight before any import write', () => {
     expect(result.current.preflight?.requiredConfirmations).toEqual({ existingChildren: 5 });
   });
 
-  it('a risky import confirms the typed number, then uploads the same batch and finalizes', async () => {
+  it('a risky import confirms the typed number, then uploads the same batch', async () => {
     stubApi(riskyPreflight);
     const result = await preparedHook();
     const batchId = (calls('preflightEpiImport')[0] as { batchId: string }).batchId;
     await act(async () => { await result.current.confirmUpload({ existingChildren: '5' }); });
     expect(calls('confirmEpiImport')).toEqual([{ batchId, typedNumbers: { existingChildren: '5' } }]);
     expect(calls('upsertEpiData')).toEqual([expect.objectContaining({ batchId, chunk: rows, fiscalYear: '2569', targetTable: 'Epi_1_Year' })]);
-    expect(calls('cleanupEpiData')).toEqual([expect.objectContaining({ batchId })]);
     expect(result.current.status).toBe('success');
   });
 
@@ -187,5 +186,30 @@ describe('Issue #140 — an Unfinished Import Undo blocks the import', () => {
     expect(result.current.status).toBe('error');
     expect(result.current.errorMsg).toMatch(/เด็ก 1 ปี.*ปีงบประมาณ 2569.*ย้อนการนำเข้าล่าสุด/);
     expect(calls('cleanupEpiData')).toHaveLength(0);
+  });
+});
+
+describe('Issue #144 — the last chunk finalizes the import (ADR-0011)', () => {
+  it('a successful import never calls cleanup, shows the finalizing chunk\'s deactivations, then writes the summaries', async () => {
+    stubApi(safePreflight);
+    const result = await preparedHook();
+    await act(async () => { await result.current.confirmUpload(); });
+    expect(calls('cleanupEpiData')).toHaveLength(0);
+    expect(result.current.status).toBe('success');
+    expect(result.current.results).toEqual({ inserted: 2, updated: 0, deactivated: 5 });
+    expect(calls('getEpiData')).toHaveLength(1); // the Dashboard Summary step still runs after the finalize
+  });
+
+  it('a last chunk that does not report the batch finalized is a failure: no cleanup call and no summary', async () => {
+    stubApi(safePreflight);
+    const result = await preparedHook();
+    const fetchApi = api.fetchApi.getMockImplementation()!;
+    api.fetchApi.mockImplementation(async (action: string, payload: unknown) =>
+      action === 'upsertEpiData' ? { data: { success: true, inserted: 2, updated: 0, finalized: false } } : fetchApi(action, payload));
+    await act(async () => { await result.current.confirmUpload(); });
+    expect(result.current.status).toBe('error');
+    expect(result.current.errorMsg).not.toBe('');
+    expect(calls('cleanupEpiData')).toHaveLength(0);
+    expect(calls('getEpiData')).toHaveLength(0);
   });
 });

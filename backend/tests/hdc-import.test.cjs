@@ -216,9 +216,10 @@ test('masked duplicate CIDs remain distinct by PID across repeated imports', () 
 
 test('a complete older sync cannot deactivate a newer overlapping import', () => {
   const { context: c, read } = setup();
-  upload(c, [person()], 'old-complete', 2569, 'Epi_1_Year', { mode: 'sync' });
+  upload(c, [person()], 'old-complete', 2569, 'Epi_1_Year', { mode: 'sync' }); // its only chunk finalized it (Issue #144)
   upload(c, [person({ cid: '0000000000002' })], 'newer');
-  assert.equal(finish(c, 'old-complete').success, false);
+  const replay = finish(c, 'old-complete');
+  assert.deepEqual([replay.success, replay.replayed, replay.deactivated], [true, true, 0]);
   assert.equal(read().every(row => row.is_active), true);
 });
 
@@ -356,6 +357,7 @@ test('AI analysis is facility-scoped with server-derived audit identity and reje
   const own = person({ hoscode: '00002', cid: '0000000000002', sex: '1', check_vhid: '00123456' });
   const foreign = person({ sex: '1', check_vhid: '00123456' });
   upload(c, [own, foreign], 'ai');
+  audit.length = 0; // the import's own events; only the AI events below are under test
   const keyOf = row => ({ hoscode: row.hoscode, pid: row.pid, cid: row.cid, sex: row.sex, birth: row.birth, check_vhid: row.check_vhid });
   const rows = read();
   const ownIndex = rows.findIndex(row => row.hoscode === '00002'), foreignIndex = rows.findIndex(row => row.hoscode === '00588');
@@ -440,8 +442,7 @@ test('accepted chunks audit one logical upload_excel event with server-derived i
     auditLogs.appendRow(['uuid', userId, email, action, details, new Date().toISOString()]);
   };
   assert.equal(c.upsertEpiData([person()], 'audit-1', importer, 2569).success, true);
-  assert.equal(audit.length, 1);
-  assert.equal(audit[0].action, 'upload_excel');
+  assert.deepEqual(audit.map(entry => entry.action), ['upload_excel', 'cleanup_epi_data']); // Issue #144: its only chunk finalized it
   assert.equal(audit[0].userId, 'u1');
   assert.equal(audit[0].email, 'importer@example.test');
   const details = audit[0].details;
@@ -458,7 +459,7 @@ test('accepted chunks audit one logical upload_excel event with server-derived i
   // Normal replay after successful audit: no duplicate logical event.
   const replay = c.upsertEpiData([person()], 'audit-1', importer, 2569);
   assert.deepEqual([replay.inserted, replay.updated, replay.replayed], [0, 0, true]);
-  assert.equal(audit.length, 1);
+  assert.equal(audit.length, 2);
   assert.equal(read().length, 1);
 });
 
@@ -478,7 +479,7 @@ test('audit append failure after durable receipt is repaired on exact retry with
   const retry = c.upsertEpiData([person()], 'repair-1', { userId: 'u2', email: 'retry@example.test' }, 2569);
   assert.deepEqual([retry.inserted, retry.updated, retry.replayed], [0, 0, true]);
   assert.equal(read().length, 1);
-  assert.equal(audit.length, 1);
+  assert.deepEqual(audit.map(entry => entry.action), ['upload_excel', 'cleanup_epi_data']); // Issue #144: the retry also finishes the finalize
   assert.equal(audit[0].userId, 'u1');
   assert.equal(audit[0].email, 'importer@example.test');
   assert.ok(audit[0].details.includes('inserted 1'));
@@ -494,10 +495,13 @@ test('an audit append that physically succeeded but threw is deduplicated on ret
   };
   assert.throws(() => c.upsertEpiData([person()], 'ambig-1', importer, 2569), /ambiguous append failure/);
   assert.equal(auditLogs.cells.length, 2);
-  c.logAction = () => { throw new Error('must not append again'); };
+  c.logAction = (userId, email, action, details) => {
+    if (action === 'upload_excel') throw new Error('must not append again');
+    auditLogs.appendRow(['uuid', userId, email, action, details, new Date().toISOString()]); // Issue #144: the retry finishes the finalize
+  };
   const retry = c.upsertEpiData([person()], 'ambig-1', importer, 2569);
   assert.deepEqual([retry.inserted, retry.updated, retry.replayed], [0, 0, true]);
-  assert.equal(auditLogs.cells.length, 2); // exactly one logical upload_excel event remains
+  assert.equal(auditLogs.cells.filter(row => row[3] === 'upload_excel').length, 1); // exactly one logical upload_excel event remains
 });
 
 test('legacy index+fingerprint receipts replay without fabricating audit history', () => {
@@ -515,7 +519,7 @@ test('legacy index+fingerprint receipts replay without fabricating audit history
   assert.equal(audit.length, 0); // nothing fabricated for legacy receipts
 });
 
-test('rejections never audit; sync finalize stays a separate cleanup_epi_data event', () => {
+test('rejections never audit; each finalized batch has one cleanup_epi_data event', () => {
   const { context: c, createSheet } = setup();
   auditSheet(createSheet);
   const audit = [];
@@ -523,13 +527,14 @@ test('rejections never audit; sync finalize stays a separate cleanup_epi_data ev
   assert.equal(c.upsertEpiData([person({ birth: '2025-02-30' })], 'bad', importer, 2569).success, false);        // invalid record
   assert.equal(c.upsertEpiData([person()], 'bad2', importer, '20X9').success, false);                            // invalid scope
   assert.equal(audit.length, 0);
-  assert.equal(c.upsertEpiData([person()], 'mm', importer, 2569).success, true);                                 // merge import (no finalize)
+  assert.equal(c.upsertEpiData([person()], 'mm', importer, 2569).success, true);                                 // merge import, finalized by its only chunk
   assert.equal(c.upsertEpiData([person({ addr: 'changed' })], 'mm', importer, 2569).success, false);             // fingerprint mismatch
   assert.equal(c.upsertEpiData([person()], 'mm', importer, 2569, 'Epi_1_Year', { mode: 'sync' }).success, false); // batch scope mismatch
   assert.equal(c.upsertEpiData([person()], 'sync-1', importer, 2569, 'Epi_1_Year', { mode: 'sync' }).success, true);
-  c.cleanupEpiData('sync-1', [], 'admin', 2569);
+  c.cleanupEpiData('sync-1', [], 'admin', 2569);                                                                  // a replay: audits nothing
   assert.equal(audit.filter(entry => entry[2] === 'upload_excel').length, 2);   // only the two accepted chunks
-  assert.equal(audit.filter(entry => entry[2] === 'cleanup_epi_data').length, 1); // finalization remains separate
+  assert.deepEqual(audit.filter(entry => entry[2] === 'cleanup_epi_data').map(entry => entry[3]),
+    ['Batch mm: 0 deactivated (merge).', 'Batch sync-1: 0 deactivated (sync).']); // one per finalized batch
 });
 
 test('a finalized batch rejects unseen chunks at the finalized guard without auditing', () => {
@@ -1365,4 +1370,111 @@ test('an undoing receipt is never finalized, and a resent chunk of its batch wri
   assert.equal(c.upsertEpiData(cohort(2), 'wrong', importer, 2569).replayed, true);
   assert.equal(receiptOf(sheets, 'wrong').status, 'undoing');
   assert.deepEqual(activeCids(read), cohort(2).map(row => row.cid)); // untouched until the undo is finished
+});
+
+/* ─────────────── Issue #144 (#145): the last chunk finalizes the Import (ADR-0011) ─────────────── */
+test('the only chunk of a sync finalizes it: absent children deactivated, receipt complete, one audit after the receipt', () => {
+  const { context: c, sheets, read, createSheet } = setup();
+  const auditLogs = auditSheet(createSheet);
+  importBatch(c, cohort(3), 'existing');
+  const statusAtAudit = [];
+  c.logAction = (userId, email, action, details) => {
+    if (action === 'cleanup_epi_data') statusAtAudit.push(receiptOf(sheets, 'sync').status);
+    auditLogs.appendRow(['uuid', userId, email, action, details, 'at']);
+  };
+  prepare(c, [cohort(2)], 'sync', { mode: 'sync', auth: importer });
+  const written = plain(c.upsertEpiData(cohort(2), 'sync', importer, 2569, 'Epi_1_Year', { mode: 'sync' }));
+  assert.deepEqual([written.success, written.updated, written.finalized, written.deactivated], [true, 2, true, 1]);
+  assert.deepEqual(activeCids(read), cohort(2).map(row => row.cid));
+  assert.equal(read().find(row => row.cid === cohort(3)[2].cid).deactivated_by_batch, 'sync');
+  const receipt = receiptOf(sheets, 'sync');
+  assert.equal(receipt.status, 'complete');
+  const finalize = JSON.parse(receipt.finalize);
+  assert.deepEqual([finalize.deactivated, finalize.deactivationRecorded], [1, true]);
+  const events = auditLogs.cells.filter(row => row[3] === 'cleanup_epi_data');
+  assert.deepEqual(events.map(row => [row[1], row[2], row[4]]), [['SYSTEM', 'importer@example.test', 'Batch sync: 1 deactivated (sync).']]);
+  assert.deepEqual(statusAtAudit, ['complete']);
+});
+
+test('a multi-chunk merge is finalized by the chunk that completes it, even out of order, and deactivates no one', () => {
+  const { context: c, sheets, read } = setup();
+  importBatch(c, cohort(3, '00588', 50), 'existing');
+  const chunks = [cohort(2), cohort(2, '00588', 3)];
+  prepare(c, chunks, 'merge', { auth: importer });
+  const options = index => ({ mode: 'merge', chunkIndex: index, totalChunks: 2 });
+  const second = plain(c.upsertEpiData(chunks[1], 'merge', importer, 2569, 'Epi_1_Year', options(1)));
+  assert.deepEqual([second.success, second.finalized], [true, false]);
+  assert.equal(receiptOf(sheets, 'merge').status, 'uploading');
+  const first = plain(c.upsertEpiData(chunks[0], 'merge', importer, 2569, 'Epi_1_Year', options(0)));
+  assert.deepEqual([first.success, first.inserted, first.finalized, first.deactivated], [true, 2, true, 0]);
+  assert.equal(receiptOf(sheets, 'merge').status, 'complete');
+  assert.equal(read().filter(isActive).length, 7);
+});
+
+test('a finalize cut off after its row write is finished by resending the chunk, counting every row the batch deactivated', () => {
+  const { context: c, sheets, read, createSheet } = setup();
+  const auditLogs = auditSheet(createSheet);
+  importBatch(c, cohort(3), 'existing');
+  c.logAction = (userId, email, action, details) => auditLogs.appendRow(['uuid', userId, email, action, details, 'at']);
+  prepare(c, [cohort(1)], 'sync', { mode: 'sync', auth: importer });
+  failNextWrite(sheets, 'epi_import_batches', values => values.some(row => row[0] === 'sync' && row[7] === 'complete'));
+  assert.throws(() => c.upsertEpiData(cohort(1), 'sync', importer, 2569, 'Epi_1_Year', { mode: 'sync' }), /Sheets service failed/);
+  assert.equal(receiptOf(sheets, 'sync').status, 'uploading');
+  assert.deepEqual(activeCids(read), cohort(1).map(row => row.cid)); // the rows were written before the receipt failed
+
+  const resent = plain(c.upsertEpiData(cohort(1), 'sync', importer, 2569, 'Epi_1_Year', { mode: 'sync' }));
+  assert.deepEqual([resent.success, resent.replayed, resent.finalized, resent.deactivated], [true, true, true, 2]);
+  assert.equal(receiptOf(sheets, 'sync').status, 'complete');
+  assert.equal(JSON.parse(receiptOf(sheets, 'sync').finalize).deactivated, 2);
+  const events = auditLogs.cells.filter(row => ['upload_excel', 'cleanup_epi_data'].includes(row[3]) && /^Batch sync[ :]/.test(row[4]));
+  assert.deepEqual(events.map(row => row[3]), ['upload_excel', 'cleanup_epi_data']); // each written once
+  assert.equal(events[1][4], 'Batch sync: 2 deactivated (sync).');
+});
+
+test('a replay against a complete batch reports the recorded deactivations from either endpoint', () => {
+  const { context: c } = setup();
+  importBatch(c, cohort(3), 'existing');
+  prepare(c, [cohort(1)], 'sync', { mode: 'sync', auth: importer });
+  assert.equal(c.upsertEpiData(cohort(1), 'sync', importer, 2569, 'Epi_1_Year', { mode: 'sync' }).deactivated, 2);
+  const resent = plain(c.upsertEpiData(cohort(1), 'sync', importer, 2569, 'Epi_1_Year', { mode: 'sync' }));
+  assert.deepEqual([resent.replayed, resent.finalized, resent.deactivated], [true, true, 2]);
+  assert.deepEqual(plain(c.cleanupEpiData('sync', [], 'admin', 2569)), { success: true, deactivated: 2, replayed: true });
+});
+
+test('a batch left uploading with every chunk written, as the previous frontend could leave it, is finalized by cleanup', () => {
+  const { context: c, sheets, read } = setup();
+  importBatch(c, cohort(3), 'existing');
+  prepare(c, [cohort(1)], 'sync', { mode: 'sync', auth: importer });
+  failNextWrite(sheets, 'epi_import_batches', values => values.some(row => row[0] === 'sync' && row[7] === 'complete'));
+  assert.throws(() => c.upsertEpiData(cohort(1), 'sync', importer, 2569, 'Epi_1_Year', { mode: 'sync' }), /Sheets service failed/);
+  assert.deepEqual(plain(c.cleanupEpiData('sync', [], 'admin', 2569)), { success: true, deactivated: 2 });
+  assert.equal(receiptOf(sheets, 'sync').status, 'complete');
+  assert.deepEqual(activeCids(read), cohort(1).map(row => row.cid));
+});
+
+test('an unfinalized sync is never finalized after a newer overlapping import, by cleanup or by resending its chunk', () => {
+  const { context: c, sheets, read } = setup();
+  prepare(c, [cohort(2)], 'stuck', { mode: 'sync', auth: importer });
+  failNextWrite(sheets, 'epi_import_batches', values => values.some(row => row[0] === 'stuck' && row[7] === 'complete'));
+  assert.throws(() => c.upsertEpiData(cohort(2), 'stuck', importer, 2569, 'Epi_1_Year', { mode: 'sync' }), /Sheets service failed/);
+  importBatch(c, cohort(1, '00588', 50), 'newer');
+  const refusal = { success: false, error: 'A newer import overlaps this batch. Import a fresh full file before syncing.' };
+  assert.deepEqual(plain(c.cleanupEpiData('stuck', [], 'admin', 2569)), refusal);
+  assert.deepEqual(plain(c.upsertEpiData(cohort(2), 'stuck', importer, 2569, 'Epi_1_Year', { mode: 'sync' })), refusal);
+  assert.equal(receiptOf(sheets, 'stuck').status, 'uploading');
+  assert.equal(read().filter(isActive).length, 3);
+});
+
+test('Import Undo of a sync whose finalize was finished by a resent chunk restores exactly what it changed', () => {
+  const { context: c, sheets, read } = setup();
+  importBatch(c, cohort(3), 'existing');
+  const wrong = cohort(2, '00588', 100);
+  prepare(c, [wrong], 'wrong', { mode: 'sync', auth: importer });
+  failNextWrite(sheets, 'epi_import_batches', values => values.some(row => row[0] === 'wrong' && row[7] === 'complete'));
+  assert.throws(() => c.upsertEpiData(wrong, 'wrong', importer, 2569, 'Epi_1_Year', { mode: 'sync' }), /Sheets service failed/);
+  assert.equal(c.upsertEpiData(wrong, 'wrong', importer, 2569, 'Epi_1_Year', { mode: 'sync' }).deactivated, 3);
+  const preview = undoPreview(c);
+  assert.deepEqual([preview.eligible, preview.batchId, preview.wouldDeactivate, preview.wouldReactivate], [true, 'wrong', 2, 3]);
+  assert.equal(undo(c, preview).success, true);
+  assert.deepEqual(activeCids(read), cohort(3).map(row => row.cid));
 });

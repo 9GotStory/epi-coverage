@@ -257,7 +257,6 @@ export function UploadDashboard() {
                 <div className="flex justify-between text-[14px] font-medium tracking-[-0.224px]">
                   <span className="text-[#7a7a7a]">
                     {status === 'preflighting' ? 'กำลังตรวจสอบไฟล์กับข้อมูลเดิม...' :
-                     status === 'cleaning' ? 'กำลังจัดระเบียบและตรวจสอบข้อมูลเก่า...' : 
                      status === 'generating_summary' ? 'กำลังประมวลผลข้อมูลภาพรวม Dashboard...' : 'กำลังนำเข้าข้อมูล...'}
                   </span>
                   <span className="text-[#0066cc] font-semibold">{progress}%</span>
