@@ -1,3 +1,4 @@
+import { vaccineFieldLabel } from './hdcData';
 import type { VaccineRule } from './ruleEngine';
 
 /**
@@ -25,23 +26,25 @@ export function sortRulesForDisplay(rules: VaccineRule[]): VaccineRule[] {
 }
 
 /**
- * สร้าง map field → display_name ของ rule แรก (ตามลำดับที่ส่งเข้ามา)
- * ที่ใช้ field นั้นใน required_fields หรือ branch_alt_fields
- * ใช้ทำป้ายชื่อวัคซีนใน dropdown "ตรวจสอบข้อมูลวันที่" แทนการ hardcode
+ * ป้ายชื่อเข็มของคอลัมน์วันที่ (Issue #130) — ใช้ร่วมกันในข้อสังเกตวันที่และหน้า Rules Engine
+ * ถ้ามี rule ที่ใช้คอลัมน์นั้นคอลัมน์เดียว (required + branch_alt คือคอลัมน์นั้นเท่านั้น) ใช้ display_name
+ * ของ rule แรกตามลำดับที่ส่งเข้ามา ไม่งั้นใช้ป้ายตามชื่อคอลัมน์ (vaccineFieldLabel) เพราะ rule หลายคอลัมน์
+ * เช่น Rota (ครบถ้วนตามเกณฑ์) หรือ LAJE/JE 1 ปี ไม่ได้บอกว่าเป็นเข็มไหน
  *
  * แคชตาม reference ของ array (WeakMap) เพราะถูกเรียกบ่อยมาก
  * (ต่อ rule ต่อ record ในรอบการประเมิน) และผู้เรียกมักส่ง array เดิมซ้ำ ๆ
  */
 const labelMapCache = new WeakMap<VaccineRule[], Map<string, string>>();
-export function buildFieldLabelMap(rules: VaccineRule[]): Map<string, string> {
-  const cached = labelMapCache.get(rules);
-  if (cached) return cached;
-  const map = new Map<string, string>();
-  for (const rule of rules) {
-    for (const field of [...rule.required_fields, ...(rule.branch_alt_fields || [])]) {
-      if (field && !map.has(field)) map.set(field, rule.display_name || field);
+export function buildDoseLabeler(rules: VaccineRule[]): (field: string) => string {
+  let map = labelMapCache.get(rules);
+  if (!map) {
+    map = new Map<string, string>();
+    for (const rule of rules) {
+      const fields = [...new Set([...rule.required_fields, ...(rule.branch_alt_fields || [])].filter(Boolean))];
+      if (fields.length === 1 && rule.display_name && !map.has(fields[0])) map.set(fields[0], rule.display_name);
     }
+    labelMapCache.set(rules, map);
   }
-  labelMapCache.set(rules, map);
-  return map;
+  const labels = map;
+  return field => labels.get(field) ?? vaccineFieldLabel(field);
 }

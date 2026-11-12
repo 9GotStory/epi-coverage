@@ -7,12 +7,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { getHdcVaccineRows, hdcValue, formatHdcDate, calendarDay } from '../utils/vaccine/hdcData';
 import { formatDateStr } from '../utils/dateUtils';
 import { inapplicableReason } from '../utils/vaccine/birthWindow';
+import { dateWarningNote, type DateWarning } from '../utils/vaccine/dateWarnings';
 import type { InapplicableRule } from '../types';
 
 interface VaccineHistoryModalProps {
   rules?: VaccineRule[];
   caption?: string;
-  warnings?: string[];
+  /** Issue #130: ข้อสังเกตวันที่แบบมีโครงสร้าง — แถวของคอลัมน์ที่ข้อสังเกตอ้างถึงจะถูกเน้นพร้อมหมายเหตุ */
+  warnings?: DateWarning[];
   warningsStatus?: string;
   /** แสดงหัวข้อ "ผลจาก HDC" — เฉพาะมุมมองที่ 2 (ข้อมูลนี้เป็นของมุมมองที่ 2 ไม่เกี่ยวกับการประเมินรายชนิด) */
   showHdcResult?: boolean;
@@ -50,6 +52,8 @@ export function VaccineHistoryModal({ isOpen, onClose, record, warnings, warning
   const dateWarnings = warnings ?? [];
   const inapplicableById = new Map(inapplicableRules.map(rule => [rule.rule_id, inapplicableReason(rule)]));
   const reasonOf = (ruleId: string | undefined) => (ruleId === undefined ? undefined : inapplicableById.get(ruleId));
+  // คอลัมน์คู่ที่ไม่มีแถว (View 1 แสดงเฉพาะคอลัมน์ของกลุ่มอายุ) ไม่เพิ่มแถว ข้อความเต็มอยู่ในกล่องด้านบน
+  const notesOf = (field: string) => dateWarnings.filter(warning => warning.fields.includes(field)).map(warning => dateWarningNote(warning, field));
 
   return (
     <Dialog open={isOpen} onOpenChange={open => { if (!open) onClose(); }}>
@@ -76,7 +80,7 @@ export function VaccineHistoryModal({ isOpen, onClose, record, warnings, warning
             ข้อสังเกตข้อมูลวันที่ — โปรดตรวจสอบต้นทาง
           </p>
           <p className="text-amber-700">ข้อสังเกตวันที่ไม่นับเป็นวัคซีนขาด เกณฑ์ที่มีวันที่ครบแต่มีข้อสังเกตแสดงผล "ตรวจสอบประวัติ" และไม่นำมาคำนวณร้อยละจนกว่าจะแก้ข้อมูลต้นทาง</p>
-          <ul className="list-disc pl-5 text-amber-800 marker:text-amber-500">{dateWarnings.map(warning => <li key={warning}>{warning}</li>)}</ul>
+          <ul className="list-disc pl-5 text-amber-800 marker:text-amber-500">{dateWarnings.map(warning => <li key={warning.message}>{warning.message}</li>)}</ul>
         </div>}
         {!rules && inapplicableRules.length > 0 && <div className="border rounded-lg p-3 text-sm space-y-1">
           <p className="font-semibold">เกณฑ์ที่ไม่ใช้กับเด็กรายนี้ (ตามช่วงวันเกิด)</p>
@@ -92,14 +96,17 @@ export function VaccineHistoryModal({ isOpen, onClose, record, warnings, warning
             </TableRow>
           </TableHeader>
           <TableBody>
-            {rows.map(row => (
-              <TableRow key={row.id}>
-                <TableCell><div>{row.name}</div><div className="text-xs text-zinc-500" title="ชื่อคอลัมน์ในไฟล์ HDC ที่นำเข้า">{row.field}</div>{reasonOf(row.ruleId) && <div className="text-sm font-medium">{reasonOf(row.ruleId)}</div>}{row.note && <div className="text-sm text-muted-foreground">{row.note}</div>}</TableCell>
+            {rows.map(row => {
+              const notes = notesOf(row.field);
+              return (
+              <TableRow key={row.id} className={notes.length > 0 ? 'bg-amber-50 hover:bg-amber-100/70' : undefined}>
+                <TableCell><div>{row.name}</div><div className="text-xs text-zinc-500" title="ชื่อคอลัมน์ในไฟล์ HDC ที่นำเข้า">{row.field}</div>{reasonOf(row.ruleId) && <div className="text-sm font-medium">{reasonOf(row.ruleId)}</div>}{row.note && <div className="text-sm text-muted-foreground">{row.note}</div>}{notes.map(note => <div key={note} className="text-sm text-amber-800 flex items-center gap-1"><AlertTriangle className="w-3.5 h-3.5 text-amber-500 shrink-0" />{note}</div>)}</TableCell>
                 <TableCell className="whitespace-pre-wrap" title={dateCellTooltip(record, row.date)}>{formatHdcDate(row.date)}</TableCell>
                 <TableCell title={row.facility === '—' ? 'ไม่มีค่ารหัสสถานบริการในไฟล์ที่นำเข้า' : undefined}>{row.facility}</TableCell>
                 <TableCell title={row.inputFacility === '—' ? 'ไม่มีค่ารหัสหน่วยบันทึกในไฟล์ที่นำเข้า' : undefined}>{row.inputFacility}</TableCell>
               </TableRow>
-            ))}
+              );
+            })}
             {rows.length === 0 && <TableRow><TableCell colSpan={4} className="text-center py-8">ไม่พบคอลัมน์วัคซีนในข้อมูลที่โหลดมา</TableCell></TableRow>}
           </TableBody>
         </Table>

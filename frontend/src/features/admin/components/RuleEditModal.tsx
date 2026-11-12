@@ -1,6 +1,5 @@
 import { getRuleDateChecks } from '../../../shared/utils/vaccine/dateWarnings';
-import { buildFieldLabelMap } from '../../../shared/utils/vaccine/rulePresentation';
-import { vaccineFieldLabel } from '../../../shared/utils/vaccine/hdcData';
+import { buildDoseLabeler } from '../../../shared/utils/vaccine/rulePresentation';
 import { beInputToIso, isoToBeInput } from '../../../shared/utils/vaccine/birthWindow';
 import { fetchApi } from '../../../shared/lib/api';
 import { useAuth } from '../../../shared/contexts/AuthContext';
@@ -138,10 +137,10 @@ export function RuleEditModal({ rule, allRules, isOpen, onClose, onSave, fiscalY
   const ordered = useFieldArray({ control: form.control, name: 'date_checks.ordered_pairs' });
   const currentFields = [...form.watch('required_fields'), ...(form.watch('branch_alt_fields') || [])].map(f => f.value);
   const dateOptions = [...new Set([...allRules.flatMap(r => [...r.required_fields, ...(r.branch_alt_fields || [])]), ...currentFields])].filter(Boolean).sort();
-  // ป้ายชื่อวัคซีนมาจาก vaccine_rules (display_name ของ rule ที่ใช้ field นั้น) ไม่ hardcode
-  const fieldLabelMap = buildFieldLabelMap(allRules);
+  // Issue #130: ป้ายชื่อเข็มเดียวกับข้อสังเกตวันที่ (display_name ของ rule คอลัมน์เดียว หรือป้ายตามคอลัมน์)
+  const doseLabel = buildDoseLabeler(allRules);
   const dateOptionLabel = (value: string) => {
-    const label = fieldLabelMap.get(value) ?? vaccineFieldLabel(value);
+    const label = doseLabel(value);
     return label === value ? value : `${label} (${value})`;
   };
 

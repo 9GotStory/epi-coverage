@@ -81,9 +81,23 @@ describe('Issue #102 — View 2 list: a date warning is ตรวจสอบป
   it('shows a child whose only problem is a date warning as ตรวจสอบประวัติ, with no mismatch flag against HDC ผ่าน', () => {
     const html = renderRows([child('DATE-WARNING', { bcg_date: '2025-01-14', mmr1_date: '2025-10-20', result: 'ผ่าน' })]);
     expect(html).toContain('>ตรวจสอบประวัติ<');
-    expect(html).toContain('ตรวจสอบประวัติ: BCG 1 เข็ม');
     expect(html).not.toContain('>ไม่ผ่าน<');
     expect(html).not.toContain('ขาด:');
     expect(html).not.toContain(MISMATCH_BADGE);
+  });
+});
+
+describe('Issue #130 — View 2 list: the date warnings themselves appear under the rule result', () => {
+  it('shows the full warning instead of the rule-name-only "ตรวจสอบประวัติ: …" detail', () => {
+    const html = renderRows([child('DATE-WARNING', { bcg_date: '2025-01-14', mmr1_date: '2025-10-20', result: 'ผ่าน' })]);
+    expect(html).toContain('>BCG 1 เข็ม ฉีดก่อนวันเกิด (14-01-2025, เกิด 15-01-2025)<');
+    expect(html).not.toContain('ตรวจสอบประวัติ: BCG 1 เข็ม');
+  });
+
+  it('shows the warnings on rows of any status, next to what is missing', () => {
+    const html = renderRows([child('MISSING-AND-WARNING', { bcg_date: '2025-01-14', mmr1_date: '', result: 'ไม่ผ่าน' })]);
+    expect(html).toContain('>ไม่ผ่าน<');
+    expect(html).toContain('ขาด: MMR เข็ม 1');
+    expect(html).toContain('>BCG 1 เข็ม ฉีดก่อนวันเกิด (14-01-2025, เกิด 15-01-2025)<');
   });
 });

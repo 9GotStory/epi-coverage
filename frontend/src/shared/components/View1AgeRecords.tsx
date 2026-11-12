@@ -5,7 +5,7 @@ import type { EpiAge, View1AgeProps } from '../types/hdc';
 import { useVaccineRules } from '../hooks/useVaccineRules';
 import { isOutPlanRule, sortRulesForDisplay } from '../utils/vaccine/rulePresentation';
 import { evaluateDynamicV1 } from '../utils/vaccine/ruleEngine';
-import { getRecordDateWarnings } from '../utils/vaccine/dateWarnings';
+import { getRecordDateWarningDetails } from '../utils/vaccine/dateWarnings';
 import { getHdcExportRows, getHdcVaccineRows, hdcValue } from '../utils/vaccine/hdcData';
 import { formatDateStr, formatDateTimeStr, getBirthDateRangeForQuarter } from '../utils/dateUtils';
 import { exportToExcel, exportToPdf } from '../exportUtils';
@@ -40,7 +40,8 @@ export function View1AgeRecords({ age, fiscalYear, quarter, data, isLoading, err
       return birth >= start && birth <= end;
     }).map(record => {
       const evaluation = evaluateDynamicV1(record, rules);
-      const warnings = getRecordDateWarnings(record, ageRules);
+      const dateWarningDetails = getRecordDateWarningDetails(record, ageRules);
+      const warnings = dateWarningDetails.map(warning => warning.message);
       const unknown = rulesLoading || rulesError || !rules.length || !!evaluation.unknownVaccines?.length;
       // สถานะเต็ม (ใช้กับ filter + tooltip): unknown > missing > ตรวจสอบประวัติ (#102) > pending > ครบ
       // (คำเตือนวันที่ เช่น ลงวันที่ตรงวันเกิด → rule นั้นไม่ผ่านแต่ไม่ขาด จึงเป็น ตรวจสอบประวัติ ไม่ใช่ ครบ หรือ ไม่ครบ)
@@ -56,7 +57,7 @@ export function View1AgeRecords({ age, fiscalYear, quarter, data, isLoading, err
       if (warnings.length) tooltipParts.push(`ตรวจสอบวันที่: ${warnings.join(' · ')}`);
       // Issue #102: export/PDF ใช้รายละเอียดเดียวกับ tooltip — รายการตรวจสอบประวัติต้องมีข้อสังเกตวันที่ให้แก้ต้นทางได้
       const reasons = tooltipParts.join(' · ');
-      return { ...record, evaluationStatus: status, evaluationBadge: badge, evaluationDetails: reasons, evaluationTooltip: reasons };
+      return { ...record, evaluationStatus: status, evaluationBadge: badge, evaluationDetails: reasons, evaluationTooltip: reasons, dateWarningDetails };
     });
   }, [data, fiscalYear, quarter, age, rules, ageRules, rulesLoading, rulesError]);
   const facilities = [...new Map(processed.map(record => [record.hoscode, record.hosname])).entries()].sort();
@@ -79,6 +80,8 @@ export function View1AgeRecords({ age, fiscalYear, quarter, data, isLoading, err
           <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${BADGE_CLASSES[row.original.evaluationBadge] ?? 'bg-red-100 text-red-700'}`}>
             {row.original.evaluationBadge}
           </span>
+          {/* Issue #130: ข้อสังเกตวันที่แสดงใต้ badge โดยไม่ต้องชี้เมาส์ */}
+          {row.original.dateWarningDetails.length > 0 && <ul className="text-xs text-amber-800 mt-1 space-y-0.5">{row.original.dateWarningDetails.map(warning => <li key={warning.message}>{warning.message}</li>)}</ul>}
         </div>
       ),
     },
@@ -111,6 +114,6 @@ export function View1AgeRecords({ age, fiscalYear, quarter, data, isLoading, err
     </div>
     <p className="text-sm text-muted-foreground">แสดง {filtered.length} จาก {processed.length} คน</p>
     <EpiDataTable data={filtered} columns={columns} />
-    <VaccineHistoryModal rules={ageRules} caption={`รายการวัคซีนสำหรับกลุ่มอายุ ${age} ปี`} showHdcResult={false} record={selected} isOpen={!!selected} onClose={() => setSelected(null)} inapplicableRules={selected ? evaluateDynamicV1(selected, rules).inapplicableRules : []} warnings={selected ? getRecordDateWarnings(selected, ageRules) : []} warningsStatus={rulesLoading ? 'กำลังโหลดเกณฑ์...' : rulesError || undefined} />
+    <VaccineHistoryModal rules={ageRules} caption={`รายการวัคซีนสำหรับกลุ่มอายุ ${age} ปี`} showHdcResult={false} record={selected} isOpen={!!selected} onClose={() => setSelected(null)} inapplicableRules={selected ? evaluateDynamicV1(selected, rules).inapplicableRules : []} warnings={selected ? getRecordDateWarningDetails(selected, ageRules) : []} warningsStatus={rulesLoading ? 'กำลังโหลดเกณฑ์...' : rulesError || undefined} />
   </div>;
 }

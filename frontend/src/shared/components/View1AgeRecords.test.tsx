@@ -67,7 +67,13 @@ describe('age-specific individual view rendering (rules-driven)', () => {
     const html = renderRecords([{ ...data[0], dtp5_date: '2021-01-01' }]);
     expect(html).toContain('>ตรวจสอบประวัติ<');
     expect(html).not.toContain('>ไม่ครบ<');
-    expect(html).toContain('ตรวจสอบวันที่: DTP เข็ม 5: วันที่ฉีดตรงวันเกิดตามเกณฑ์ที่ไม่อนุญาต');
+    expect(html).toContain('title="ตรวจสอบวันที่: DTP เข็ม 5 ฉีดตรงวันเกิด (01-01-2021) ซึ่งเกณฑ์ไม่อนุญาต"');
+  });
+
+  it('Issue #130: shows the date warnings under the badge, not only in the tooltip', () => {
+    const html = renderRecords([{ ...data[0], dtp5_date: '2021-01-01', opv5_date: '2021-01-01' }]);
+    expect(html).toContain('>DTP เข็ม 5 ฉีดตรงวันเกิด (01-01-2021) ซึ่งเกณฑ์ไม่อนุญาต<');
+    expect(html).toContain('>OPV เข็ม 5 ฉีดตรงวันเกิด (01-01-2021) ซึ่งเกณฑ์ไม่อนุญาต<');
   });
 
   it('Issue #102: a really missing dose still makes the record ไม่ครบ alongside a date warning', () => {
