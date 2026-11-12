@@ -107,3 +107,22 @@ describe('YearComparison honest no-data vs real zero (Issue #22)', () => {
     expect(html).not.toContain('ไม่มีข้อมูลสรุป');
   });
 });
+
+describe('Issue #102 — View 2 composition shows ตรวจสอบประวัติ apart from ไม่ผ่านเกณฑ์', () => {
+  const current = { total: 10, view2Coverage: 50, view2Passed: 3, view2ApplicableTotal: 6, view2PendingCount: 1, view2NotEvaluableCount: 1 };
+
+  it('charts and tables the review count so the composition adds up to the cohort', () => {
+    const { html, chartData } = renderComparison([
+      makeSummary(previousYear, { ...current, view2ReviewCount: 2 }),
+      makeSummary(currentYear, { ...current, view2ReviewCount: 2 }),
+    ]);
+    const point = chartData!.find((d) => d.name === `ปี ${currentYear}`)!;
+    expect(point).toMatchObject({ passed: 3, failed: 3, pending: 1, notEvaluable: 1, review: 2 });
+    expect(html).toContain('ตรวจสอบประวัติ (วันที่ผิดปกติ)');
+  });
+
+  it('keeps a summary generated before #102 as unknown (—), never zero', () => {
+    const { chartData } = renderComparison([makeSummary(previousYear, current), makeSummary(currentYear, current)]);
+    expect(chartData!.find((d) => d.name === `ปี ${currentYear}`)!.review).toBeNull();
+  });
+});

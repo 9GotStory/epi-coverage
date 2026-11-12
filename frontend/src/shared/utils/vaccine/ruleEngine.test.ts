@@ -551,7 +551,8 @@ describe('date configuration drives evaluation', () => {
     const configured = { ...rule, date_checks: { ...rule.date_checks!, same_day_pairs: [{ field: 'hbv1_date', other_field: 'dtp1_date' }] } };
     expect(evaluateDynamicV1(record, [configured]).results.HBV).toBe(false);
     // Issue #101: กฎวันที่ตัดสิน View 2 — `result` ของ HDC ยังคงแสดงประกอบตามเดิม ไม่ถูกแก้
-    expect(evaluateDynamicV2({ ...record, result: 'ผ่าน' }, [{ ...configured, view_type: 2 }])).toMatchObject({ status: 'FAIL', hdcVerdict: 'PASS' });
+    // Issue #102: คำเตือนวันที่ทำให้เป็นตรวจสอบประวัติ ไม่ใช่ไม่ผ่าน
+    expect(evaluateDynamicV2({ ...record, result: 'ผ่าน' }, [{ ...configured, view_type: 2 }])).toMatchObject({ status: 'REVIEW', hdcVerdict: 'PASS' });
   });
   it('does not compare Rota alternatives as if they were separate doses', () => {
     const rota = { ...rule, vaccine_group: 'Rota', display_name: 'Rota เข็ม 1', required_fields: ['rv21_date'], branch_alt_fields: ['rv31_date'], logic_type: 'BRANCH' as const, date_checks: undefined };

@@ -130,6 +130,7 @@ export function AgeGroupExpandedView({ summary, targetView1, targetView2, fiscal
 
         <TabsContent value="view1" className="space-y-8 outline-none">
           {!!summary.view1UnknownDoses && <p role="status" className="text-sm text-muted-foreground">ข้อมูลไม่เพียงพอ {summary.view1UnknownDoses.toLocaleString()} รายการ จึงไม่รวมในการคำนวณร้อยละ</p>}
+          {!!summary.view1ReviewDoses && <p role="status" className="text-sm text-muted-foreground">ตรวจสอบประวัติ {summary.view1ReviewDoses.toLocaleString()} รายการ (วันที่ผิดปกติ ไม่ใช่วัคซีนขาด) จึงไม่รวมในการคำนวณร้อยละ</p>}
           {/* View 1 Breakdown */}
           <div>
             <div className="mb-4">
@@ -210,6 +211,12 @@ export function AgeGroupExpandedView({ summary, targetView1, targetView2, fiscal
             {!!summary.view2NotEvaluableCount && (
               <p role="status" className="text-sm text-muted-foreground mb-3">
                 ข้อมูลไม่ครบตามเกณฑ์ {summary.view2NotEvaluableCount.toLocaleString()} คน ประเมิน Fully Immunized ไม่ได้ จึงไม่รวมในการคำนวณร้อยละ
+              </p>
+            )}
+            {/* Issue #102: คำเตือนวันที่เป็นงานตรวจข้อมูลต้นทาง ไม่ใช่รายชื่อตามฉีด สรุปรุ่นก่อน #102 ไม่มีฟิลด์นี้ */}
+            {!!summary.view2ReviewCount && (
+              <p role="status" className="text-sm text-muted-foreground mb-3">
+                ตรวจสอบประวัติ {summary.view2ReviewCount.toLocaleString()} คน (วันที่ผิดปกติ ไม่ใช่วัคซีนขาด) จึงไม่รวมในการคำนวณร้อยละ
               </p>
             )}
             {summary.view2Breakdown.length > 0 ? (

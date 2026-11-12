@@ -51,18 +51,29 @@ describe('age-specific individual view rendering (rules-driven)', () => {
     expect(incompleteHtml).toContain('title="OPV เข็ม 5"');
   });
 
-  it('marks a record with a date warning as ไม่ครบ with the warning in the tooltip', () => {
-    // dtp5 ลงเป็นวันเกิด = date warning → rule ไม่ผ่าน → ต้องเป็น ไม่ครบ ไม่ใช่ ครบ
-    const warned = [{ ...data[0], dtp5_date: '2021-01-01' }];
+  const renderRecords = (records: typeof data) => {
     const client = new QueryClient();
     client.setQueryData(['vaccineRules', 2569, '5yr'], rules);
     const html = renderToStaticMarkup(
       <QueryClientProvider client={client}>
-        <View1AgeRecords age={5} fiscalYear={2569} quarter="all" data={warned} isLoading={false} error={null} asOfDate={null} />
+        <View1AgeRecords age={5} fiscalYear={2569} quarter="all" data={records} isLoading={false} error={null} asOfDate={null} />
       </QueryClientProvider>,
     );
-    expect(html).toContain('bg-red-100');
+    return html.slice(html.indexOf('<tbody'), html.indexOf('</tbody>'));
+  };
+
+  it('Issue #102: marks a record whose only problem is a date warning as ตรวจสอบประวัติ, not ไม่ครบ', () => {
+    // dtp5 ลงเป็นวันเกิด = คำเตือนวันที่ → ตรวจสอบประวัติ ไม่ใช่เข็มขาด
+    const html = renderRecords([{ ...data[0], dtp5_date: '2021-01-01' }]);
+    expect(html).toContain('>ตรวจสอบประวัติ<');
+    expect(html).not.toContain('>ไม่ครบ<');
     expect(html).toContain('ตรวจสอบวันที่: DTP เข็ม 5: วันที่ฉีดตรงวันเกิดตามเกณฑ์ที่ไม่อนุญาต');
+  });
+
+  it('Issue #102: a really missing dose still makes the record ไม่ครบ alongside a date warning', () => {
+    const html = renderRecords([{ ...data[0], dtp5_date: '2021-01-01', opv5_date: '' }]);
+    expect(html).toContain('>ไม่ครบ<');
+    expect(html).toContain('title="OPV เข็ม 5 · ตรวจสอบวันที่: DTP เข็ม 5');
   });
 
   it('labels out-of-plan rules in the guide and header', () => {

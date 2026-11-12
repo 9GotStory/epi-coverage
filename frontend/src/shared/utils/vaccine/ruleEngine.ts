@@ -15,6 +15,8 @@ export interface View1Evaluation {
   pendingVaccines?: string[];
   /** display_name ของ rule ที่อยู่ในสถานะ pending (ใช้ตัดออกจากตัวหาร coverage รายวัคซีน) */
   pendingRuleNames?: string[];
+  /** Issue #102: display_name ของ rule ที่วันที่ครบแต่มีคำเตือนวันที่ ("ตรวจสอบประวัติ") — ไม่ผ่าน ไม่ขาด และไม่อยู่ในตัวหาร */
+  reviewRuleNames?: string[];
   results: Record<string, boolean>;
   /** Issue #121: กฎที่ Birth Window ตัดเด็กออก — ไม่อยู่ใน results/รายการใด ใช้อธิบายในประวัติเท่านั้น */
   inapplicableRules?: InapplicableRule[];
@@ -86,8 +88,8 @@ export const hasFieldDataError = (record: EpiRecord, field: keyof EpiRecord, all
 };
 
 /**
- * เช็กว่าได้รับวัคซีนนั้นๆ หรือยัง โดยอิงจาก Field วันที่
- * วันที่ผิดปกติ (ก่อนวันเกิด/ตรงวันเกิดที่ rule ไม่อนุญาต) → ถือว่ายังไม่ได้รับตามเกณฑ์ HDC
+ * เช็กว่า Field วันที่มีวันที่ที่ไม่มีข้อผิดปกติ (ก่อนวันเกิด/ตรงวันเกิดที่ rule ไม่อนุญาต)
+ * ไม่ใช่ตัวตัดสินว่าขาดวัคซีน — engine ถือวันที่ผิดปกติเป็น "ตรวจสอบประวัติ" (Issue #102, CONTEXT.md §23)
  * @param allowOnBirth อนุญาตให้วันที่ตรงวันเกิดได้ — ผู้เรียกต้องส่งจาก rule.target_age_months === 0
  */
 export const hasDose = (record: EpiRecord, field: keyof EpiRecord, allowOnBirth: boolean = false): boolean => {
@@ -169,6 +171,19 @@ export function ruleSourceDecidable(rule: VaccineRule, record: EpiRecord): boole
 }
 
 /**
+ * Issue #102: กฎมีวันที่ครบตาม ALL/ANY/BRANCH หรือไม่ โดยยังไม่ดูคำเตือนวันที่ — ค่าที่ไม่ว่างแต่รูปแบบผิด
+ * นับว่ามีวันที่ (เป็นคำเตือน "ตรวจสอบประวัติ" ไม่ใช่เข็มขาด) เซลล์ว่างหรือขีดเท่านั้นที่เป็นการขาดวันที่
+ */
+const ruleDatesPresent = (record: EpiRecord, rule: VaccineRule): boolean => {
+  const present = (field: string) => dateKey(record[field as keyof EpiRecord]) !== null;
+  const allPresent = (fields: string[] | undefined) => !!fields && fields.length > 0 && fields.every(present);
+  if (rule.logic_type === 'ANY') return !!rule.required_fields && rule.required_fields.some(present);
+  // BRANCH ผ่านเมื่อเส้นทางใดเส้นทางหนึ่งครบ (เช่น Rota 2 เข็ม หรือ 3 เข็ม)
+  if (rule.logic_type === 'BRANCH') return allPresent(rule.required_fields) || allPresent(rule.branch_alt_fields);
+  return rule.logic_type === 'ALL' && allPresent(rule.required_fields);
+};
+
+/**
  * Evaluate Dynamic View 1 (รายเข็ม)
  * Return structure ให้เข้ากันกับ View1Evaluation
  */
@@ -183,6 +198,7 @@ export const evaluateDynamicV1 = (record: EpiRecord, rules: VaccineRule[], evalu
   const v1Rules = rules.filter(rule => rule.view_type === 1 && rule.is_active && !(rule.display_only || isOutPlanRule(rule)));
   const unknownVaccines: string[] = [];
   const unknownRuleNames: string[] = [];
+  const reviewRuleNames: string[] = [];
   const inapplicableRules: InapplicableRule[] = [];
   let passedCount = 0;
 
@@ -205,30 +221,13 @@ export const evaluateDynamicV1 = (record: EpiRecord, rules: VaccineRule[], evalu
       unknownVaccines.push(`${rule.display_name}: ${rule.unavailable_reason || 'ไฟล์ไม่มีคอลัมน์ที่จำเป็น'}`);
       continue;
     }
-    const dataError = ruleHasDataError(record, rule, rules);
-    if (dataError) {
+    // Issue #102: วันที่ครบแต่มีคำเตือน = ตรวจสอบประวัติ ไม่ผ่านและไม่ขาด (ตัดออกจากตัวหารแบบ pending/unknown)
+    // เซลล์ว่างยังเป็นขาด/Pending ตามเดิมแม้กฎมีคำเตือนร่วมด้วย
+    const passed = ruleDatesPresent(record, rule);
+    if (passed && ruleHasDataError(record, rule, rules)) {
       results[rule.display_name] = false;
-      missingVaccines.push(formatRuleError(rule, dataError));
+      reviewRuleNames.push(rule.display_name);
       continue;
-    }
-
-    let passed = false;
-
-    if (rule.logic_type === 'ALL') {
-      // ต้องมีทุกเข็ม
-      passed = rule.required_fields && rule.required_fields.length > 0 && rule.required_fields.every(field => Boolean(dateKey(record[field as keyof EpiRecord])));
-    } else if (rule.logic_type === 'ANY') {
-      // มีเข็มใดเข็มหนึ่งก็ผ่าน
-      passed = rule.required_fields && rule.required_fields.length > 0 && rule.required_fields.some(field => Boolean(dateKey(record[field as keyof EpiRecord])));
-    } else if (rule.logic_type === 'BRANCH') {
-      // เส้นทางที่ 1 (เช่น Rota 2 เข็ม)
-      const path1Passed = rule.required_fields && rule.required_fields.length > 0 && rule.required_fields.every(field => Boolean(dateKey(record[field as keyof EpiRecord])));
-      // เส้นทางที่ 2 (เช่น Rota 3 เข็ม)
-      const path2Passed = rule.branch_alt_fields && rule.branch_alt_fields.length > 0
-        ? rule.branch_alt_fields.every(field => Boolean(dateKey(record[field as keyof EpiRecord])))
-        : false;
-
-      passed = path1Passed || path2Passed;
     }
 
     results[rule.display_name] = passed;
@@ -245,7 +244,7 @@ export const evaluateDynamicV1 = (record: EpiRecord, rules: VaccineRule[], evalu
     }
   }
 
-  return { missingVaccines, pendingVaccines, pendingRuleNames, unknownVaccines, unknownRuleNames, passedCount, results, inapplicableRules };
+  return { missingVaccines, pendingVaccines, pendingRuleNames, unknownVaccines, unknownRuleNames, reviewRuleNames, passedCount, results, inapplicableRules };
 };
 
 /** คำตัดสินจาก `result` ของ HDC — ค่าว่างหรือค่าที่ระบบไม่รู้จัก (เช่น '-') คือไม่มีคำตัดสิน */
@@ -270,6 +269,7 @@ export const evaluateDynamicV2 = (record: EpiRecord, rules: VaccineRule[], evalu
   const missingVaccines: string[] = [];
   const pendingVaccines: string[] = [];
   const passedVaccines: string[] = [];
+  const reviewVaccines: string[] = [];
   const notEvaluableVaccines: string[] = [];
   const inapplicableRules: InapplicableRule[] = [];
 
@@ -295,53 +295,36 @@ export const evaluateDynamicV2 = (record: EpiRecord, rules: VaccineRule[], evalu
       continue;
     }
 
-    const dataError = ruleHasDataError(record, rule, rules);
-    if (dataError) {
-      // V2 เก็บ "ชื่อกฎสะอาด" เท่านั้น — ข้อความ warning ต้องไม่หลุดมาเป็นชื่อวัคซีนใน
-      // breakdown (สัดส่วนตามกฎประเมินภายใน) รายละเอียดวันที่แสดงที่ layer คำเตือนของ modal
-      missingVaccines.push(rule.display_name);
-      continue;
-    }
-
-    let passed = false;
-    if (rule.logic_type === 'ALL') {
-      passed = rule.required_fields && rule.required_fields.length > 0 && rule.required_fields.every(field => Boolean(dateKey(record[field as keyof EpiRecord])));
-    } else if (rule.logic_type === 'ANY') {
-      passed = rule.required_fields && rule.required_fields.length > 0 && rule.required_fields.some(field => Boolean(dateKey(record[field as keyof EpiRecord])));
-    } else if (rule.logic_type === 'BRANCH') {
-      const path1Passed = rule.required_fields && rule.required_fields.length > 0 && rule.required_fields.every(field => Boolean(dateKey(record[field as keyof EpiRecord])));
-      const path2Passed = rule.branch_alt_fields && rule.branch_alt_fields.length > 0
-        ? rule.branch_alt_fields.every(field => Boolean(dateKey(record[field as keyof EpiRecord])))
-        : false;
-      passed = path1Passed || path2Passed;
-    }
-
-    if (!passed) {
-
+    // Issue #102: ดูวันที่ครบก่อน — เซลล์ว่างคือขาดจริง (หรือ Pending) แม้กฎมีคำเตือนวันที่ร่วมด้วย
+    if (!ruleDatesPresent(record, rule)) {
       const { names, isPending } = resolveMissingRuleNames(rule, currentAgeMonths);
       if (isPending) {
         pendingVaccines.push(...names);
       } else {
         missingVaccines.push(...names);
       }
+    } else if (ruleHasDataError(record, rule, rules)) {
+      // วันที่ครบแต่มีคำเตือน = ตรวจสอบประวัติ ไม่ใช่ขาด — เก็บ "ชื่อกฎสะอาด" รายละเอียดอยู่ที่คำเตือนในประวัติ
+      reviewVaccines.push(rule.display_name);
     } else {
       passedVaccines.push(rule.display_name);
     }
   }
 
-  // ลำดับ Confirmed Missing Dose > Pending Rule > ประเมินไม่ได้ (#103, #119) — เด็กยังเล็กกว่าอายุเกณฑ์
+  // ลำดับ Confirmed Missing Dose > ตรวจสอบประวัติ (#102) > Pending Rule > ประเมินไม่ได้ (#103, #119) — เด็กยังเล็กกว่าอายุเกณฑ์
   // คงสถานะ PENDING ตามสัญญา #23 อายุถึงแล้วคอลัมน์ยังไม่ครบจึงเป็น NOT_EVALUABLE (งานตามหาไฟล์ใหม่ #89)
   // ไม่มีกฎ View 2 ที่เปิดใช้เลยก็ตัดสินไม่ได้ ไม่ใช่ผ่าน (fail closed — summary ต้องไม่เป็น 100% ปลอม)
-  const status: 'PASS' | 'FAIL' | 'PENDING' | 'NOT_EVALUABLE' =
+  const status: NonNullable<VaccineStatus['status']> =
     missingVaccines.length > 0 ? 'FAIL'
-      : pendingVaccines.length > 0 ? 'PENDING'
-        : notEvaluableVaccines.length > 0 || v2Rules.length === 0 ? 'NOT_EVALUABLE'
-          : 'PASS';
+      : reviewVaccines.length > 0 ? 'REVIEW'
+        : pendingVaccines.length > 0 ? 'PENDING'
+          : notEvaluableVaccines.length > 0 || v2Rules.length === 0 ? 'NOT_EVALUABLE'
+            : 'PASS';
 
   // Issue #101 (ADR-0006): ผลจากกฎเป็นหลัก `result` ของ HDC แสดงประกอบเท่านั้น ไม่เปลี่ยน status
   // ขัดกัน = ทั้งสองฝ่ายตัดสินผ่าน/ไม่ผ่านแล้วไม่ตรงกัน — View 2 Pending/ประเมินไม่ได้ไม่ใช่คำตัดสิน จึงไม่ติดป้าย
   const hdcVerdict = readHdcVerdict(record.result);
   const hdcMismatch = (hdcVerdict === 'PASS' && status === 'FAIL') || (hdcVerdict === 'FAIL' && status === 'PASS');
 
-  return { isFullyImmunized: status === 'PASS', status, missingVaccines, pendingVaccines, passedVaccines, notEvaluableVaccines, inapplicableRules, hdcVerdict, hdcMismatch };
+  return { isFullyImmunized: status === 'PASS', status, missingVaccines, pendingVaccines, passedVaccines, reviewVaccines, notEvaluableVaccines, inapplicableRules, hdcVerdict, hdcMismatch };
 };

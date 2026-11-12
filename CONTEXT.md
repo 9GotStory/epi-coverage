@@ -362,6 +362,8 @@ Current concepts include:
 
 A date-check warning must not automatically be reinterpreted as a missing vaccine.
 
+A Vaccine Rule whose required dates are all present but which carries a date-check warning is in the **"ตรวจสอบประวัติ"** (review history) state: neither passed nor missing (Issue #102, ADR-0006). It is a history-review task, never a vaccination chase list. How it is ranked and counted is defined in `docs/features.md` §3.6.
+
 ---
 
 ## 24. Same-Day Pair
@@ -544,8 +546,9 @@ When a new domain concept appears repeatedly and cannot be expressed clearly usi
 
 - View 2 Pending records (§40) are excluded from the applicable denominator and counted separately (`view2PendingCount`).
 - Records with a required View 2 rule that the source file cannot confirm columns for, and no Confirmed Missing Dose, are "ประเมินไม่ได้" (not evaluable): also excluded and counted separately (`view2NotEvaluableCount`, Issue #89). They are a data-quality follow-up, never a vaccination chase list.
-- A record with a Confirmed Missing Dose (§38) stays an applicable failure even when another required View 2 rule is not evaluable (Issue #103) or is a Pending Rule (§39, Issue #119).
-- A newly generated summary partitions its cohort exactly into applicable + View 2 Pending + not evaluable; coverage uses applicable as the denominator.
+- Records whose only problem is a date-check warning are "ตรวจสอบประวัติ" (§23): also excluded and counted separately (`view2ReviewCount`, Issue #102).
+- A record with a Confirmed Missing Dose (§38) stays an applicable failure even when another required View 2 rule is not evaluable (Issue #103), is a Pending Rule (§39, Issue #119) or carries a date-check warning (Issue #102).
+- A newly generated summary partitions its cohort exactly into applicable + View 2 Pending + not evaluable + ตรวจสอบประวัติ; coverage uses applicable as the denominator.
 - Historical summary snapshots may predate this persisted contract and lack the fields; they remain valid without them.
 
 This is a summary-aggregation concept. It does not change per-record View 2 display authority (see §12) or the Vaccine Rules Engine (§26).
