@@ -4,7 +4,7 @@
  * Public seam: actual YearComparison, network-mocked annual summary APIs and
  * real user interactions. Fixtures are synthetic, aggregate, and non-identifying.
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
@@ -107,6 +107,14 @@ const annualRequests = () => api.fetchApi.mock.calls
   .filter(call => call[0] === 'getDashboardSummariesMultiYear')
   .map(call => (call[1] as { fiscalYears: number[] }).fiscalYears);
 
+// Issue #132: the route's first render in a file is a one-time cold cost (~0.6 s alone, 1–5 s when
+// the machine is under load), longer than findBy's 1 s default. Pay it once here so each test's
+// waits measure that test's own behaviour.
+beforeAll(async () => {
+  mount();
+  await screen.findByRole('heading', { name: 'เด็กอายุ 5 ปี' }, { timeout: 10_000 });
+  cleanup();
+}, 15_000);
 beforeEach(() => { api.fetchApi.mockReset(); charts.rendered.length = 0; });
 afterEach(() => cleanup());
 
