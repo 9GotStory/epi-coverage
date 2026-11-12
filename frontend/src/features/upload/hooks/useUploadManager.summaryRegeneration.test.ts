@@ -44,8 +44,7 @@ function stubApi(activeRecords: Partial<Record<Table, Record<string, unknown>[]>
       return { data: { success: true } };
     }
     if (action === 'preflightEpiImport') return { data: safePreflight };
-    if (action === 'upsertEpiData') return { data: { success: true, inserted: 0, updated: 2 } };
-    if (action === 'cleanupEpiData') return { data: { success: true, deactivated: 7 } };
+    if (action === 'upsertEpiData') return { data: { success: true, inserted: 0, updated: 2, finalized: true, deactivated: 7 } }; // Issue #144: the last chunk finalizes
     return { data: { success: true } };
   });
   return saved;
