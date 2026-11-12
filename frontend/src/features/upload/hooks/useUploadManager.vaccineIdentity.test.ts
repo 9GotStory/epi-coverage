@@ -23,7 +23,7 @@ import type { VaccineRule } from '../../../shared/utils/vaccine/ruleEngine';
 const api = vi.hoisted(() => ({ fetchApi: vi.fn() }));
 
 vi.mock('../../../shared/lib/api', () => ({ fetchApi: api.fetchApi }));
-vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+vi.mock('sonner', () => ({ toast: { success: vi.fn(), warning: vi.fn(), error: vi.fn() } }));
 
 /** Synthetic snapshot-time rules with forward identity fields (test-only widening). */
 function v1Rule(metricKey: string): VaccineRule {

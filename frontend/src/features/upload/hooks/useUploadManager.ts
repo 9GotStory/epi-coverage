@@ -19,6 +19,55 @@ async function saveSummary(payload: Record<string, unknown>) {
 }
 
 export type TargetTable = 'Epi_1_Year' | 'Epi_2_Year' | 'Epi_3_Year' | 'Epi_5_Year';
+
+export const TABLE_LABEL: Record<TargetTable, string> = {
+  Epi_1_Year: 'เด็ก 1 ปี', Epi_2_Year: 'เด็ก 2 ปี', Epi_3_Year: 'เด็ก 3 ปี', Epi_5_Year: 'เด็ก 5 ปี',
+};
+
+/** The four Age Group tables Summary Regeneration processes. */
+export const SUMMARY_REGENERATION_TABLES: readonly TargetTable[] = ['Epi_1_Year', 'Epi_2_Year', 'Epi_3_Year', 'Epi_5_Year'];
+
+/**
+ * Issue #134: writes the Dashboard Summaries (`_all` + Q1–Q4) of one table and Fiscal Year from its
+ * Active Records, for both Summary Regeneration and the post-import step. A table with no Active Records
+ * gets no summary at all and its existing rows are left untouched (CONTEXT.md §44). An empty cohort or
+ * quarter inside a table with records is still a real 0. Returns false when the table was skipped.
+ */
+async function writeTableSummaries(targetTable: TargetTable, fiscalYear: string): Promise<boolean> {
+  const fullDataRes = await fetchApi('getEpiData', { targetTable, fiscalYear: Number(fiscalYear), hoscode: '00588' });
+  const fullData = fullDataRes.data; // getEpiData คืน array ตรงๆ (ถ้าไม่มี sheet คืน [])
+  if (!Array.isArray(fullData)) throw new Error('รูปแบบข้อมูล EPI ไม่ถูกต้อง (ต้องเป็น array)');
+  if (fullData.length === 0) return false;
+
+  // ดึง Rules จาก Database สำหรับปีงบประมาณและกลุ่มอายุนี้
+  const ageGroup = getAgeGroupFromTable(targetTable);
+  const rulesRes = await fetchApi('getVaccineRules', { fiscalYear, ageGroup });
+  const rules: VaccineRule[] = rulesRes.data;
+  if (!Array.isArray(rules)) throw new Error('รูปแบบข้อมูล vaccine rules ไม่ถูกต้อง (ต้องเป็น array)');
+
+  // View 1 ใช้ rules จากฐานข้อมูล (view_type=1) ร่วมกับหน้ารายบุคคล; View 2 ใช้ view_type=2
+  const dbRules = markSourceAware(rules);
+  const evalV1 = (r: EpiRecord) => evaluateDynamicV1(r, dbRules);
+  const evalV2 = (r: EpiRecord) => evaluateDynamicV2(r, dbRules);
+
+  const targetAge = getAgeFromTable(targetTable);
+  const rangeAll = getBirthDateRangeForQuarter(Number(fiscalYear), 'all', targetAge);
+  const cohortAll = fullData.filter((record: EpiRecord) => new Date(record.birth) >= rangeAll.start && new Date(record.birth) <= rangeAll.end);
+  const summaryAll = calcGroupSummary(cohortAll, evalV1, evalV2, Number(fiscalYear), dbRules);
+  await saveSummary({ targetTable, fiscalYear: Number(fiscalYear), quarter: 'all', summaryData: JSON.stringify(summaryAll) });
+
+  for (const q of [1, 2, 3, 4] as const) {
+    const { start, end } = getBirthDateRangeForQuarter(Number(fiscalYear), q, targetAge);
+    const quarterData = fullData.filter((record: any) => {
+      if (!record.birth) return false;
+      const bDate = new Date(record.birth);
+      return bDate >= start && bDate <= end;
+    });
+    const summaryQ = calcGroupSummary(quarterData, evalV1, evalV2, Number(fiscalYear), dbRules);
+    await saveSummary({ targetTable, fiscalYear: Number(fiscalYear), quarter: q, summaryData: JSON.stringify(summaryQ) });
+  }
+  return true;
+}
 export type UploadStatus = 'idle' | 'parsing' | 'preflighting' | 'confirming' | 'uploading' | 'cleaning' | 'generating_summary' | 'success' | 'error';
 
 /** Issue #111: server-side preview of an import — counts and facility codes only, never identities. */
@@ -62,6 +111,8 @@ export function useUploadManager() {
   const [errorMsg, setErrorMsg] = useState('');
   const [results, setResults] = useState<{inserted: number, updated: number, deactivated: number}>({inserted: 0, updated: 0, deactivated: 0});
   const [isSyncing, setIsSyncing] = useState(false);
+  /** Issue #134: the last import wrote no Dashboard Summary because its table has no Active Records left. */
+  const [summarySkipped, setSummarySkipped] = useState(false);
   const [preflight, setPreflight] = useState<ImportPreflight | null>(null);
   // The parsed rows and the scope they were preflighted for; the import uses exactly these.
   const pendingRef = useRef<{ batchId: string; rows: any[]; fiscalYear: string; targetTable: TargetTable; importMode: 'merge' | 'sync' } | null>(null);
@@ -146,6 +197,7 @@ export function useUploadManager() {
     setStatus('uploading');
     setProgress(0);
     setResults({inserted: 0, updated: 0, deactivated: 0});
+    setSummarySkipped(false);
     const { batchId, rows: allRows, fiscalYear, targetTable, importMode } = pending;
 
     try {
@@ -179,40 +231,8 @@ export function useUploadManager() {
       // Generate and Save Dashboard Summary
       setStatus('generating_summary');
       setProgress(90);
-      
-      const fullDataRes = await fetchApi('getEpiData', { targetTable, fiscalYear: Number(fiscalYear), hoscode: '00588' });
-      const fullData = fullDataRes.data; // getEpiData คืน array ตรงๆ (ถ้าไม่มี sheet คืน [])
-
-      let evalV1, evalV2;
-
-      // ดึง Rules จาก Database สำหรับปีงบประมาณและกลุ่มอายุนี้
-      const ageGroup = getAgeGroupFromTable(targetTable);
-      const rulesRes = await fetchApi('getVaccineRules', { fiscalYear, ageGroup });
-      const rules: VaccineRule[] = rulesRes.data;
-      if (!Array.isArray(rules)) throw new Error('รูปแบบข้อมูล vaccine rules ไม่ถูกต้อง (ต้องเป็น array)');
-      
-      // View 1 ใช้ rules จากฐานข้อมูล (view_type=1) ร่วมกับหน้ารายบุคคล; View 2 ใช้ view_type=2
-      const dbRules = markSourceAware(rules);
-      evalV1 = (r: EpiRecord) => evaluateDynamicV1(r, dbRules);
-      evalV2 = (r: EpiRecord) => evaluateDynamicV2(r, dbRules);
-      
-      const rangeAll = getBirthDateRangeForQuarter(Number(fiscalYear), 'all', getAgeFromTable(targetTable));
-      const cohortAll = fullData.filter((record: EpiRecord) => new Date(record.birth) >= rangeAll.start && new Date(record.birth) <= rangeAll.end);
-      const summaryAll = calcGroupSummary(cohortAll, evalV1, evalV2, Number(fiscalYear), dbRules);
-      await saveSummary({ targetTable, fiscalYear, quarter: 'all', summaryData: JSON.stringify(summaryAll) });
-
-      // Generate for each quarter
-      const targetAge = getAgeFromTable(targetTable);
-      for (const q of [1, 2, 3, 4] as const) {
-        const { start, end } = getBirthDateRangeForQuarter(Number(fiscalYear), q, targetAge);
-        const quarterData = fullData.filter((record: any) => {
-          if (!record.birth) return false;
-          const bDate = new Date(record.birth);
-          return bDate >= start && bDate <= end;
-        });
-        const summaryQ = calcGroupSummary(quarterData, evalV1, evalV2, Number(fiscalYear), dbRules);
-        await saveSummary({ targetTable, fiscalYear, quarter: q, summaryData: JSON.stringify(summaryQ) });
-      }
+      // Issue #134: a Full-File Sync that deactivated every record leaves no Active Records, so no summary.
+      setSummarySkipped(!(await writeTableSummaries(targetTable, fiscalYear)));
 
       setProgress(100);
       setResults({ inserted, updated, deactivated: cleanupPayload.deactivated || 0 });
@@ -249,59 +269,41 @@ export function useUploadManager() {
     setStatus('idle');
     setProgress(0);
     setErrorMsg('');
+    setSummarySkipped(false);
   }, []);
 
   const handleSyncAll = useCallback(async () => {
     setIsSyncing(true);
+    // Issue #134: refresh unless the run certainly wrote nothing; a failure part-way may follow saved tables.
+    let wroteNothing = false;
     try {
-      const tables: TargetTable[] = ['Epi_1_Year', 'Epi_2_Year', 'Epi_3_Year', 'Epi_5_Year'];
-      for (const t of tables) {
-        const fullDataRes = await fetchApi('getEpiData', { targetTable: t, fiscalYear: Number(fiscalYear), hoscode: '00588' });
-        const fullData = fullDataRes.data; // getEpiData คืน array ตรงๆ (ถ้าไม่มี sheet คืน [])
-
-        let evalV1, evalV2;
-
-        const ageGroup = getAgeGroupFromTable(t);
-        const rulesRes = await fetchApi('getVaccineRules', { fiscalYear, ageGroup });
-        const rules: VaccineRule[] = rulesRes.data;
-        if (!Array.isArray(rules)) throw new Error('รูปแบบข้อมูล vaccine rules ไม่ถูกต้อง (ต้องเป็น array)');
-        
-        const dbRules = markSourceAware(rules);
-        evalV1 = (r: EpiRecord) => evaluateDynamicV1(r, dbRules);
-        evalV2 = (r: EpiRecord) => evaluateDynamicV2(r, dbRules);
-        
-        const rangeAll = getBirthDateRangeForQuarter(Number(fiscalYear), 'all', getAgeFromTable(t));
-        const cohortAll = fullData.filter((record: EpiRecord) => new Date(record.birth) >= rangeAll.start && new Date(record.birth) <= rangeAll.end);
-        const summaryAll = calcGroupSummary(cohortAll, evalV1, evalV2, Number(fiscalYear), dbRules);
-        await saveSummary({ targetTable: t, fiscalYear: Number(fiscalYear), quarter: 'all', summaryData: JSON.stringify(summaryAll) });
-        
-        const targetAge = getAgeFromTable(t);
-        for (const q of [1, 2, 3, 4] as const) {
-          const { start, end } = getBirthDateRangeForQuarter(Number(fiscalYear), q, targetAge);
-          const quarterData = fullData.filter((record: any) => {
-            if (!record.birth) return false;
-            const bDate = new Date(record.birth);
-            return bDate >= start && bDate <= end;
-          });
-          const summaryQ = calcGroupSummary(quarterData, evalV1, evalV2, Number(fiscalYear), dbRules);
-          await saveSummary({ targetTable: t, fiscalYear: Number(fiscalYear), quarter: q, summaryData: JSON.stringify(summaryQ) });
-        }
+      const skippedLabels: string[] = [];
+      for (const table of SUMMARY_REGENERATION_TABLES) {
+        if (!(await writeTableSummaries(table, fiscalYear))) skippedLabels.push(TABLE_LABEL[table]);
       }
-      
-      // Invalidate relevant queries to force dashboard and rules refresh
-      queryClient.invalidateQueries({ queryKey: ['dashboardSummaries'] });
-      // Issue #22: Comparison reads must refresh too (separate query family), plus
-      // the summary-derived usable comparison years.
-      queryClient.invalidateQueries({ queryKey: ['dashboardSummariesMultiYear'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboardSummaryYears'] });
-      queryClient.invalidateQueries({ queryKey: ['vaccineRules'] });
-      queryClient.invalidateQueries({ queryKey: ['epiData'] });
-
-      toast.success('ประมวลผล Dashboard สำหรับทุกกลุ่มอายุเรียบร้อยแล้ว!');
+      if (skippedLabels.length === SUMMARY_REGENERATION_TABLES.length) {
+        wroteNothing = true;
+        toast.error(`ไม่มีข้อมูลปีงบประมาณ ${fiscalYear} ในทุกกลุ่มอายุ — ไม่ได้บันทึกสรุป`);
+      } else if (skippedLabels.length > 0) {
+        const regeneratedCount = SUMMARY_REGENERATION_TABLES.length - skippedLabels.length;
+        toast.warning(`ประมวลผลปีงบประมาณ ${fiscalYear} แล้ว ${regeneratedCount} กลุ่มอายุ · ข้าม${skippedLabels.join(', ')} (ไม่มีข้อมูลปีนี้)`);
+      } else {
+        toast.success('ประมวลผล Dashboard สำหรับทุกกลุ่มอายุเรียบร้อยแล้ว!');
+      }
     } catch (error: any) {
       console.error(error);
       toast.error('เกิดข้อผิดพลาดในการประมวลผล: ' + (error.message || 'Unknown error'));
     } finally {
+      if (!wroteNothing) {
+        // Invalidate relevant queries to force dashboard and rules refresh
+        queryClient.invalidateQueries({ queryKey: ['dashboardSummaries'] });
+        // Issue #22: Comparison reads must refresh too (separate query family), plus
+        // the summary-derived usable comparison years.
+        queryClient.invalidateQueries({ queryKey: ['dashboardSummariesMultiYear'] });
+        queryClient.invalidateQueries({ queryKey: ['dashboardSummaryYears'] });
+        queryClient.invalidateQueries({ queryKey: ['vaccineRules'] });
+        queryClient.invalidateQueries({ queryKey: ['epiData'] });
+      }
       setIsSyncing(false);
     }
   }, [fiscalYear, queryClient]);
@@ -320,6 +322,7 @@ export function useUploadManager() {
     status,
     errorMsg,
     results,
+    summarySkipped,
     isSyncing,
     handleDrop,
     handleUpload,

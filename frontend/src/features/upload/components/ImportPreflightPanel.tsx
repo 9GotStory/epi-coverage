@@ -1,11 +1,8 @@
 import { useState } from 'react';
 import { AlertTriangle, ShieldCheck } from 'lucide-react';
 import { Button } from '../../../shared/components/ui/button';
-import type { ImportPreflight, TargetTable } from '../hooks/useUploadManager';
-
-const TABLE_LABEL: Record<TargetTable, string> = {
-  Epi_1_Year: 'เด็ก 1 ปี', Epi_2_Year: 'เด็ก 2 ปี', Epi_3_Year: 'เด็ก 3 ปี', Epi_5_Year: 'เด็ก 5 ปี',
-};
+import { TABLE_LABEL } from '../hooks/useUploadManager';
+import type { ImportPreflight } from '../hooks/useUploadManager';
 
 interface Props {
   preflight: ImportPreflight;

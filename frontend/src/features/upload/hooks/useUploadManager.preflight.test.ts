@@ -17,7 +17,7 @@ const api = vi.hoisted(() => ({ fetchApi: vi.fn() }));
 const parser = vi.hoisted(() => ({ parseHdcFile: vi.fn() }));
 vi.mock('../../../shared/lib/api', () => ({ fetchApi: api.fetchApi }));
 vi.mock('../utils/parseHdcFile', () => ({ parseHdcFile: parser.parseHdcFile }));
-vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+vi.mock('sonner', () => ({ toast: { success: vi.fn(), warning: vi.fn(), error: vi.fn() } }));
 
 const rows = [
   { hoscode: '00001', hosname: 'หน่วยจำลอง', pid: '1', cid: '0000000000001', sex: '1', birth: '2024-11-15', check_vhid: '00000101', name: 'สมมติ', lname: 'ทดสอบ', bcg_date: '2024-11-16' },

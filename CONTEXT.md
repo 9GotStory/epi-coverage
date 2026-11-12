@@ -532,6 +532,7 @@ Preferred examples:
 - Vaccine Rule for one configurable evaluation rule
 - Vaccine Rules Engine for the rule subsystem
 - Full-File Sync only for the explicit synchronization behavior
+- Summary Regeneration for recomputing Dashboard Summaries, never "Sync Summaries" or "sync"
 - View 2 Pending for the record-level not-yet-due state, never bare "pending" (which is an Approval Status)
 - Inapplicable Rule for a rule outside the child's Birth Window, never "not applicable" for a rule that is pending or not evaluable
 - HDC Result Mismatch for a disagreement between the rule result and the HDC `result`, never "HDC override"
@@ -619,3 +620,21 @@ Do not confuse it with:
 An **HDC Result Mismatch** is a View 2 record whose rule result (§12) and imported HDC `result` (§17) disagree (Issue #101). Thai UI wording: "ผลไม่ตรงกับ HDC".
 
 It is a review flag for staff, not a result: it never changes the rule result. Which combinations count as a mismatch is defined in `docs/features.md` §3.1.
+
+---
+
+## 44. Dashboard Summary
+
+A **Dashboard Summary** is a stored aggregate snapshot for one Age Group, one Fiscal Year and one period (the whole fiscal year or one quarter). It is computed from Active Records (§30) under that year's Vaccine Rules (§19).
+
+It holds counts only, never individual records. Its timestamp is when it was computed, not the As-of Date (§31).
+
+A Dashboard Summary is a measurement of data that exists. An Age Group with no Active Records for a Fiscal Year has no Dashboard Summary for that year. It does not have a summary of zero (Issue #115).
+
+---
+
+## 45. Summary Regeneration
+
+**Summary Regeneration** recomputes the Dashboard Summaries (§44) of one Fiscal Year from the Active Records already stored, without a new Import (§27). Thai UI wording: "ประมวลผล Dashboard ใหม่".
+
+It is not a sync. "Sync" in this project means Full-File Sync (§29), which can deactivate records. Summary Regeneration never changes Individual EPI Records.
