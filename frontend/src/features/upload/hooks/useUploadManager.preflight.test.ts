@@ -164,3 +164,28 @@ describe('Issue #136 — one typed number per risk condition; no default Fiscal 
     expect(result.current.fiscalYear).toBe('2569');
   });
 });
+
+describe('Issue #140 — an Unfinished Import Undo blocks the import', () => {
+  const blocked = { success: false, reason: 'unfinished_undo', error: 'An Import Undo of this table and fiscal year is unfinished. Finish it first.' };
+
+  it('explains a refused preflight in Thai, naming the table and Fiscal Year and the undo section', async () => {
+    stubApi(blocked);
+    const result = await preparedHook();
+    expect(result.current.status).toBe('error');
+    expect(result.current.errorMsg).toMatch(/เด็ก 1 ปี.*ปีงบประมาณ 2569/);
+    expect(result.current.errorMsg).toMatch(/ย้อนการนำเข้าล่าสุด/);
+    expect(calls('upsertEpiData')).toHaveLength(0);
+  });
+
+  it('explains the same refusal of the first chunk write', async () => {
+    stubApi(safePreflight);
+    const result = await preparedHook();
+    const fetchApi = api.fetchApi.getMockImplementation()!;
+    api.fetchApi.mockImplementation(async (action: string, payload: unknown) =>
+      action === 'upsertEpiData' ? { data: blocked } : fetchApi(action, payload));
+    await act(async () => { await result.current.confirmUpload(); });
+    expect(result.current.status).toBe('error');
+    expect(result.current.errorMsg).toMatch(/เด็ก 1 ปี.*ปีงบประมาณ 2569.*ย้อนการนำเข้าล่าสุด/);
+    expect(calls('cleanupEpiData')).toHaveLength(0);
+  });
+});

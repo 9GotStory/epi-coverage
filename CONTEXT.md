@@ -661,5 +661,6 @@ Do not confuse it with a Birth Window (§41), whose Thai wording is "ช่ว�
 - It applies only to a Batch that updated no existing record. Such a Batch only added records and, in a Full-File Sync (§29), deactivated records. Import Undo deactivates the records it added and reactivates the records it deactivated.
 - It is exact or refused. It never infers which records a Batch changed, and it never restores overwritten vaccine values. When it is refused, the recovery is to import the correct file again.
 - It is one step only. An undone Batch cannot be undone again, and it still blocks Import Undo of any earlier Batch.
+- An **Unfinished Import Undo** is an Import Undo that has started but has not completed every step (Issue #140). Thai UI wording: "การย้อนที่ยังไม่เสร็จ"; the action that completes it is "ย้อนต่อให้เสร็จ". The Batch counts as undone only once every step is complete. Until then, no Import may write to the same Age Group and Fiscal Year. Do not call finishing it a "repair": nothing is broken, the undo is not finished yet.
 
 Do not call it a "rollback" or "revert". It is not a Full-File Sync and not a Summary Regeneration (§45), although it changes Active Records and therefore the Dashboard Summaries (§44).

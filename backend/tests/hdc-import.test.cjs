@@ -38,7 +38,7 @@ function setup({ autoPreflight = true } = {}) {
           setFontWeight() { return this; }, setBackground() { return this; },
         };
       },
-      appendRow(values) { cells.push([...values]); return this; },
+      appendRow(values) { cells.push([...values]); maxRows = Math.max(maxRows, cells.length); return this; }, // Sheets grows the grid on append
       deleteRow(n) { cells.splice(n - 1, 1); return this; },
     };
     if (sheet.getLastColumn() > maxColumns) maxColumns = sheet.getLastColumn();
@@ -1172,15 +1172,197 @@ test('Import Undo routes are closed to the public and to facility users', () => 
   assert.equal(call('undoEpiImport', actions.undoEpiImport).data.reason, 'no_batch');
 });
 
-test('a summary removal that fails after the rows are written still leaves the undo recorded and audited', () => {
-  const { context: c, sheets } = setup();
+test('a summary removal that fails leaves the undo unfinished, and finishing it removes the summaries and audits once', () => {
+  const { context: c, sheets, createSheet } = setup();
+  summarySheet(createSheet);
+  const auditLogs = auditSheet(createSheet);
+  c.logAction = (userId, email, action, details) => auditLogs.appendRow(['uuid', userId, email, action, details, 'at']);
   importBatch(c, cohort(2), 'only-import');
-  const audit = [];
-  c.logAction = (...entry) => audit.push(entry);
   const preview = undoPreview(c);
+  const deleteDashboardSummaries = c.deleteDashboardSummaries;
   c.deleteDashboardSummaries = () => { throw new Error('Sheets service failed'); };
   assert.throws(() => c.undoEpiImport(preview.batchId, { wouldDeactivate: 2, wouldReactivate: 0 }, administrator), /Sheets service failed/);
-  const batches = sheets.get('epi_import_batches').cells;
-  assert.equal(batches.find(row => row[0] === 'only-import')[batches[0].indexOf('status')], 'undone');
-  assert.deepEqual(audit.map(entry => entry[2]), ['undo_epi_import']);
+  assert.equal(receiptOf(sheets, 'only-import').status, 'undoing'); // ADR-0010, replacing #139's "undone at once": the receipt traces it
+  assert.equal(auditLogs.cells.filter(row => row[3] === 'undo_epi_import').length, 0); // audited only with the real summary outcome
+
+  c.deleteDashboardSummaries = deleteDashboardSummaries;
+  const unfinished = undoPreview(c);
+  assert.deepEqual([unfinished.unfinished, unfinished.wouldDeactivate, unfinished.wouldReactivate, unfinished.summariesWillBeRemoved], [true, 2, 0, true]);
+  assert.deepEqual(finishUndo(c, unfinished), { success: true, deactivated: 2, reactivated: 0, summariesRemoved: true });
+  assert.deepEqual(sheets.get('Dashboard_Summaries').cells.slice(1).map(row => row[0]), ['Epi_1_Year_2570_all', 'Epi_2_Year_2569_all']);
+  const events = auditLogs.cells.filter(row => row[3] === 'undo_epi_import');
+  assert.equal(events.length, 1);
+  assert.ok(events[0][4].includes('summaries removed true'), events[0][4]);
+  assert.equal(receiptOf(sheets, 'only-import').status, 'undone');
+});
+
+/* ─────────────── Issue #140 (#142): Unfinished Import Undo ─────────────── */
+const receiptOf = (sheets, batch) => {
+  const cells = sheets.get('epi_import_batches').cells;
+  const row = cells.find(entry => entry[0] === batch);
+  return Object.fromEntries(cells[0].map((field, index) => [field, row[index]]));
+};
+/** Makes the next write to `sheetName` that `matches` throw, as a Sheets service error or a timeout would. */
+function failNextWrite(sheets, sheetName, matches = () => true) {
+  const sheet = sheets.get(sheetName);
+  const getRange = sheet.getRange;
+  sheet.getRange = (...args) => {
+    const range = getRange.apply(sheet, args);
+    const setValues = range.setValues;
+    range.setValues = values => {
+      if (matches(values)) { sheet.getRange = getRange; throw new Error('Sheets service failed'); }
+      return setValues.call(range, values);
+    };
+    return range;
+  };
+}
+const finishUndo = (c, preview, auth = administrator) =>
+  plain(c.undoEpiImport(preview.batchId, { wouldDeactivate: preview.wouldDeactivate, wouldReactivate: preview.wouldReactivate }, auth));
+
+test('an undo whose row write fails stays undoing, and finishing it does exactly what the undo planned', () => {
+  const { context: c, sheets, read } = setup();
+  importBatch(c, cohort(6), 'existing', { mode: 'sync' });
+  importBatch(c, cohort(5), 'moved-out', { mode: 'sync' });
+  importBatch(c, cohort(4, '00588', 100), 'wrong-file', { mode: 'sync' });
+  const preview = undoPreview(c);
+  failNextWrite(sheets, 'Epi_1_Year');
+  assert.throws(() => c.undoEpiImport(preview.batchId, { wouldDeactivate: 4, wouldReactivate: 5 }, administrator), /Sheets service failed/);
+  assert.equal(receiptOf(sheets, 'wrong-file').status, 'undoing');
+  assert.deepEqual(activeCids(read), cohort(4, '00588', 100).map(row => row.cid)); // rows untouched
+
+  const unfinished = undoPreview(c);
+  assert.deepEqual([unfinished.eligible, unfinished.unfinished, unfinished.batchId, unfinished.startedBy],
+    [true, true, 'wrong-file', 'admin@example.test']);
+  assert.ok(!Number.isNaN(Date.parse(unfinished.startedAt)));
+  assert.deepEqual([unfinished.wouldDeactivate, unfinished.wouldReactivate, unfinished.activeAfter, unfinished.summariesWillBeRemoved], [4, 5, 5, false]);
+  assert.equal('byHoscode' in unfinished, false);
+
+  assert.deepEqual(finishUndo(c, unfinished), { success: true, deactivated: 4, reactivated: 5, summariesRemoved: false });
+  assert.equal(receiptOf(sheets, 'wrong-file').status, 'undone');
+  assert.deepEqual(activeCids(read), cohort(5).map(row => row.cid));
+  assert.equal(undoPreview(c).reason, 'already_undone');
+});
+
+test('an undo interrupted after its row write is finished with the planned counts, never a 0 / 0 audit', () => {
+  const { context: c, sheets, read, createSheet } = setup();
+  const auditLogs = auditSheet(createSheet);
+  importBatch(c, cohort(3), 'existing', { mode: 'sync' });
+  importBatch(c, cohort(2, '00588', 90), 'wrong', { mode: 'sync' });
+  const preview = undoPreview(c);
+  c.logAction = () => { throw new Error('audit append failed'); };
+  assert.throws(() => undo(c, preview), /audit append failed/);
+  assert.deepEqual(activeCids(read), cohort(3).map(row => row.cid)); // the rows are already reversed
+  assert.equal(receiptOf(sheets, 'wrong').status, 'undoing');
+
+  const unfinished = undoPreview(c);
+  assert.deepEqual([unfinished.unfinished, unfinished.wouldDeactivate, unfinished.wouldReactivate], [true, 2, 3]);
+  c.logAction = (userId, email, action, details) => auditLogs.appendRow(['uuid', userId, email, action, details, 'at']);
+  const otherAdmin = { ...administrator, userId: 'a2', email: 'other-admin@example.test' };
+  assert.deepEqual(finishUndo(c, unfinished, otherAdmin), { success: true, deactivated: 2, reactivated: 3, summariesRemoved: false });
+  assert.deepEqual(activeCids(read), cohort(3).map(row => row.cid));
+
+  const events = auditLogs.cells.filter(row => row[3] === 'undo_epi_import');
+  assert.equal(events.length, 1);
+  const [, userId, email, , details] = events[0];
+  assert.deepEqual([userId, email], ['a1', 'admin@example.test']); // the admin who started the undo
+  for (const fact of ['deactivated 2', 'reactivated 3', 'finished by other-admin@example.test']) assert.ok(details.includes(fact), details);
+  const record = JSON.parse(receiptOf(sheets, 'wrong').undo);
+  assert.deepEqual([record.by, record.deactivated, record.reactivated, record.finishedBy], ['admin@example.test', 2, 3, 'other-admin@example.test']);
+});
+
+test('an undo whose final receipt write fails is finished without writing anything twice', () => {
+  const { context: c, sheets, read, createSheet } = setup();
+  const auditLogs = auditSheet(createSheet);
+  c.logAction = (userId, email, action, details) => auditLogs.appendRow(['uuid', userId, email, action, details, 'at']);
+  importBatch(c, cohort(2), 'only-import');
+  const preview = undoPreview(c);
+  failNextWrite(sheets, 'epi_import_batches', values => values.some(row => row[7] === 'undone'));
+  assert.throws(() => undo(c, preview), /Sheets service failed/);
+  assert.equal(receiptOf(sheets, 'only-import').status, 'undoing');
+  c.logAction = () => { throw new Error('must not audit again'); };
+  assert.deepEqual(finishUndo(c, undoPreview(c)), { success: true, deactivated: 2, reactivated: 0, summariesRemoved: true });
+  assert.equal(receiptOf(sheets, 'only-import').status, 'undone');
+  assert.equal(read().filter(isActive).length, 0);
+  assert.equal('finishedBy' in JSON.parse(receiptOf(sheets, 'only-import').undo), false); // the same admin finished it
+  assert.equal(finishUndo(c, { batchId: 'only-import', wouldDeactivate: 2, wouldReactivate: 0 }).reason, 'already_undone');
+});
+
+test('finishing an undo is refused when the rows match neither the plan nor the finished undo, or when the counts are not the plan', () => {
+  const { context: c, sheets, read } = setup();
+  importBatch(c, cohort(3), 'existing', { mode: 'sync' });
+  importBatch(c, cohort(2, '00588', 90), 'wrong', { mode: 'sync' });
+  const preview = undoPreview(c);
+  failNextWrite(sheets, 'Epi_1_Year');
+  assert.throws(() => undo(c, preview), /Sheets service failed/);
+  const unfinished = undoPreview(c);
+  assert.deepEqual(finishUndo(c, { ...unfinished, wouldDeactivate: 1 }),
+    { success: false, reason: 'stale', error: 'The undo preview is out of date. Review it again.' });
+
+  const cells = sheets.get('Epi_1_Year').cells; // a hand edit: one inserted row deactivated outside the app
+  cells.find(row => row[cells[0].indexOf('last_seen_batch')] === 'wrong')[cells[0].indexOf('is_active')] = false;
+  const before = JSON.stringify(read());
+  assert.deepEqual(finishUndo(c, unfinished),
+    { success: false, reason: 'unfinished_mismatch', error: 'The records no longer match the unfinished undo.' });
+  assert.equal(JSON.stringify(read()), before);
+  assert.equal(receiptOf(sheets, 'wrong').status, 'undoing');
+});
+
+test('finishing an undo keeps the Dashboard Summaries when Active Records exist by then, and audits what really happened', () => {
+  const { context: c, sheets, createSheet } = setup();
+  summarySheet(createSheet);
+  const auditLogs = auditSheet(createSheet);
+  c.logAction = (userId, email, action, details) => auditLogs.appendRow(['uuid', userId, email, action, details, 'at']);
+  importBatch(c, cohort(1, '00002', 70), 'earlier');
+  const cells = sheets.get('Epi_1_Year').cells;
+  cells[1][cells[0].indexOf('is_active')] = false; // deactivated by hand before #139, so no batch recorded it
+  importBatch(c, cohort(2), 'only-import');
+  const preview = undoPreview(c);
+  assert.equal(preview.summariesWillBeRemoved, true);
+  const deleteDashboardSummaries = c.deleteDashboardSummaries;
+  c.deleteDashboardSummaries = () => { throw new Error('Sheets service failed'); };
+  assert.throws(() => undo(c, preview), /Sheets service failed/);
+  c.deleteDashboardSummaries = deleteDashboardSummaries;
+
+  cells[1][cells[0].indexOf('is_active')] = true; // the earlier child is reactivated by hand while the undo is unfinished
+  const unfinished = undoPreview(c);
+  assert.deepEqual([unfinished.activeAfter, unfinished.summariesWillBeRemoved], [1, false]);
+  assert.deepEqual(finishUndo(c, unfinished), { success: true, deactivated: 2, reactivated: 0, summariesRemoved: false });
+  assert.equal(sheets.get('Dashboard_Summaries').cells.length, 9);
+  assert.equal(JSON.parse(receiptOf(sheets, 'only-import').undo).summariesRemoved, false);
+  const events = auditLogs.cells.filter(row => row[3] === 'undo_epi_import');
+  assert.equal(events.length, 1);
+  assert.ok(events[0][4].includes('summaries removed false'), events[0][4]);
+});
+
+test('an Unfinished Import Undo blocks every Import into its table and year until it is finished', () => {
+  const { context: c, sheets, read } = setup();
+  importBatch(c, cohort(2), 'wrong');
+  prepare(c, [cohort(1, '00002', 30)], 'prepared-earlier', { auth: importer }); // passed preflight before the undo started
+  const preview = undoPreview(c);
+  failNextWrite(sheets, 'Epi_1_Year');
+  assert.throws(() => undo(c, preview), /Sheets service failed/);
+
+  const blocked = { success: false, reason: 'unfinished_undo', error: 'An Import Undo of this table and fiscal year is unfinished. Finish it first.' };
+  const other = cohort(1, '00002', 40); // a facility the unfinished undo never touched
+  assert.deepEqual(plain(preflight(c, [other], 'blocked-preflight')), blocked);
+  assert.deepEqual(plain(c.upsertEpiData(cohort(1, '00002', 30), 'prepared-earlier', importer, 2569, 'Epi_1_Year')), blocked);
+  assert.equal(read().length, 2);
+  assert.equal(preflight(c, [other], 'other-table', { table: 'Epi_2_Year' }).success, true);
+  assert.equal(preflight(c, [other], 'other-year', { year: 2570 }).success, true);
+
+  assert.equal(finishUndo(c, undoPreview(c)).success, true);
+  importBatch(c, other, 'after-finish');
+  assert.deepEqual(activeCids(read), other.map(row => row.cid));
+});
+
+test('an undoing receipt is never finalized, and a resent chunk of its batch writes nothing', () => {
+  const { context: c, sheets, read } = setup();
+  importBatch(c, cohort(2), 'wrong');
+  const preview = undoPreview(c);
+  failNextWrite(sheets, 'Epi_1_Year');
+  assert.throws(() => undo(c, preview), /Sheets service failed/);
+  assert.deepEqual(plain(c.cleanupEpiData('wrong', [], 'admin', 2569)), { success: false, error: 'This import was undone.' });
+  assert.equal(c.upsertEpiData(cohort(2), 'wrong', importer, 2569).replayed, true);
+  assert.equal(receiptOf(sheets, 'wrong').status, 'undoing');
+  assert.deepEqual(activeCids(read), cohort(2).map(row => row.cid)); // untouched until the undo is finished
 });
