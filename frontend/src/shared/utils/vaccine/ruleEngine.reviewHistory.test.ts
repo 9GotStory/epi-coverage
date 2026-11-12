@@ -72,3 +72,21 @@ describe('evaluateDynamicV2 — ตรวจสอบประวัติ (Issu
     expect(result).toMatchObject({ status: 'PENDING', pendingVaccines: ['DTP ครบ 3 เข็ม'], reviewVaccines: [] });
   });
 });
+
+describe('warning scope covers every date of the rule (owner decision 2026-11-12, Issue #102)', () => {
+  const rota = rule({
+    rule_id: 'rota', vaccine_group: 'Rota', display_name: 'Rota (ครบถ้วน)', logic_type: 'BRANCH',
+    required_fields: ['rv21_date', 'rv22_date'], branch_alt_fields: ['rv31_date', 'rv32_date', 'rv33_date'],
+  });
+  const anyOpv = rule({ rule_id: 'opv', vaccine_group: 'OPV', display_name: 'OPV อย่างน้อย 1 เข็ม', logic_type: 'ANY', required_fields: ['opv1_date', 'opv2_date'] });
+
+  it('a stray warning on the unused BRANCH path still makes the rule ตรวจสอบประวัติ', () => {
+    const record = { ...child, rv21_date: '2024-03-01', rv22_date: '2024-05-01', rv31_date: '2023-12-31' };
+    expect(evaluateDynamicV2(record, [rota], asOf)).toMatchObject({ status: 'REVIEW', reviewVaccines: ['Rota (ครบถ้วน)'] });
+  });
+
+  it('a warning on another dose of an ANY rule still makes the rule ตรวจสอบประวัติ', () => {
+    const record = { ...child, opv1_date: '2024-03-01', opv2_date: '2023-12-31' };
+    expect(evaluateDynamicV2(record, [anyOpv], asOf)).toMatchObject({ status: 'REVIEW', reviewVaccines: ['OPV อย่างน้อย 1 เข็ม'] });
+  });
+});
