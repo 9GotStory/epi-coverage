@@ -958,7 +958,8 @@ function seedVaccineRulesLocked_(fiscalYear, adminEmail, force) {
     { age_group: '2yr', view_type: 2, vaccine_group: 'JE', display_name: 'LAJE/JE 1 ปี', hdc_code: 'J11/051', required_fields: ['j11_date'], branch_alt_fields: ['je1_date', 'je2_date'], logic_type: 'BRANCH', is_required_for_v2: true, target_age_months: 12 },
 
     // ── 3yr — View 1 ──
-    { age_group: '3yr', view_type: 1, vaccine_group: 'JE', display_name: 'LAJE เข็ม 2 / JE เข็ม 3', hdc_code: 'J12/053', required_fields: ['j12_date'], branch_alt_fields: ['je3_date'], logic_type: 'BRANCH', is_required_for_v2: true, target_age_months: 30 },
+    // LAJE-only — ไม่อ้าง je3_date (Issue #127, docs/features.md)
+    { age_group: '3yr', view_type: 1, vaccine_group: 'JE', display_name: 'LAJE เข็ม 2', hdc_code: 'J12', required_fields: ['j12_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 30 },
 
     // ── 3yr — View 2: report template ข้อ 6 (Fully Immunized) ──
     // ── BCG ──
@@ -999,8 +1000,8 @@ function seedVaccineRulesLocked_(fiscalYear, adminEmail, force) {
     { age_group: '3yr', view_type: 2, vaccine_group: 'Rota', display_name: 'Rota เข็ม 1', hdc_code: 'R11/R21', required_fields: ['rv21_date'], branch_alt_fields: ['rv31_date'], logic_type: 'BRANCH', is_required_for_v2: true, target_age_months: 2 },
     { age_group: '3yr', view_type: 2, vaccine_group: 'Rota', display_name: 'Rota (ครบถ้วนตามเกณฑ์)', hdc_code: 'R12/R23', required_fields: ['rv21_date', 'rv22_date'], branch_alt_fields: ['rv31_date', 'rv32_date', 'rv33_date'], logic_type: 'BRANCH', is_required_for_v2: true, target_age_months: 6 },
 
-    // ── JE / LAJE (BRANCH: ครบชุด LAJE 2 เข็ม หรือ JE 3 เข็ม — ไม่ผสมข้ามชุด, Issue #104) ──
-    { age_group: '3yr', view_type: 2, vaccine_group: 'JE', display_name: 'LAJE 2 เข็ม / JE 3 เข็ม', hdc_code: 'J11/J12/051/053', required_fields: ['j11_date', 'j12_date'], branch_alt_fields: ['je1_date', 'je2_date', 'je3_date'], logic_type: 'BRANCH', is_required_for_v2: true, target_age_months: 30 },
+    // ── JE / LAJE (ALL: ครบชุด LAJE 2 เข็ม — ไม่อ้าง je3_date, Issue #127) ──
+    { age_group: '3yr', view_type: 2, vaccine_group: 'JE', display_name: 'LAJE 2 เข็ม', hdc_code: 'J11/J12', required_fields: ['j11_date', 'j12_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 30 },
 
     // ── 5yr — View 1 ──
     { age_group: '5yr', view_type: 1, vaccine_group: 'DTP', display_name: 'DTP เข็ม 5', hdc_code: '035', required_fields: ['dtp5_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 48},
@@ -1048,9 +1049,9 @@ function seedVaccineRulesLocked_(fiscalYear, adminEmail, force) {
     { age_group: '5yr', view_type: 2, vaccine_group: 'Rota', display_name: 'Rota (ครบถ้วนตามเกณฑ์)', hdc_code: 'R12/R23', required_fields: ['rv21_date', 'rv22_date'], branch_alt_fields: ['rv31_date', 'rv32_date', 'rv33_date'], logic_type: 'BRANCH', is_required_for_v2: true, target_age_months: 6 },
 
     // ── JE / LAJE (แยกรายเข็ม Single Responsibility สำหรับเด็ก 5 ปี) ──
-    // ── JE / LAJE (BRANCH: ได้ชนิดใดชนิดหนึ่งถือว่าผ่าน) ──
+    // ── JE / LAJE (1 ปี BRANCH: ได้ชนิดใดชนิดหนึ่งถือว่าผ่าน; เข็ม 2 LAJE-only — ไม่อ้าง je3_date, Issue #127) ──
     { age_group: '5yr', view_type: 2, vaccine_group: 'JE', display_name: 'LAJE/JE 1 ปี', hdc_code: 'J11/051', required_fields: ['j11_date'], branch_alt_fields: ['je1_date', 'je2_date'], logic_type: 'BRANCH', is_required_for_v2: true, target_age_months: 12 },
-    { age_group: '5yr', view_type: 2, vaccine_group: 'JE', display_name: 'LAJE เข็ม 2 / JE เข็ม 3', hdc_code: 'J12/053', required_fields: ['j12_date'], branch_alt_fields: ['je3_date'], logic_type: 'BRANCH', is_required_for_v2: true, target_age_months: 30 },
+    { age_group: '5yr', view_type: 2, vaccine_group: 'JE', display_name: 'LAJE เข็ม 2', hdc_code: 'J12', required_fields: ['j12_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 30 },
   ];
 
   const now = new Date();

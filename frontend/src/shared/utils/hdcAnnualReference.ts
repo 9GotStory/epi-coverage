@@ -23,15 +23,19 @@ function asRecord(value:unknown):Record<string,unknown>|null {
  * than EPI; show both sources without replacing the EPI evaluation.
  */
 type HdcAgeGroup = '1yr' | '2yr' | '3yr' | '5yr';
-interface HdcMetricRuleMapping {
-  metric: string;
+interface HdcRuleShape {
   code: string;
   vaccineGroup: string;
   fields: readonly string[];
   logic: 'ALL' | 'BRANCH';
   branch?: readonly string[];
+}
+interface HdcMetricRuleMapping extends HdcRuleShape {
+  metric: string;
   // Codes older seeds wrote for the same field; already-configured years keep them.
   legacyCodes?: readonly string[];
+  // Whole rule shapes older seeds wrote for the same metric; years not yet edited keep them.
+  legacyShapes?: readonly HdcRuleShape[];
 }
 
 interface HdcAgeReport {
@@ -93,7 +97,9 @@ export const HDC_AGE_REPORTS: Record<HdcAgeGroup, HdcAgeReport> = {
   '3yr': {
     table:'s_epi3',reportId:'267ce09f2a704eb7783997e25d1f18ba',
     mappings:[
-      branch('je3','J12/053','JE',['j12_date'],['je3_date']),
+      // LAJE-only since Issue #127; seeds before it wrote BRANCH j12_date | je3_date, J12/053.
+      {...pair('je3','J12','JE','j12_date'),
+        legacyShapes:[{code:'J12/053',vaccineGroup:'JE',fields:['j12_date'],logic:'BRANCH',branch:['je3_date']}]},
     ],
   },
   '5yr': {
@@ -180,6 +186,14 @@ function sameStrings(a:readonly string[]|undefined,b:readonly string[]|undefined
   return JSON.stringify(a??[])===JSON.stringify(b??[]);
 }
 
+function shapeMatches(shape:HdcRuleShape,codes:readonly string[],rule:VaccineRule):boolean {
+  return codes.includes(rule.hdc_code) &&
+    shape.vaccineGroup===rule.vaccine_group &&
+    shape.logic===rule.logic_type &&
+    sameStrings(shape.fields,rule.required_fields) &&
+    sameStrings(shape.branch,rule.branch_alt_fields);
+}
+
 /**
  * Resolve an OpenData metric from EXACTLY one active rule matching the summary
  * identity. No matching by fuzzy name, no implicit new vaccines, no auto code
@@ -197,10 +211,7 @@ export function findHdcAgeMetric(
   const rule=matches[0];
   if((rule.metric_key||rule.rule_id)!==item.metric_key)return null;
   const metric=report.mappings.filter(m=>
-    (m.code===rule.hdc_code || (m.legacyCodes??[]).includes(rule.hdc_code)) &&
-    m.vaccineGroup===rule.vaccine_group &&
-    m.logic===rule.logic_type &&
-    sameStrings(m.fields,rule.required_fields) &&
-    sameStrings(m.branch,rule.branch_alt_fields));
+    shapeMatches(m,[m.code,...(m.legacyCodes??[])],rule) ||
+    (m.legacyShapes??[]).some(shape=>shapeMatches(shape,[shape.code],rule)));
   return metric.length===1 ? metric[0].metric:null;
 }
