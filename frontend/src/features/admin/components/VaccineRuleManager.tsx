@@ -81,8 +81,9 @@ export const VaccineRuleManager = ({ onDirtyChange }: VaccineRuleManagerProps) =
     if (!original || deletedRuleIds.includes(draft.rule_id)) return false;
     return JSON.stringify(original) !== JSON.stringify(draft);
   }) : [];
-  // Issue #148: a draft rule with no stored original is an addition
-  const addedRules = displayRules.filter(draft => !rules.some(r => r.rule_id === draft.rule_id));
+  // Issue #148: a draft rule with no stored original is an addition (unless it is marked for deletion)
+  const isStored = (ruleId: string) => rules.some(r => r.rule_id === ruleId);
+  const addedRules = displayRules.filter(draft => !isStored(draft.rule_id) && !deletedRuleIds.includes(draft.rule_id));
   const deletedRules = rules.filter(r => deletedRuleIds.includes(r.rule_id));
   // The rule set as it will be saved; memoized so the open rule form is not reset on every render
   const remainingRules = useMemo(() => displayRules.filter(r => !deletedRuleIds.includes(r.rule_id)), [displayRules, deletedRuleIds]);
@@ -192,14 +193,10 @@ export const VaccineRuleManager = ({ onDirtyChange }: VaccineRuleManagerProps) =
     setIsAddingRule(false);
   };
 
-  // Issue #148: a stored rule is only marked (undoable until Batch Save); a draft-only addition is
-  // simply dropped, since the server has nothing to delete
+  // Issue #148: deleting only marks the rule, undoable until Batch Save. A marked unsaved addition is
+  // simply not sent; only stored rules go to the server as deleted_rule_ids.
   const handleToggleDelete = (rule: VaccineRule) => {
-    if (!rules.some(r => r.rule_id === rule.rule_id)) {
-      setDraftRules(displayRules.filter(r => r.rule_id !== rule.rule_id));
-    } else {
-      setDeletedRuleIds(ids => ids.includes(rule.rule_id) ? ids.filter(id => id !== rule.rule_id) : [...ids, rule.rule_id]);
-    }
+    setDeletedRuleIds(ids => ids.includes(rule.rule_id) ? ids.filter(id => id !== rule.rule_id) : [...ids, rule.rule_id]);
     setHasUnsavedChanges(true);
   };
 
@@ -288,7 +285,7 @@ export const VaccineRuleManager = ({ onDirtyChange }: VaccineRuleManagerProps) =
         fiscalYear, 
         ageGroup, 
         rules: remainingRules,
-        deleted_rule_ids: deletedRuleIds,
+        deleted_rule_ids: deletedRules.map(r => r.rule_id),
       });
       if (res.data?.success) {
         toast.success('บันทึกเกณฑ์วัคซีนทั้งหมดลงฐานข้อมูลสำเร็จ!');
@@ -563,6 +560,7 @@ export const VaccineRuleManager = ({ onDirtyChange }: VaccineRuleManagerProps) =
         <RuleEditModal
           allRules={remainingRules}
           rule={editingRule}
+          isNewRule={!editingRule || !isStored(editingRule.rule_id)}
           isOpen={!!editingRule || isAddingRule}
           onClose={() => { setEditingRule(null); setIsAddingRule(false); }}
           onSave={handleSaveModal}

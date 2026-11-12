@@ -122,7 +122,7 @@
 - รหัสเดียวกันอยู่ทั้งใน `rules` และ `deleted_rule_ids` หรือซ้ำใน `rules`
 - ผลลัพธ์จะไม่เหลือกฎเลย
 
-กฎใน `rules` ที่ `rule_id` ยังไม่มีในชีตคือการเพิ่ม และได้ `metric_key = rule_id`
+กฎใน `rules` ที่ `rule_id` ยังไม่มีในชีตคือการเพิ่ม `metric_key` ของกฎที่เพิ่มเป็นไปตาม [Decision E](specs/comparison-page-improvement.md)
 
 ทั้ง `batchSaveRules` (ทุกกฎในคำขอ) และ `saveVaccineRule` ตรวจโครงสร้างกฎก่อนเขียนแบบ fail closed ข้อความ error ระบุ `rule_id` ของกฎที่ผิด: `display_name` และ `vaccine_group` ไม่ว่างหลัง trim; `view_type` เป็น 1 หรือ 2; `logic_type` เป็น `ALL`/`ANY`/`BRANCH`; `required_fields` มีอย่างน้อยหนึ่งรายการ ทุกรายการตรง `^[a-z][a-z0-9_]*_date$`; กฎ `BRANCH` มี `branch_alt_fields` อย่างน้อยหนึ่งรายการในรูปเดียวกัน; `target_age_months` ถ้ามีต้องเป็นจำนวนเต็มไม่ติดลบ (ค่าว่างได้ — server ไม่บังคับ) กฎในชีตที่ผิดโครงสร้างอยู่ก่อนจึงบล็อก Batch Save จนกว่าจะแก้หรือลบกฎนั้น
 

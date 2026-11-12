@@ -150,6 +150,47 @@ describe('Issue #148 — adding a Vaccine Rule', () => {
   });
 });
 
+describe('Issue #148 — an unsaved addition', () => {
+  const addRule = async () => {
+    const dialog = openNewRule();
+    fillNewRule(dialog, 'hbv4_date');
+    await vi.waitFor(() => expect(targetAge(dialog).value).toBe('4'));
+    await settle();
+    await submitDraft(dialog);
+  };
+
+  it('still requires Target Age when reopened before Batch Save', { timeout: 15_000 }, async () => {
+    renderManager();
+    await addRule();
+    fireEvent.click(screen.getByRole('button', { name: 'แก้ไขเกณฑ์ HBV เข็มใหม่' }));
+    const dialog = within(screen.getByRole('dialog'));
+    type(targetAge(dialog), '');
+    fireEvent.click(dialog.getByRole('button', { name: 'ตกลง (บันทึกฉบับร่าง)' }));
+    expect(await dialog.findByText('กรุณาระบุอายุเป้าหมายของเกณฑ์ใหม่')).toBeTruthy();
+  });
+
+  it('is marked "จะถูกลบ" and can be undone, and a marked addition is not sent', { timeout: 15_000 }, async () => {
+    renderManager();
+    await addRule();
+    const row = () => within(screen.getByRole('table')).getByText('HBV เข็มใหม่').closest('tr')!;
+    fireEvent.click(within(row()).getByRole('button', { name: 'ลบเกณฑ์ HBV เข็มใหม่' }));
+    expect(within(row()).getByText('จะถูกลบ')).toBeTruthy();
+    fireEvent.click(within(row()).getByRole('button', { name: 'ยกเลิกการลบ HBV เข็มใหม่' }));
+    expect(within(row()).queryByText('จะถูกลบ')).toBeNull();
+
+    // Marked again, with an edit to a stored rule so there is something to save
+    fireEvent.click(within(row()).getByRole('button', { name: 'ลบเกณฑ์ HBV เข็มใหม่' }));
+    fireEvent.click(screen.getByRole('button', { name: 'ลบเกณฑ์ DTP เข็ม 1' }));
+    const review = openReview();
+    expect(review.queryByText('เพิ่มใหม่')).toBeNull();
+    fireEvent.click(review.getByRole('button', { name: 'ยืนยันการบันทึก' }));
+    await vi.waitFor(() => expect(fetchApi).toHaveBeenCalledWith('batchSaveRules', expect.anything()));
+    const body = vi.mocked(fetchApi).mock.calls.find(([action]) => action === 'batchSaveRules')![1] as any;
+    expect(body.rules.map((r: VaccineRule) => r.rule_id)).toEqual(['hbv1']);
+    expect(body.deleted_rule_ids).toEqual(['dtp1']);
+  });
+});
+
 describe('Issue #148 — deleting a Vaccine Rule', () => {
   it('marks a rule "จะถูกลบ" in the draft and can undo it', () => {
     renderManager();

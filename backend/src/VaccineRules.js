@@ -423,17 +423,17 @@ function findDuplicateActiveDisplayName_(rules) {
   return null;
 }
 
+const RULE_FIELD_NAME_RE_ = /^[a-z][a-z0-9_]*_date$/;
+const RULE_LOGIC_TYPES_ = ['ALL', 'ANY', 'BRANCH'];
+function hasTargetAge_(value) {
+  return value !== undefined && value !== null && value !== '';
+}
 /**
  * Issue #148: โครงสร้างของ rule ตรวจที่ server ทุกเส้นทางเขียน (saveVaccineRule, batchSaveRules)
  * ก่อนเขียนใด ๆ แบบ fail closed — ฟอร์มหน้าเว็บไม่ใช่ผู้ตัดสิน
  * target_age_months ไม่บังคับ (rule เดิมอาศัยค่าตั้งต้นราย field ได้) แต่ถ้ามีต้องเป็นจำนวนเต็มไม่ติดลบ
  * @throws {Error} ข้อความระบุ rule ที่ผิด
  */
-const RULE_FIELD_NAME_RE_ = /^[a-z][a-z0-9_]*_date$/;
-const RULE_LOGIC_TYPES_ = ['ALL', 'ANY', 'BRANCH'];
-function hasTargetAge_(value) {
-  return value !== undefined && value !== null && value !== '';
-}
 function validateRuleStructure_(rule) {
   const fail = message => { throw new Error(`rule ${rule && rule.rule_id}: ${message}`); };
   if (!rule || typeof rule !== 'object' || typeof rule.rule_id !== 'string' || rule.rule_id.trim() === '') fail('rule_id is required');
@@ -441,15 +441,15 @@ function validateRuleStructure_(rule) {
   if (typeof rule.vaccine_group !== 'string' || rule.vaccine_group.trim() === '') fail('vaccine_group is required');
   if (rule.view_type !== 1 && rule.view_type !== 2) fail('view_type must be 1 or 2');
   if (!RULE_LOGIC_TYPES_.includes(rule.logic_type)) fail(`logic_type must be one of: ${RULE_LOGIC_TYPES_.join(', ')}`);
-  const fieldList = (value, name) => {
+  const validatedColumns = (value, name) => {
     if (value !== undefined && !Array.isArray(value)) fail(`${name} must be an array`);
     for (const field of value || []) {
       if (typeof field !== 'string' || !RULE_FIELD_NAME_RE_.test(field)) fail(`${name} entry "${field}" must match ${RULE_FIELD_NAME_RE_.source}`);
     }
     return value || [];
   };
-  if (fieldList(rule.required_fields, 'required_fields').length === 0) fail('required_fields needs at least one column');
-  if (fieldList(rule.branch_alt_fields, 'branch_alt_fields').length === 0 && rule.logic_type === 'BRANCH') fail('a BRANCH rule needs at least one branch_alt_fields column');
+  if (validatedColumns(rule.required_fields, 'required_fields').length === 0) fail('required_fields needs at least one column');
+  if (validatedColumns(rule.branch_alt_fields, 'branch_alt_fields').length === 0 && rule.logic_type === 'BRANCH') fail('a BRANCH rule needs at least one branch_alt_fields column');
   if (hasTargetAge_(rule.target_age_months) && !(Number.isInteger(rule.target_age_months) && rule.target_age_months >= 0)) {
     fail('target_age_months must be a non-negative whole number');
   }
@@ -477,7 +477,7 @@ function saveVaccineRule(rule, adminEmail) {
     const known = new Set(Object.keys(TARGET_AGE_MONTHS_BY_FIELD));
     const peers = getVaccineRules(rule.fiscal_year, rule.age_group);
     [...incoming, ...peers].forEach(r => [...(r.required_fields || []), ...(r.branch_alt_fields || [])].forEach(f => {
-      if (typeof f === 'string' && /^[a-z][a-z0-9_]*_date$/.test(f)) known.add(f);
+      if (typeof f === 'string' && RULE_FIELD_NAME_RE_.test(f)) known.add(f);
     }));
     incoming.forEach(r => validateDateChecks_(r.date_checks, r, known));
     incoming.forEach(validateBirthWindow_);
@@ -622,7 +622,7 @@ function batchSaveRules(fiscalYear, ageGroup, rules, adminEmail, deletedRuleIds)
       const known = new Set(Object.keys(TARGET_AGE_MONTHS_BY_FIELD));
       const peers = getVaccineRules(incoming[0]?.fiscal_year || fiscalYear, incoming[0]?.age_group || ageGroup);
       [...incoming, ...peers].forEach(r => [...(r.required_fields || []), ...(r.branch_alt_fields || [])].forEach(f => {
-        if (typeof f === 'string' && /^[a-z][a-z0-9_]*_date$/.test(f)) known.add(f);
+        if (typeof f === 'string' && RULE_FIELD_NAME_RE_.test(f)) known.add(f);
       }));
       incoming.forEach(r => validateDateChecks_(r.date_checks, r, known));
       incoming.forEach(validateBirthWindow_);

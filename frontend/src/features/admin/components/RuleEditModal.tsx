@@ -93,12 +93,14 @@ interface RuleEditModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (updatedRule: VaccineRule) => void;
+  /** Issue #148: not yet stored — a blank form, or an addition reopened before Batch Save. Defaults to !rule. */
+  isNewRule?: boolean;
   // Fallbacks for new rule creation
   fiscalYear: number;
   ageGroup: string;
 }
 
-export function RuleEditModal({ rule, allRules, isOpen, onClose, onSave, fiscalYear, ageGroup }: RuleEditModalProps) {
+export function RuleEditModal({ rule, allRules, isOpen, onClose, onSave, fiscalYear, ageGroup, isNewRule }: RuleEditModalProps) {
   const form = useForm<RuleFormValues>({
     resolver: zodResolver(ruleSchema),
     defaultValues: {
@@ -189,7 +191,8 @@ export function RuleEditModal({ rule, allRules, isOpen, onClose, onSave, fiscalY
 
   // Issue #148: new-rule mode. Target Age is prefilled from the backend default map and date checks
   // from the shared derivation for unconfigured rules; each follows the columns until the admin edits it.
-  const isNew = !rule;
+  // A reopened addition keeps its saved values, so only a blank form is prefilled.
+  const isNew = isNewRule ?? !rule;
   const [targetAgeEdited, setTargetAgeEdited] = useState(false);
   // A ref, not state: a pending prefill must see the edit in the very render the admin's click causes
   const dateChecksEdited = useRef(false);
@@ -233,9 +236,9 @@ export function RuleEditModal({ rule, allRules, isOpen, onClose, onSave, fiscalY
     replaceSameDay(checks.same_day_pairs);
     replaceOrdered(checks.ordered_pairs);
   }, [isOpen, isNew, columnsKey, watchedTargetAge, isActive, allRules, fiscalYear, ageGroup, form, replaceSameDay, replaceOrdered]);
-  // Any control the admin touches in the date-check section makes the section theirs.
+  // A button press or a changed value in the date-check section makes the section the admin's.
   const markDateChecksEdited = (event: React.SyntheticEvent) => {
-    if ((event.target as HTMLElement).closest('button, select, input')) dateChecksEdited.current = true;
+    if (event.type === 'change' || (event.target as HTMLElement).closest('button')) dateChecksEdited.current = true;
   };
 
   useEffect(() => {
@@ -257,6 +260,8 @@ export function RuleEditModal({ rule, allRules, isOpen, onClose, onSave, fiscalY
           born_on_or_after: isoToBeInput(rule.born_on_or_after),
           born_before: isoToBeInput(rule.born_before),
         });
+        setTargetAgeEdited(true);
+        dateChecksEdited.current = true;
       } else {
         // Issue #148: a new rule starts blank, with one column input to fill
         form.reset({
@@ -700,7 +705,7 @@ export function RuleEditModal({ rule, allRules, isOpen, onClose, onSave, fiscalY
                   </Button>
                 )}
               </div>
-              {isNew && <p className="text-sm text-zinc-500">ระบบเติมค่าจากเกณฑ์อื่นในกลุ่มอายุนี้ และปรับตามคอลัมน์กับอายุเป้าหมายจนกว่าคุณจะแก้ส่วนนี้เอง ค่าที่เห็นจะถูกบันทึกกับเกณฑ์</p>}
+              {!rule && <p className="text-sm text-zinc-500">ระบบเติมค่าจากเกณฑ์อื่นในกลุ่มอายุนี้ และปรับตามคอลัมน์กับอายุเป้าหมายจนกว่าคุณจะแก้ส่วนนี้เอง ค่าที่เห็นจะถูกบันทึกกับเกณฑ์</p>}
               {rule && !rule.date_checks && <p className="text-sm text-zinc-500">เกณฑ์เดิมยังไม่มีการตั้งค่ารายคู่ ระบบแสดงค่าเริ่มต้นให้ตรวจทาน กดบันทึกฉบับร่างและยืนยันบันทึกเพื่อใช้ค่าที่เลือก</p>}
               <p className="text-sm text-zinc-500">ใช้กับเข็มในเกณฑ์นี้ แสดงรายละเอียดในประวัติการรับวัคซีน กฎวันซ้ำเป็นการตรวจข้อมูลตามที่ผู้ดูแลกำหนด ไม่ใช่ข้อห้ามฉีดวัคซีนร่วมกันทางการแพทย์</p>
               {(['before_birth', 'allow_on_birth'] as const).map(key => <FormField key={key} control={form.control} name={`date_checks.${key}`} render={({ field }) => <FormItem className="flex items-center justify-between gap-3">
