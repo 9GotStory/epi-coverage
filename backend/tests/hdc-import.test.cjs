@@ -53,7 +53,7 @@ function setup({ autoPreflight = true } = {}) {
     SpreadsheetApp: { flush() {} },
     Utilities: { formatDate: (value, timeZone) => new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(value), getUuid: () => 'uuid', DigestAlgorithm: { SHA_256: 'sha256' }, computeDigest: (_, data) => crypto.createHash('sha256').update(data).digest(), base64Encode: data => Buffer.from(data).toString('base64') },
   });
-  for (const file of ['SheetText.js', 'Setup.js', 'Upload.js', 'Data.js']) vm.runInContext(fs.readFileSync(path.join(__dirname, '../src', file), 'utf8'), context);
+  for (const file of ['SheetText.js', 'Setup.js', 'Upload.js', 'Data.js', 'DashboardCache.js']) vm.runInContext(fs.readFileSync(path.join(__dirname, '../src', file), 'utf8'), context);
   context.logAction = () => {};
   if (autoPreflight) {
     // Issue #111 makes preflight mandatory. Single-chunk uploads in pre-#111 tests run the real
@@ -928,4 +928,246 @@ test('an import already writing when the Cohort Birth Range check shipped is not
   asPre136Receipt(sheets, 'in-flight');
   assert.equal(c.upsertEpiData(cohort(2, '00588', 3), 'in-flight', 'admin', 2569, 'Epi_1_Year', { totalChunks: 2, chunkIndex: 1 }).success, true);
   assert.equal(read().length, 4);
+});
+
+/* ─────────────── Issue #139 (#112): Import Undo ─────────────── */
+const isActive = row => row.is_active === true || String(row.is_active).toLowerCase() === 'true';
+const activeCids = (read, table = 'Epi_1_Year') => read(table).filter(isActive).map(row => row.cid).sort();
+/** The real import path: preflight (+ typed confirmation when asked), every chunk, then finalize. */
+function importBatch(c, rows, batch, { year = 2569, table = 'Epi_1_Year', mode = 'merge', auth = importer } = {}) {
+  prepare(c, [rows], batch, { year, table, mode, auth });
+  const written = c.upsertEpiData(rows, batch, auth, year, table, { mode });
+  assert.equal(written.success, true, written.error);
+  const finalized = c.cleanupEpiData(batch, [], auth.email, year, table);
+  assert.equal(finalized.success, true, finalized.error);
+  return { ...written, deactivated: finalized.deactivated };
+}
+const undoPreview = (c, table = 'Epi_1_Year', year = 2569, auth = administrator) => plain(c.previewEpiImportUndo(table, year, auth));
+const undo = (c, preview, auth = administrator) =>
+  plain(c.undoEpiImport(preview.batchId, { wouldDeactivate: preview.wouldDeactivate, wouldReactivate: preview.wouldReactivate }, auth));
+
+test('undo of the incident shape restores the cohort and keeps children who moved out earlier inactive', () => {
+  const { context: c, read } = setup();
+  importBatch(c, cohort(6), 'existing', { mode: 'sync' });
+  importBatch(c, cohort(5), 'moved-out', { mode: 'sync' }); // child 6 really moved out
+  const wrong = importBatch(c, cohort(4, '00588', 100), 'wrong-file', { mode: 'sync' }); // zero-match sync
+  assert.deepEqual([wrong.inserted, wrong.updated, wrong.deactivated], [4, 0, 5]);
+
+  const preview = undoPreview(c);
+  assert.equal(preview.success, true);
+  assert.equal(preview.eligible, true);
+  assert.deepEqual([preview.batchId, preview.targetTable, preview.fiscalYear, preview.mode], ['wrong-file', 'Epi_1_Year', '2569', 'sync']);
+  assert.equal(preview.importedBy, 'importer@example.test');
+  assert.ok(!Number.isNaN(Date.parse(preview.importedAt)));
+  assert.deepEqual([preview.wouldDeactivate, preview.wouldReactivate, preview.activeAfter, preview.summariesWillBeRemoved], [4, 5, 5, false]);
+  assert.deepEqual(preview.byHoscode, [{ hoscode: '00588', wouldDeactivate: 4, wouldReactivate: 5 }]);
+  assert.equal(/\d{13}/.test(JSON.stringify(preview)), false); // counts and facility codes only
+
+  assert.deepEqual(undo(c, preview), { success: true, deactivated: 4, reactivated: 5, summariesRemoved: false });
+  assert.deepEqual(activeCids(read), cohort(5).map(row => row.cid));
+  assert.equal(isActive(read().find(row => row.cid === cohort(6)[5].cid)), false); // moved out before the wrong import
+});
+
+test('undo of a merge batch that only inserted rows deactivates exactly those rows', () => {
+  const { context: c, read } = setup();
+  importBatch(c, cohort(3), 'existing');
+  importBatch(c, [...cohort(2, '00588', 50), ...cohort(1, '00002', 60)], 'merge-new');
+  const preview = undoPreview(c);
+  assert.deepEqual([preview.eligible, preview.mode, preview.wouldDeactivate, preview.wouldReactivate, preview.activeAfter], [true, 'merge', 3, 0, 3]);
+  assert.deepEqual(preview.byHoscode, [{ hoscode: '00002', wouldDeactivate: 1, wouldReactivate: 0 }, { hoscode: '00588', wouldDeactivate: 2, wouldReactivate: 0 }]);
+  assert.equal(undo(c, preview).success, true);
+  assert.deepEqual(activeCids(read), cohort(3).map(row => row.cid));
+  assert.equal(read().length, 6); // soft: inserted rows stay, inactive
+});
+
+/** Rewrites a receipt as one finalized by the pre-#139 cleanup, which kept no deactivation record. */
+function asPre139Receipt(sheets, batch) {
+  const cells = sheets.get('epi_import_batches').cells;
+  cells.find(row => row[0] === batch)[cells[0].indexOf('finalize')] = '';
+}
+
+test('undo is refused, with a reason code, whenever it cannot be exact', () => {
+  const reasonOf = (c, table = 'Epi_1_Year') => { const preview = undoPreview(c, table); return preview.eligible ? 'eligible' : preview.reason; };
+
+  const { context: empty } = setup();
+  assert.equal(reasonOf(empty), 'no_batch');
+  preflight(empty, [cohort(2)], 'only-preflight');
+  assert.equal(reasonOf(empty), 'no_batch'); // a preflight receipt has written nothing
+
+  const { context: uploading } = setup();
+  prepare(uploading, [cohort(2), cohort(2, '00588', 3)], 'half');
+  uploading.upsertEpiData(cohort(2), 'half', importer, 2569, 'Epi_1_Year', { totalChunks: 2 });
+  assert.equal(reasonOf(uploading), 'in_progress');
+
+  const { context: legacy, sheets } = setup();
+  importBatch(legacy, cohort(2), 'before-undo-existed', { mode: 'sync' });
+  asPre139Receipt(sheets, 'before-undo-existed');
+  assert.equal(reasonOf(legacy), 'not_recorded');
+
+  const { context: noAudit, sheets: noAuditSheets } = setup();
+  importBatch(noAudit, cohort(2), 'legacy-chunks');
+  const receipt = noAuditSheets.get('epi_import_batches').cells.find(row => row[0] === 'legacy-chunks');
+  receipt[5] = JSON.stringify(JSON.parse(receipt[5]).map(({ index, fingerprint }) => ({ index, fingerprint }))); // index+fingerprint only
+  assert.equal(reasonOf(noAudit), 'not_recorded');
+
+  const { context: updating } = setup();
+  importBatch(updating, cohort(3), 'existing');
+  importBatch(updating, cohort(4), 'matched-one'); // 3 updated, 1 inserted
+  assert.equal(reasonOf(updating), 'updated_existing');
+
+  const { context: reactivating } = setup();
+  importBatch(reactivating, cohort(3), 'existing', { mode: 'sync' });
+  importBatch(reactivating, cohort(2), 'drop-one', { mode: 'sync' });
+  importBatch(reactivating, cohort(3, '00588', 3).slice(0, 1), 'bring-back'); // reactivation counts as an update
+  assert.equal(reasonOf(reactivating), 'updated_existing');
+
+  const { context: undone } = setup();
+  importBatch(undone, cohort(2), 'once');
+  undo(undone, undoPreview(undone));
+  assert.equal(reasonOf(undone), 'already_undone');
+  // Other tables and years are separate scopes.
+  assert.equal(reasonOf(undone, 'Epi_2_Year'), 'no_batch');
+});
+
+test('undo goes one step only: an undone batch blocks every earlier batch, and a repeat changes nothing', () => {
+  const { context: c, read } = setup();
+  importBatch(c, cohort(2), 'first');
+  importBatch(c, cohort(2, '00588', 10), 'second');
+  const firstPreview = undoPreview(c);
+  assert.equal(firstPreview.batchId, 'second');
+  assert.equal(undo(c, firstPreview).success, true);
+  const after = JSON.stringify(read());
+  assert.deepEqual(undo(c, firstPreview), { success: false, reason: 'already_undone', error: 'The latest import was already undone.' });
+  assert.deepEqual(undo(c, { batchId: 'first', wouldDeactivate: 2, wouldReactivate: 0 }).reason, 'newer_import');
+  assert.equal(JSON.stringify(read()), after);
+});
+
+test('undo is refused when a newer import wrote after the preview, or when the counts moved', () => {
+  const { context: c, read } = setup();
+  importBatch(c, cohort(2), 'target');
+  const preview = undoPreview(c);
+  importBatch(c, cohort(1, '00588', 20), 'newer');
+  assert.equal(undo(c, preview).reason, 'newer_import');
+
+  const { context: moved, read: readMoved, sheets } = setup();
+  importBatch(moved, cohort(2), 'target');
+  const stale = undoPreview(moved);
+  const cells = sheets.get('Epi_1_Year').cells; // a hand edit after the preview
+  cells[1][cells[0].indexOf('is_active')] = false;
+  const before = JSON.stringify(readMoved());
+  assert.deepEqual(undo(moved, stale), { success: false, reason: 'stale', error: 'The undo preview is out of date. Review it again.' });
+  assert.equal(JSON.stringify(readMoved()), before);
+  assert.equal(read().filter(isActive).length, 3);
+});
+
+test('only the latest written batch of a table and year can be undone, even when a later one touched other facilities', () => {
+  const { context: c, read } = setup();
+  importBatch(c, cohort(2, '00588'), 'earlier');
+  importBatch(c, cohort(2, '00002', 30), 'later-elsewhere');
+  assert.equal(undoPreview(c).batchId, 'later-elsewhere');
+  assert.equal(undo(c, { batchId: 'earlier', wouldDeactivate: 2, wouldReactivate: 0 }).reason, 'newer_import');
+  assert.equal(read().filter(isActive).length, 4);
+});
+
+test('an undone receipt is never finalized again, and an overlapping open preflight goes stale', () => {
+  const { context: c, read } = setup();
+  importBatch(c, cohort(3), 'existing', { mode: 'sync' });
+  importBatch(c, cohort(2, '00588', 40), 'wrong', { mode: 'merge' });
+  prepare(c, [cohort(3)], 'fresh-preflight', { mode: 'sync', auth: importer }); // open while the admin undoes 'wrong'
+  assert.equal(undo(c, undoPreview(c)).success, true);
+  assert.deepEqual(plain(c.cleanupEpiData('wrong', [], 'admin', 2569)), { success: false, error: 'This import was undone.' });
+  const stale = c.upsertEpiData(cohort(3), 'fresh-preflight', importer, 2569, 'Epi_1_Year', { mode: 'sync' });
+  assert.deepEqual([stale.success, stale.error], [false, 'Data changed since preflight. Start a new import.']);
+  assert.equal(c.upsertEpiData(cohort(2, '00588', 40), 'wrong', importer, 2569).replayed, true); // a retried chunk is a no-op replay
+  assert.deepEqual(activeCids(read), cohort(3).map(row => row.cid));
+});
+
+/** Dashboard_Summaries rows for two tables and two years, plus the legacy annual id. */
+function summarySheet(createSheet) {
+  const row = (table, year, quarter) => [quarter == null ? `${table}_${year}` : `${table}_${year}_${quarter}`, table, year, '{}', 'at'];
+  return createSheet('Dashboard_Summaries', [['id', 'targetTable', 'fiscalYear', 'summaryData', 'updated_at'],
+    ...['all', 1, 2, 3, 4].map(q => row('Epi_1_Year', 2569, q)), row('Epi_1_Year', 2569),
+    row('Epi_1_Year', 2570, 'all'), row('Epi_2_Year', 2569, 'all')]);
+}
+
+test('undo that leaves no Active Records removes every Dashboard Summary of that table and year, and only those', () => {
+  const { context: c, createSheet, sheets } = setup();
+  summarySheet(createSheet);
+  importBatch(c, cohort(2), 'only-import');
+  const preview = undoPreview(c);
+  assert.deepEqual([preview.activeAfter, preview.summariesWillBeRemoved], [0, true]);
+  assert.deepEqual(undo(c, preview), { success: true, deactivated: 2, reactivated: 0, summariesRemoved: true });
+  assert.deepEqual(sheets.get('Dashboard_Summaries').cells.slice(1).map(row => row[0]), ['Epi_1_Year_2570_all', 'Epi_2_Year_2569_all']);
+});
+
+test('undo keeps the Dashboard Summaries while another facility still has Active Records', () => {
+  const { context: c, createSheet, sheets } = setup();
+  summarySheet(createSheet);
+  importBatch(c, cohort(1, '00002', 70), 'other-facility');
+  importBatch(c, cohort(2), 'target');
+  const preview = undoPreview(c);
+  assert.deepEqual([preview.activeAfter, preview.summariesWillBeRemoved], [1, false]);
+  assert.equal(undo(c, preview).summariesRemoved, false);
+  assert.equal(sheets.get('Dashboard_Summaries').cells.length, 9);
+});
+
+test('facility codes with leading zeros survive undo as strings', () => {
+  const { context: c, read } = setup();
+  importBatch(c, cohort(2, '00012'), 'existing', { mode: 'sync' });
+  importBatch(c, cohort(1, '00012', 80), 'wrong', { mode: 'sync' });
+  const preview = undoPreview(c);
+  assert.deepEqual(preview.byHoscode, [{ hoscode: '00012', wouldDeactivate: 1, wouldReactivate: 2 }]);
+  undo(c, preview);
+  assert.deepEqual(read().map(row => row.hoscode), ['00012', '00012', '00012']);
+  assert.equal(read().filter(isActive).length, 2);
+});
+
+test('undo is audited with the batch, scope, counts and facility codes only, and the receipt records who undid it', () => {
+  const { context: c, sheets } = setup();
+  importBatch(c, cohort(3), 'existing', { mode: 'sync' });
+  importBatch(c, cohort(2, '00588', 90), 'wrong', { mode: 'sync' });
+  const audit = [];
+  c.logAction = (...entry) => audit.push(entry);
+  undo(c, undoPreview(c));
+  assert.equal(audit.length, 1);
+  const [userId, email, action, details] = audit[0];
+  assert.deepEqual([userId, email, action], ['a1', 'admin@example.test', 'undo_epi_import']);
+  for (const fact of ['wrong', 'Epi_1_Year', 'FY 2569', 'sync', 'deactivated 2', 'reactivated 3', '00588', 'summaries removed false']) assert.ok(details.includes(fact), details);
+  assert.equal(/\d{13}/.test(details), false);
+  assert.equal(details.includes('ข้อมูล') || details.includes('จำลอง'), false);
+  const batches = sheets.get('epi_import_batches').cells;
+  const receipt = batches.find(row => row[0] === 'wrong');
+  assert.equal(receipt[batches[0].indexOf('status')], 'undone');
+  const record = JSON.parse(receipt[batches[0].indexOf('undo')]);
+  assert.deepEqual([record.by, record.deactivated, record.reactivated, record.summariesRemoved], ['admin@example.test', 2, 3, false]);
+  assert.ok(!Number.isNaN(Date.parse(record.at)));
+});
+
+test('an import clears deactivated_by_batch on a row it reactivates, and a file may not carry the column', () => {
+  const { context: c, read } = setup();
+  importBatch(c, cohort(2), 'existing', { mode: 'sync' });
+  importBatch(c, cohort(1), 'drop-one', { mode: 'sync' });
+  assert.equal(read()[1].deactivated_by_batch, 'drop-one');
+  importBatch(c, cohort(2), 'bring-back', { mode: 'sync' });
+  assert.deepEqual(read().map(row => [isActive(row), row.deactivated_by_batch]), [[true, ''], [true, '']]);
+  const { context: fresh } = setup({ autoPreflight: false });
+  prepare(fresh, [[person({ deactivated_by_batch: 'forged' })]], 'forged');
+  assert.deepEqual(plain(fresh.upsertEpiData([person({ deactivated_by_batch: 'forged' })], 'forged', importer, 2569)),
+    { success: false, error: 'Unsupported source column: deactivated_by_batch' });
+});
+
+test('Import Undo routes are closed to the public and to facility users', () => {
+  const { call, setAuth } = routerContext(anonymous);
+  const actions = { previewEpiImportUndo: { targetTable: 'Epi_1_Year', fiscalYear: 2569 },
+    undoEpiImport: { batchId: 'none', expected: { wouldDeactivate: 0, wouldReactivate: 0 } } };
+  for (const [action, body] of Object.entries(actions)) {
+    setAuth(anonymous); assert.equal(call(action, body).status, 401, action);
+    setAuth(ordinary); assert.equal(call(action, body).status, 403, action);
+    setAuth(districtUser); assert.equal(call(action, body).status, 403, action);
+    setAuth(administrator); assert.equal(call(action, body).status, 200, action);
+    setAuth(superAdministrator); assert.equal(call(action, body).status, 200, action);
+  }
+  setAuth(administrator);
+  assert.equal(call('previewEpiImportUndo', actions.previewEpiImportUndo).data.reason, 'no_batch');
+  assert.equal(call('undoEpiImport', actions.undoEpiImport).data.reason, 'no_batch');
 });

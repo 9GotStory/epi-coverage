@@ -200,3 +200,4 @@ Creating an ADR documents an architectural decision. It does not authorize expan
 - [ADR-0006](0006-vaccine-rules-sheet-is-staff-owned-primary-source.md) — The staff-configured `vaccine_rules` sheet is the primary source for follow-up; rule evaluation is authoritative for View 2. **Accepted** (supersedes ADR-0003 "Relationship to View 2" and ADR-0002 "View 2 Boundary")
 - [ADR-0007](0007-mandatory-import-preflight.md) — Every EPI import runs a read-only, server-enforced preflight; risky imports need a typed confirmation. **Accepted**
 - [ADR-0008](0008-vaccine-rule-birth-window-keyed-on-birth-date.md) — A schedule change between cohorts is a per-rule Birth Window keyed on birth date. **Accepted**
+- [ADR-0009](0009-import-undo-is-exact-or-refused.md) — Import Undo reverses only record activity, exactly or not at all; batches that updated existing records cannot be undone. **Accepted**

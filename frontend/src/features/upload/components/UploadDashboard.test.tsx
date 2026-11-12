@@ -108,3 +108,29 @@ describe('Issue #136 — no default Fiscal Year on the upload page', () => {
     await waitFor(() => expect(parser.parseHdcFile).toHaveBeenCalledTimes(1));
   });
 });
+
+describe('Issue #139 — Import Undo section', () => {
+  it('has its own table and year with no defaults, previews once both are chosen and confirms with one click', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-11-12T09:00:00+07:00'));
+    api.fetchApi.mockImplementation(async (action: string) => {
+      if (action === 'previewEpiImportUndo') return { data: { success: true, eligible: true, batchId: 'b1', targetTable: 'Epi_2_Year', fiscalYear: '2569',
+        mode: 'merge', importedAt: '2026-11-11T03:00:00.000Z', importedBy: 'admin@example.test', wouldDeactivate: 4, wouldReactivate: 0,
+        activeAfter: 0, summariesWillBeRemoved: true, byHoscode: [{ hoscode: '00001', wouldDeactivate: 4, wouldReactivate: 0 }] } };
+      if (action === 'undoEpiImport') return { data: { success: true, deactivated: 4, reactivated: 0, summariesRemoved: true } };
+      return { data: { success: true } };
+    });
+    renderPage();
+    const table = screen.getByRole('combobox', { name: 'กลุ่มอายุที่จะย้อนการนำเข้า' }) as HTMLSelectElement;
+    const year = screen.getByRole('combobox', { name: 'ปีงบประมาณที่จะย้อนการนำเข้า' }) as HTMLSelectElement;
+    expect([table.value, year.value]).toEqual(['', '']);
+    fireEvent.change(table, { target: { value: 'Epi_2_Year' } });
+    fireEvent.change(year, { target: { value: '2569' } });
+    expect(await screen.findByRole('heading', { name: /เด็ก 2 ปี.*ปีงบประมาณ 2569/ })).toBeTruthy();
+    expect(api.fetchApi).toHaveBeenCalledWith('previewEpiImportUndo', { targetTable: 'Epi_2_Year', fiscalYear: '2569' });
+    fireEvent.click(screen.getByRole('button', { name: /ยืนยันย้อนการนำเข้า/ }));
+    expect(await screen.findByText(/ย้อนการนำเข้าล่าสุดของเด็ก 2 ปี ปีงบประมาณ 2569 แล้ว/)).toBeTruthy();
+    expect(api.fetchApi).toHaveBeenCalledWith('undoEpiImport', { batchId: 'b1', expected: { wouldDeactivate: 4, wouldReactivate: 0 } });
+    await waitFor(() => expect(api.fetchApi).not.toHaveBeenCalledWith('saveDashboardSummary', expect.anything()));
+  });
+});

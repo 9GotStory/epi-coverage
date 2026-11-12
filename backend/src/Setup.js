@@ -47,7 +47,7 @@ function getEpiSchemas() {
     const doseFields = schemas[table].filter(field => field.endsWith('_date'));
     schemas[table] = [...new Set([...schemas[table], ...sourceFields,
       ...doseFields.flatMap(field => [field.replace('_date', '_hospcode'), field.replace('_date', '_input_hosp')]),
-      'source_columns'])];
+      'source_columns', 'deactivated_by_batch'])];
   });
   return schemas;
 }

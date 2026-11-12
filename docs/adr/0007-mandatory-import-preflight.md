@@ -41,4 +41,4 @@ Business rules are in `docs/features.md`. The receipt mechanics are in `docs/hdc
 * Every upload takes one extra round trip and one extra click. A risky upload also needs a typed number.
 * Clients older than this change cannot import. The backend and frontend must be deployed together.
 * Receipts from before this change that are stuck in `uploading` cannot be finalized and must be re-imported.
-* An app-level undo of a completed sync remains out of scope (issue #112).
+* An app-level undo of a completed sync was out of scope here; Import Undo is decided in ADR-0009 (issue #112).

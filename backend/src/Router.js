@@ -59,7 +59,7 @@ function handleRequest(method, e) {
     // 6. Admin Actions (ต้องเป็น Admin เท่านั้น)
     const adminActions = [
       'setup', 'getAllUsers', 'updateUserStatus', 'updateUserFacility',
-      'upsertFacility', 'preflightEpiImport', 'confirmEpiImport', 'upsertEpiData', 'cleanupEpiData', 'getAuditLogs',
+      'upsertFacility', 'preflightEpiImport', 'confirmEpiImport', 'upsertEpiData', 'cleanupEpiData', 'previewEpiImportUndo', 'undoEpiImport', 'getAuditLogs',
       'saveDashboardSummary', 'forceSyncOpenData', 'setupOpenDataTrigger',
       'seedVaccineRules', 'saveVaccineRule', 'cloneVaccineRules', 'batchSaveRules', 'suggestRuleTargetAges', 'suggestRuleDateChecks',
       'migrateVaccineMetricKeys'
@@ -82,6 +82,9 @@ function handleRequest(method, e) {
       case 'confirmEpiImport': return responseJson(confirmEpiImport(body.batchId, body.typedNumbers, authResult));
       case 'upsertEpiData': return responseJson(upsertEpiData(body.chunk, body.batchId, authResult, body.fiscalYear, body.targetTable, body.options));
       case 'cleanupEpiData': return responseJson(cleanupEpiData(body.batchId, body.touchedHoscodes, authResult.email, body.fiscalYear, body.targetTable));
+      // Issue #139: Import Undo — eligibility and counts are decided server-side only (ADR-0009)
+      case 'previewEpiImportUndo': return responseJson(previewEpiImportUndo(body.targetTable, body.fiscalYear, authResult));
+      case 'undoEpiImport': return responseJson(undoEpiImport(body.batchId, body.expected, authResult));
 
       // Issue #80: as-of timestamp สำหรับผู้ใช้ทุกสถานะ — คืนเฉพาะเวลาล่าสุดของ cleanup_epi_data
       // (data-minimized) ไม่เปิด audit_logs ฉบับเต็มซึ่งเป็น admin action
