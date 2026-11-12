@@ -107,8 +107,8 @@ const annualRequests = () => api.fetchApi.mock.calls
   .filter(call => call[0] === 'getDashboardSummariesMultiYear')
   .map(call => (call[1] as { fiscalYears: number[] }).fiscalYears);
 
-// Issue #132: the route's first render in a file is a one-time cold cost (~0.6 s alone, 1–5 s while
-// the full suite loads the machine), longer than findBy's 1 s default. Pay it once here so each test's
+// Issue #132: the route's first render in a file is a one-time cold cost (~0.6 s alone, 1–5 s when
+// the machine is under load), longer than findBy's 1 s default. Pay it once here so each test's
 // waits measure that test's own behaviour.
 beforeAll(async () => {
   mount();
