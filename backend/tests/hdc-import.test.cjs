@@ -603,10 +603,10 @@ test('preflight reports the incident shape (sync file matching no existing child
   const { context: c, read } = setup();
   upload(c, cohort(5), 'existing');
   const before = JSON.stringify(read());
-  const result = JSON.parse(JSON.stringify(preflight(c, [cohort(4, '00588', 100)], 'wrong-file', { mode: 'sync' }))); // plain objects across the vm realm
+  const result = plain(preflight(c, [cohort(4, '00588', 100)], 'wrong-file', { mode: 'sync' }));
   assert.equal(result.success, true);
   assert.deepEqual([result.matched, result.newRows, result.wouldDeactivate, result.activeBefore], [0, 4, 5, 5]);
-  assert.deepEqual(result.risk, { zeroMatchHoscodes: ['00588'], shrinkOverThreshold: true, outsideCohort: false });
+  assert.deepEqual(result.risk, { zeroMatchHoscodes: ['00588'], shrinkOverThreshold: true, outsideCohortBirthRange: false });
   assert.deepEqual(result.requiredConfirmations, { existingChildren: 5 }); // sync: the number of children that would be deactivated
   assert.deepEqual(result.byHoscode, [{ hoscode: '00588', activeBefore: 5, matched: 0, newRows: 4, wouldDeactivate: 5, outsideCohort: 0 }]);
   assert.equal(JSON.stringify(read()), before); // read-only for EPI data
@@ -646,8 +646,10 @@ test('a risky preflight blocks the upload until the exact typed number is confir
 test('a safe preflight needs no typed confirmation', () => {
   const { context: c } = setup();
   upload(c, cohort(5), 'existing');
-  const result = preflight(c, [cohort(5)], 'same-cohort', { mode: 'sync' });
+  const result = plain(preflight(c, [cohort(5)], 'same-cohort', { mode: 'sync' }));
   assert.deepEqual([result.matched, result.newRows, result.wouldDeactivate, result.requiredConfirmations], [5, 0, 0, null]);
+  // Issue #136: every birth is inside the 1-year FY2569 Cohort Birth Range, so the new condition adds nothing.
+  assert.deepEqual([result.outsideCohort, result.byHoscode[0].outsideCohort, result.risk.outsideCohortBirthRange], [0, 0, false]);
   assert.equal(c.upsertEpiData(cohort(5), 'same-cohort', importer, 2569, 'Epi_1_Year', { mode: 'sync' }).success, true);
 });
 
@@ -808,7 +810,7 @@ test('preflight reports the shrink threshold it applied', () => {
 const bornOn = (birth, count, hoscode = '00588', from = 1) => cohort(count, hoscode, from).map(row => ({ ...row, birth, bcg_date: birth }));
 
 test('FY2569 2-year births synced into an empty FY2570 are risky and the warning names FY2569 (the #136 incident)', () => {
-  const { context: c, sheets } = setup();
+  const { context: c, sheets, read } = setup();
   const file = [bornOn('2024-01-15', 3)];
   const result = plain(preflight(c, file, 'wrong-year', { year: 2570, table: 'Epi_2_Year', mode: 'sync', auth: importer }));
   assert.equal(result.success, true);
@@ -821,6 +823,10 @@ test('FY2569 2-year births synced into an empty FY2570 are risky and the warning
   const blocked = c.upsertEpiData(file[0], 'wrong-year', importer, 2570, 'Epi_2_Year', { mode: 'sync' });
   assert.deepEqual([blocked.success, blocked.error], [false, 'Typed confirmation required.']);
   assert.equal(sheets.has('Epi_2_Year'), false);
+  // An admin who really means it can still import after typing the out-of-range count (no hard block).
+  assert.equal(c.confirmEpiImport('wrong-year', { outsideCohort: '3' }, importer).success, true);
+  assert.equal(c.upsertEpiData(file[0], 'wrong-year', importer, 2570, 'Epi_2_Year', { mode: 'sync' }).success, true);
+  assert.equal(read('Epi_2_Year').length, 3);
 });
 
 test('the Cohort Birth Range of every Age Group includes 1 Oct and 30 Sep and excludes the day either side', () => {
@@ -839,6 +845,8 @@ test('the Cohort Birth Range of every Age Group includes 1 Oct and 30 Sep and ex
   }
 });
 
+const pick = result => [result.outsideCohort, result.outsideCohortFiscalYear];
+
 test('the matching Fiscal Year is named only when every out-of-range birth agrees on one year', () => {
   const { context: c } = setup();
   const options = { year: 2570, table: 'Epi_2_Year' }; // range 2024-10-01..2025-09-30
@@ -847,13 +855,12 @@ test('the matching Fiscal Year is named only when every out-of-range birth agree
   const twoYears = [[...bornOn('2024-03-01', 1), ...bornOn('2023-03-01', 1, '00588', 10)]];
   assert.deepEqual(pick(preflight(c, twoYears, 'two-years', options)), [2, null]); // FY2569 and FY2568: never guess
 });
-const pick = result => [result.outsideCohort, result.outsideCohortFiscalYear];
 
 test('a merge into a year that already has data is risky too when a row is outside the Cohort Birth Range', () => {
   const { context: c } = setup();
   upload(c, cohort(5), 'existing');
   const result = plain(preflight(c, [[...cohort(5), ...bornOn('2024-05-01', 1, '00588', 50)]], 'merge-stray', { mode: 'merge' }));
-  assert.deepEqual([result.matched, result.risk.zeroMatchHoscodes, result.risk.outsideCohort], [5, [], true]);
+  assert.deepEqual([result.matched, result.risk.zeroMatchHoscodes, result.risk.outsideCohortBirthRange], [5, [], true]);
   assert.deepEqual(result.requiredConfirmations, { outsideCohort: 1 });
 });
 
@@ -908,6 +915,7 @@ test('a preflight receipt from before the Cohort Birth Range check cannot start 
   const file = [bornOn('2024-01-15', 3)];
   preflight(c, file, 'pre-136', { year: 2570, table: 'Epi_2_Year' });
   asPre136Receipt(sheets, 'pre-136');
+  assert.deepEqual(plain(c.confirmEpiImport('pre-136', {}, 'admin')), { success: false, error: 'Preflight is out of date. Start a new import.' });
   const result = c.upsertEpiData(file[0], 'pre-136', 'admin', 2570, 'Epi_2_Year');
   assert.deepEqual([result.success, result.error], [false, 'Preflight is out of date. Start a new import.']);
   assert.equal(sheets.has('Epi_2_Year'), false);

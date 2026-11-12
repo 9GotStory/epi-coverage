@@ -25,7 +25,7 @@ The decisions behind this ADR were made in the grilling session on issue #111 (Q
      * a facility has active children but no file row matches any of them; or
      * a sync would deactivate more than `EPI_SYNC_SHRINK_THRESHOLD` (20%) of the active children in the touched facilities.
    * The admin who ran the preflight must type the number the server computed (`confirmEpiImport`).
-   * Issue #136 adds a third risk condition with its own typed number. The current list is in `docs/features.md`.
+   * **Amended 2026-11-12 (Issue #136):** a third risk condition, a file row born outside the selected Cohort Birth Range, joins the two above, and each fired condition now has its own typed number. The current list of conditions is in `docs/features.md`.
 3. **Writes fail closed.**
    * `upsertEpiData` and `cleanupEpiData` reject a batch that has no preflight receipt.
    * `upsertEpiData` also rejects a batch that is risky but not confirmed, or whose chunk identity fingerprints differ from the preflight.

@@ -89,7 +89,7 @@ export interface ImportPreflight {
   activeBefore: number;
   outsideCohort: number;
   byHoscode: Array<{ hoscode: string; activeBefore: number; matched: number; newRows: number; wouldDeactivate: number; outsideCohort: number }>;
-  risk: { zeroMatchHoscodes: string[]; shrinkOverThreshold: boolean; outsideCohort: boolean };
+  risk: { zeroMatchHoscodes: string[]; shrinkOverThreshold: boolean; outsideCohortBirthRange: boolean };
   /** The selected Age Group and Fiscal Year's Cohort Birth Range, CE `yyyy-MM-dd`, inclusive. */
   cohortBirthRange: { start: string; end: string };
   /** The one Fiscal Year (same Age Group) every out-of-range birth matches; null when none or several. */

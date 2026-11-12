@@ -59,7 +59,7 @@ describe('Issue #134 — import result when no summary was created', () => {
         success: true, batchId: 'server-echo', targetTable: 'Epi_1_Year', fiscalYear: '2569', mode: 'sync',
         matched: 1, newRows: 0, wouldDeactivate: 0, activeBefore: 1, outsideCohort: 0,
         byHoscode: [{ hoscode: '00001', activeBefore: 1, matched: 1, newRows: 0, wouldDeactivate: 0, outsideCohort: 0 }],
-        risk: { zeroMatchHoscodes: [], shrinkOverThreshold: false, outsideCohort: false },
+        risk: { zeroMatchHoscodes: [], shrinkOverThreshold: false, outsideCohortBirthRange: false },
         cohortBirthRange: { start: '2024-10-01', end: '2025-09-30' }, outsideCohortFiscalYear: null,
         requiredConfirmations: null, shrinkThreshold: 0.2,
       } };

@@ -26,10 +26,12 @@ export function ImportPreflightPanel({ preflight, isBusy, errorMsg, onConfirm, o
   const conditions = CONFIRMATION_ORDER.filter(name => required?.[name] != null);
   const isSync = preflight.mode === 'sync';
   const showOutsideCohort = preflight.outsideCohort > 0;
-  const canConfirm = !isBusy && conditions.every(name => (typed[name] ?? '').trim() === String(required?.[name]));
+  const typedValue = (name: RiskConfirmation) => (typed[name] ?? '').trim();
+  const canConfirm = !isBusy && conditions.every(name => typedValue(name) === String(required?.[name]));
+  // Thai for the Cohort Birth Range is "กลุ่มเกิดของปีงบประมาณ" (CONTEXT.md §46); bare "ช่วงวันเกิด" is the per-rule Birth Window.
   const confirmationLabel: Record<RiskConfirmation, string> = {
     existingChildren: isSync ? 'จำนวนเด็กเดิมที่จะถูกปิดสถานะ' : 'จำนวนรายชื่อในไฟล์ที่ไม่ตรงกับเด็กที่เปิดใช้งานอยู่',
-    outsideCohort: 'จำนวนรายชื่อในไฟล์ที่เกิดนอกช่วงวันเกิด',
+    outsideCohort: 'จำนวนรายชื่อในไฟล์ที่ไม่อยู่ในกลุ่มเกิด',
   };
 
   return (
@@ -67,22 +69,22 @@ export function ImportPreflightPanel({ preflight, isBusy, errorMsg, onConfirm, o
               <th className="px-4 py-3 whitespace-nowrap text-right">จับคู่ได้</th>
               <th className="px-4 py-3 whitespace-nowrap text-right">ใหม่</th>
               {isSync && <th className="px-4 py-3 whitespace-nowrap text-right">จะปิดสถานะ</th>}
-              {showOutsideCohort && <th className="px-4 py-3 whitespace-nowrap text-right">นอกช่วงวันเกิด</th>}
+              {showOutsideCohort && <th className="px-4 py-3 whitespace-nowrap text-right">ไม่อยู่ในกลุ่มเกิด</th>}
             </tr>
           </thead>
           <tbody className="divide-y divide-[#f0f0f0] bg-white">
             {preflight.byHoscode.map(row => {
               const zeroMatch = preflight.risk.zeroMatchHoscodes.includes(row.hoscode);
-              const outsideCohort = row.outsideCohort > 0;
+              const hasOutsideCohort = row.outsideCohort > 0;
               return (
-                <tr key={row.hoscode} className={zeroMatch || outsideCohort ? 'bg-[#fff0f0]' : undefined}>
+                <tr key={row.hoscode} className={zeroMatch || hasOutsideCohort ? 'bg-[#fff0f0]' : undefined}>
                   <td className="px-4 py-3 font-mono text-[12px] text-[#1d1d1f]">{row.hoscode}</td>
                   <td className="px-4 py-3 text-right">{row.activeBefore.toLocaleString()}</td>
                   <td className={`px-4 py-3 text-right ${zeroMatch ? 'text-[#ff3b30] font-semibold' : ''}`}>{row.matched.toLocaleString()}</td>
                   <td className="px-4 py-3 text-right">{row.newRows.toLocaleString()}</td>
                   {isSync && <td className="px-4 py-3 text-right">{row.wouldDeactivate.toLocaleString()}</td>}
                   {showOutsideCohort && (
-                    <td className={`px-4 py-3 text-right ${outsideCohort ? 'text-[#ff3b30] font-semibold' : ''}`}>{row.outsideCohort.toLocaleString()}</td>
+                    <td className={`px-4 py-3 text-right ${hasOutsideCohort ? 'text-[#ff3b30] font-semibold' : ''}`}>{row.outsideCohort.toLocaleString()}</td>
                   )}
                 </tr>
               );
@@ -103,11 +105,11 @@ export function ImportPreflightPanel({ preflight, isBusy, errorMsg, onConfirm, o
               {preflight.risk.shrinkOverThreshold && (
                 <p>จะปิดสถานะเด็กเดิม {preflight.wouldDeactivate.toLocaleString()} จาก {preflight.activeBefore.toLocaleString()} คน (เกิน {Math.round(preflight.shrinkThreshold * 100)}%)</p>
               )}
-              {preflight.risk.outsideCohort && (
+              {preflight.risk.outsideCohortBirthRange && (
                 <>
                   <p>
-                    {preflight.outsideCohort.toLocaleString()} รายชื่อในไฟล์เกิดนอกช่วงวันเกิดของ{TABLE_LABEL[preflight.targetTable]} ปีงบประมาณ {preflight.fiscalYear}
-                    {' '}({formatDateStr(preflight.cohortBirthRange.start)} – {formatDateStr(preflight.cohortBirthRange.end)})
+                    {preflight.outsideCohort.toLocaleString()} รายชื่อในไฟล์ไม่อยู่ในกลุ่มเกิดของ{TABLE_LABEL[preflight.targetTable]} ปีงบประมาณ {preflight.fiscalYear}
+                    {' '}(เกิด {formatDateStr(preflight.cohortBirthRange.start)} – {formatDateStr(preflight.cohortBirthRange.end)})
                   </p>
                   {preflight.outsideCohortFiscalYear && (
                     <p className="font-semibold">วันเกิดตรงกับปีงบประมาณ {preflight.outsideCohortFiscalYear} โปรดตรวจสอบว่าเลือกปีงบประมาณถูกต้อง</p>
@@ -145,7 +147,7 @@ export function ImportPreflightPanel({ preflight, isBusy, errorMsg, onConfirm, o
       <div className="flex flex-col-reverse sm:flex-row justify-end gap-3">
         <Button variant="outline" className="rounded-full px-6" disabled={isBusy} onClick={onCancel}>ยกเลิก</Button>
         <Button size="lg" disabled={!canConfirm}
-          onClick={() => onConfirm(required == null ? undefined : Object.fromEntries(conditions.map(name => [name, (typed[name] ?? '').trim()])))}>
+          onClick={() => onConfirm(required == null ? undefined : Object.fromEntries(conditions.map(name => [name, typedValue(name)])))}>
           ยืนยันนำเข้า
         </Button>
       </div>

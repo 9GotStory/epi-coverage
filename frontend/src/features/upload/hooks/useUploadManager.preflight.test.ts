@@ -28,17 +28,17 @@ const riskyPreflight = {
   success: true, batchId: 'server-echo', targetTable: 'Epi_1_Year', fiscalYear: '2569', mode: 'sync',
   matched: 0, newRows: 2, wouldDeactivate: 5, activeBefore: 5, outsideCohort: 0,
   byHoscode: [{ hoscode: '00001', activeBefore: 5, matched: 0, newRows: 2, wouldDeactivate: 5, outsideCohort: 0 }],
-  risk: { zeroMatchHoscodes: ['00001'], shrinkOverThreshold: true, outsideCohort: false },
+  risk: { zeroMatchHoscodes: ['00001'], shrinkOverThreshold: true, outsideCohortBirthRange: false },
   cohortBirthRange: { start: '2024-10-01', end: '2025-09-30' }, outsideCohortFiscalYear: null,
   requiredConfirmations: { existingChildren: 5 }, shrinkThreshold: 0.2,
 };
 const safePreflight = { ...riskyPreflight, matched: 2, newRows: 0, wouldDeactivate: 0, activeBefore: 2,
   byHoscode: [{ hoscode: '00001', activeBefore: 2, matched: 2, newRows: 0, wouldDeactivate: 0, outsideCohort: 0 }],
-  risk: { zeroMatchHoscodes: [], shrinkOverThreshold: false, outsideCohort: false }, requiredConfirmations: null };
+  risk: { zeroMatchHoscodes: [], shrinkOverThreshold: false, outsideCohortBirthRange: false }, requiredConfirmations: null };
 /** Issue #136: a sync that both shrinks the existing children and has births outside the Cohort Birth Range. */
 const twoRiskPreflight = { ...riskyPreflight, outsideCohort: 2, outsideCohortFiscalYear: '2568',
   byHoscode: [{ hoscode: '00001', activeBefore: 5, matched: 0, newRows: 2, wouldDeactivate: 5, outsideCohort: 2 }],
-  risk: { zeroMatchHoscodes: ['00001'], shrinkOverThreshold: true, outsideCohort: true },
+  risk: { zeroMatchHoscodes: ['00001'], shrinkOverThreshold: true, outsideCohortBirthRange: true },
   requiredConfirmations: { existingChildren: 5, outsideCohort: 2 } };
 
 function stubApi(preflight: Record<string, unknown>, { confirmError }: { confirmError?: string } = {}) {
