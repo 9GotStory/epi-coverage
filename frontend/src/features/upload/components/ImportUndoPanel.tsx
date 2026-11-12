@@ -1,0 +1,116 @@
+import { AlertTriangle, Undo2 } from 'lucide-react';
+import { Button } from '../../../shared/components/ui/button';
+import { formatDateTimeStr } from '../../../shared/utils/dateUtils';
+import { TABLE_LABEL, UNDO_REFUSAL_TEXT } from '../hooks/useUploadManager';
+import type { ImportUndoPreview } from '../hooks/useUploadManager';
+
+interface Props {
+  preview: ImportUndoPreview;
+  isBusy: boolean;
+  errorMsg: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}
+
+const MODE_LABEL = { merge: 'เติม / อัปเดตข้อมูล', sync: 'ซิงค์ไฟล์เต็ม' } as const;
+
+/** Issue #139: what Import Undo would change, computed by the server, or why it is refused (ADR-0009). */
+export function ImportUndoPanel({ preview, isBusy, errorMsg, onConfirm, onCancel }: Props) {
+  const heading = (
+    <div>
+      <p className="text-[14px] font-medium text-[#7a7a7a] tracking-[-0.224px]">ย้อนการนำเข้าล่าสุด</p>
+      <h3 className="text-[28px] font-semibold text-[#1d1d1f] tracking-[0.196px] mt-1">
+        {TABLE_LABEL[preview.targetTable]} · ปีงบประมาณ {preview.fiscalYear}
+      </h3>
+    </div>
+  );
+  const error = errorMsg && <p role="alert" className="text-[14px] text-[#ff3b30]">{errorMsg}</p>;
+
+  if (!preview.eligible) {
+    const refusal = UNDO_REFUSAL_TEXT[preview.reason];
+    return (
+      <div className="space-y-6 animate-in fade-in duration-500">
+        {heading}
+        {error}
+        <div className="flex gap-3 bg-[#fafafc] rounded-[16px] border border-[#e0e0e0] p-4 text-[14px] text-[#1d1d1f]">
+          <AlertTriangle className="h-5 w-5 text-[#7a7a7a] mt-0.5 shrink-0" />
+          <div className="space-y-1">
+            <p className="font-semibold">ย้อนการนำเข้านี้ไม่ได้</p>
+            <p>{refusal.reason}</p>
+            {refusal.recovery && <p>{refusal.recovery}</p>}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6 animate-in fade-in duration-500">
+      {heading}
+
+      <dl className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-[14px]">
+        <div className="bg-[#fafafc] p-4 rounded-[16px] border border-[#e0e0e0]">
+          <dt className="text-[12px] text-[#7a7a7a] font-medium tracking-[0.231px]">นำเข้าเมื่อ</dt>
+          <dd className="text-[#1d1d1f] font-medium mt-1">{formatDateTimeStr(preview.importedAt)}</dd>
+        </div>
+        <div className="bg-[#fafafc] p-4 rounded-[16px] border border-[#e0e0e0]">
+          <dt className="text-[12px] text-[#7a7a7a] font-medium tracking-[0.231px]">นำเข้าโดย</dt>
+          <dd className="text-[#1d1d1f] font-medium mt-1 break-all">{preview.importedBy || '-'}</dd>
+        </div>
+        <div className="bg-[#fafafc] p-4 rounded-[16px] border border-[#e0e0e0]">
+          <dt className="text-[12px] text-[#7a7a7a] font-medium tracking-[0.231px]">วิธีนำเข้า</dt>
+          <dd className="text-[#1d1d1f] font-medium mt-1">{MODE_LABEL[preview.mode]}</dd>
+        </div>
+      </dl>
+
+      <div className="overflow-x-auto rounded-[16px] border border-[#e0e0e0]">
+        <table className="w-full text-[14px] text-left">
+          <thead className="bg-[#fafafc] text-[#7a7a7a] font-medium border-b border-[#e0e0e0]">
+            <tr>
+              <th className="px-4 py-3 whitespace-nowrap">หน่วยบริการ</th>
+              <th className="px-4 py-3 whitespace-nowrap text-right">จะปิดสถานะ (เพิ่มจากการนำเข้านี้)</th>
+              <th className="px-4 py-3 whitespace-nowrap text-right">จะเปิดสถานะคืน (ถูกปิดโดยการนำเข้านี้)</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-[#f0f0f0] bg-white">
+            {preview.byHoscode.map(row => (
+              <tr key={row.hoscode}>
+                <td className="px-4 py-3 font-mono text-[12px] text-[#1d1d1f]">{row.hoscode}</td>
+                <td className="px-4 py-3 text-right">{row.wouldDeactivate.toLocaleString()}</td>
+                <td className="px-4 py-3 text-right">{row.wouldReactivate.toLocaleString()}</td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot className="bg-[#fafafc] font-semibold text-[#1d1d1f] border-t border-[#e0e0e0]">
+            <tr>
+              <td className="px-4 py-3">รวม</td>
+              <td className="px-4 py-3 text-right">{preview.wouldDeactivate.toLocaleString()}</td>
+              <td className="px-4 py-3 text-right">{preview.wouldReactivate.toLocaleString()}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
+      <p className="text-[14px] text-[#7a7a7a]">
+        หลังย้อนจะเหลือรายการที่เปิดใช้งาน {preview.activeAfter.toLocaleString()} รายการ แถวที่ปิดสถานะยังคงอยู่ในฐานข้อมูล ไม่ได้ถูกลบ
+      </p>
+
+      {preview.summariesWillBeRemoved && (
+        <div className="flex gap-3 bg-[#fff0f0] rounded-[16px] p-4 text-[14px] text-[#ff3b30]">
+          <AlertTriangle className="h-5 w-5 mt-0.5 shrink-0" />
+          <p>หลังย้อนจะไม่มีรายการที่เปิดใช้งานเหลือ ระบบจะลบสรุป Dashboard ของกลุ่มอายุและปีงบประมาณนี้ หน้า Dashboard จะแสดง "ไม่มีข้อมูลสรุป"</p>
+        </div>
+      )}
+
+      {error}
+
+      <div className="flex flex-col-reverse sm:flex-row justify-end gap-3">
+        <Button variant="outline" className="rounded-full px-6" disabled={isBusy} onClick={onCancel}>ยกเลิก</Button>
+        <Button size="lg" disabled={isBusy} onClick={onConfirm}>
+          <Undo2 className="mr-2 h-5 w-5" />
+          ยืนยันย้อนการนำเข้า
+        </Button>
+      </div>
+    </div>
+  );
+}

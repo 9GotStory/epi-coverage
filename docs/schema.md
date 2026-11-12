@@ -43,6 +43,7 @@
 | `fiscal_year` | String | ปีงบประมาณของข้อมูลชุดนี้ (ระบุตอนอัปโหลด เพื่อกำหนด Scope) |
 | `last_seen_batch` | String | รหัสอ้างอิงรอบการอัปโหลดล่าสุด (ใช้ตรวจสอบเด็กที่ย้ายออกโดยสร้าง Soft Delete) |
 | `is_active` | Boolean | สถานะยังอยู่ในพื้นที่หรือไม่ (TRUE/FALSE) — การอ่านเป็นแบบ fail closed: เฉพาะ TRUE ชัด ๆ เท่านั้นที่ active ค่าว่าง/สะกดผิด (แถวที่กรอกมือ) ถือว่าไม่ active |
+| `deactivated_by_batch` | String | (คอลัมน์ระบบ ต่อท้ายชีต, Issue #139) `batch_id` ของ Full-File Sync ที่ปิดสถานะแถวนี้ ว่างเมื่อแถวเปิดใช้งาน การนำเข้าที่เขียนแถวนี้ล้างค่าเป็นว่าง ไฟล์นำเข้าห้ามมีคอลัมน์นี้ แถวที่ถูกปิดสถานะก่อนมีคอลัมน์นี้เป็นค่าว่าง ใช้กับ Import Undo เท่านั้น |
 | `ai_analysis` | String | ผลการวิเคราะห์จาก AI (Gemini) สำหรับเคสที่มีปัญหา (รักษาค่าเดิมเมื่ออัปโหลด แต่ไม่ถือว่าเป็นผลวิเคราะห์ใหม่) |
 | `ai_analyzed_at` | DateTime | วันเวลาที่ AI ทำการประมวลผล |
 
@@ -57,7 +58,7 @@
 | `j11_date`, `j11_hospcode` | Date, String | วันที่ฉีด LAJE เข็ม 1 |
 | `je1_date`, `je2_date` | Date | วันที่ฉีด JE 1-2 (ถ้ามี) |
 | `batch_id`, `fiscal_year` | String | (เหมือนตารางเด็ก 1 ปี) |
-| `last_seen_batch`, `is_active` | String, Boolean| (เหมือนตารางเด็ก 1 ปี) |
+| `last_seen_batch`, `is_active`, `deactivated_by_batch` | String, Boolean, String | (เหมือนตารางเด็ก 1 ปี) |
 
 ## 4. `Epi_3_Year` (ข้อมูลวัคซีนเด็ก 3 ปี)
 *หมายเหตุ: โครงสร้างเหมือนเด็ก 1 และ 2 ปี เพิ่มคอลัมน์ LAJE 2 หรือ JE 3 และเก็บแบบ Plain Text สำหรับ hosc/hosp*
@@ -71,7 +72,7 @@
 | `j12_date`, `j12_hospcode` | Date, String | วันที่ฉีด LAJE เข็ม 2 |
 | `je1_date` ... `je3_date` | Date | วันที่ฉีด JE 1-3 |
 | `batch_id`, `fiscal_year` | String | (เหมือนตารางเด็ก 1 ปี) |
-| `last_seen_batch`, `is_active` | String, Boolean| (เหมือนตารางเด็ก 1 ปี) |
+| `last_seen_batch`, `is_active`, `deactivated_by_batch` | String, Boolean, String | (เหมือนตารางเด็ก 1 ปี) |
 ## 5. `facilities` (หน่วยบริการ)
 | Column | Type | Description |
 | :--- | :--- | :--- |

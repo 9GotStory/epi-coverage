@@ -38,7 +38,7 @@ describe('HDC parsing contract', () => {
   it('keeps frontend source allowlists exactly aligned with backend schemas', () => {
     const context: { getEpiSchemas?: () => Record<string, string[]> } = {};
     runInNewContext(readFileSync(new URL('../../../../../backend/src/Setup.js', import.meta.url), 'utf8'), context);
-    const system = ['batch_id', 'fiscal_year', 'last_seen_batch', 'is_active', 'ai_analysis', 'ai_analyzed_at', 'source_columns'];
+    const system = ['batch_id', 'fiscal_year', 'last_seen_batch', 'is_active', 'ai_analysis', 'ai_analyzed_at', 'source_columns', 'deactivated_by_batch'];
     for (const age of [1, 2, 3, 5] as EpiAge[]) {
       expect(hdcSourceFields(age).sort()).toEqual(context.getEpiSchemas!()[`Epi_${age}_Year`].filter(field => !system.includes(field)).sort());
     }

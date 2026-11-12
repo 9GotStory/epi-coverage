@@ -650,3 +650,16 @@ The **Cohort Birth Range** is the range of birth dates of the children that one 
 - A quarter's cohort is the matching three months of that range.
 
 Do not confuse it with a Birth Window (§41), whose Thai wording is "ช่วงวันเกิด". A Birth Window is an optional per-rule range that decides whether one Vaccine Rule applies to a child. A Cohort Birth Range decides which children an Age Group and Fiscal Year report on at all.
+
+---
+
+## 47. Import Undo
+
+**Import Undo** reverses the effect of one completed Import (§27) on which records are Active Records (§30) (Issue #112). Thai UI wording: "ย้อนการนำเข้าล่าสุด".
+
+- It applies only to the latest completed Batch (§28) of one Age Group and Fiscal Year, in either import mode, and only when no later Import has written to the same facilities.
+- It applies only to a Batch that updated no existing record. Such a Batch only added records and, in a Full-File Sync (§29), deactivated records. Import Undo deactivates the records it added and reactivates the records it deactivated.
+- It is exact or refused. It never infers which records a Batch changed, and it never restores overwritten vaccine values. When it is refused, the recovery is to import the correct file again.
+- It is one step only. An undone Batch cannot be undone again, and it still blocks Import Undo of any earlier Batch.
+
+Do not call it a "rollback" or "revert". It is not a Full-File Sync and not a Summary Regeneration (§45), although it changes Active Records and therefore the Dashboard Summaries (§44).

@@ -100,6 +100,31 @@ export interface ImportPreflight {
   shrinkThreshold: number;
 }
 
+/** Issue #139: why the server refused Import Undo (ADR-0009); `stale` comes only from the undo call itself. */
+export type UndoRefusalReason = 'no_batch' | 'in_progress' | 'already_undone' | 'not_recorded' | 'updated_existing' | 'newer_import' | 'stale';
+
+const REIMPORT_RECOVERY = 'วิธีแก้: นำเข้าไฟล์ที่ถูกต้องอีกครั้งแบบ "ซิงค์ไฟล์เต็ม"';
+/** Thai wording of each refusal, with the recovery where one exists (CONTEXT.md §47). */
+export const UNDO_REFUSAL_TEXT: Record<UndoRefusalReason, { reason: string; recovery?: string }> = {
+  no_batch: { reason: 'ยังไม่มีการนำเข้าของกลุ่มอายุและปีงบประมาณนี้ จึงไม่มีการนำเข้าให้ย้อน' },
+  in_progress: { reason: 'การนำเข้าล่าสุดยังอัปโหลดไม่เสร็จ จึงยังย้อนไม่ได้', recovery: 'รอให้การนำเข้าเสร็จแล้วลองใหม่ หรือนำเข้าไฟล์ที่ถูกต้องอีกครั้งแบบ "ซิงค์ไฟล์เต็ม"' },
+  already_undone: { reason: 'การนำเข้าล่าสุดถูกย้อนไปแล้ว ระบบย้อนได้เพียงขั้นเดียว', recovery: REIMPORT_RECOVERY },
+  not_recorded: { reason: 'การนำเข้าล่าสุดทำก่อนมีระบบย้อนการนำเข้า ระบบจึงไม่ทราบแน่ชัดว่าแถวใดถูกเปลี่ยน', recovery: REIMPORT_RECOVERY },
+  updated_existing: { reason: 'การนำเข้าล่าสุดอัปเดตข้อมูลเด็กที่มีอยู่แล้ว ระบบคืนค่าวัคซีนที่ถูกเขียนทับไม่ได้', recovery: REIMPORT_RECOVERY },
+  newer_import: { reason: 'มีการนำเข้าที่ใหม่กว่าเขียนข้อมูลของกลุ่มอายุและปีงบประมาณนี้แล้ว', recovery: REIMPORT_RECOVERY },
+  stale: { reason: 'ตัวอย่างล้าสมัยเพราะข้อมูลเปลี่ยนไปหลังแสดงผล โปรดตรวจตัวเลขใหม่แล้วยืนยันอีกครั้ง' },
+};
+
+interface UndoScope { targetTable: TargetTable; fiscalYear: string }
+/** Issue #139: the server-computed preview of Import Undo for the latest written Batch — counts and facility codes only. */
+export type ImportUndoPreview = UndoScope & (
+  | { eligible: true; batchId: string; mode: 'merge' | 'sync'; importedAt: string | null; importedBy: string | null;
+      wouldDeactivate: number; wouldReactivate: number; activeAfter: number; summariesWillBeRemoved: boolean;
+      byHoscode: Array<{ hoscode: string; wouldDeactivate: number; wouldReactivate: number }> }
+  | { eligible: false; reason: Exclude<UndoRefusalReason, 'stale'>; batchId?: string; mode?: 'merge' | 'sync'; importedAt?: string | null; importedBy?: string | null }
+);
+export interface ImportUndoResult extends UndoScope { deactivated: number; reactivated: number; summariesRemoved: boolean; summaryFailed: boolean }
+
 /** Record Identity (CONTEXT.md §3): the only fields sent to preflight. */
 const RECORD_IDENTITY_FIELDS = ['hoscode', 'pid', 'cid', 'sex', 'birth', 'check_vhid'] as const;
 const recordIdentityOf = (row: Record<string, unknown>) =>
@@ -127,6 +152,15 @@ export function useUploadManager() {
   const [preflight, setPreflight] = useState<ImportPreflight | null>(null);
   // The parsed rows and the scope they were preflighted for; the import uses exactly these.
   const pendingRef = useRef<{ batchId: string; rows: any[]; fiscalYear: string; targetTable: TargetTable; importMode: 'merge' | 'sync' } | null>(null);
+
+  // Issue #139: Import Undo has its own scope, with no default table or year (consistent with #136).
+  const [undoTable, setUndoTableState] = useState<TargetTable | ''>('');
+  const [undoFiscalYear, setUndoFiscalYearState] = useState('');
+  const [undoPreview, setUndoPreview] = useState<ImportUndoPreview | null>(null);
+  const [undoResult, setUndoResult] = useState<ImportUndoResult | null>(null);
+  const [undoError, setUndoError] = useState('');
+  const [isUndoing, setIsUndoing] = useState(false);
+  const undoRequestRef = useRef(0); // only the latest preview request may land
 
   const handleDrop = useCallback(async (acceptedFiles: File[]) => {
     if (acceptedFiles.length === 0 || isUploading) return;
@@ -320,6 +354,76 @@ export function useUploadManager() {
     }
   }, [fiscalYear, queryClient]);
 
+  const loadUndoPreview = useCallback(async (table: TargetTable | '', year: string) => {
+    const request = ++undoRequestRef.current;
+    setUndoPreview(null);
+    if (!table || !year) return;
+    try {
+      const res = await fetchApi('previewEpiImportUndo', { targetTable: table, fiscalYear: year });
+      const payload = res.data;
+      if (!payload || payload.error || payload.success === false) throw new Error(payload?.error || 'เกิดข้อผิดพลาด');
+      if (request === undoRequestRef.current) setUndoPreview(payload as ImportUndoPreview);
+    } catch (err: any) {
+      console.error(err);
+      if (request === undoRequestRef.current) setUndoError(`ตรวจสอบการนำเข้าล่าสุดไม่สำเร็จ: ${err.message || 'เกิดข้อผิดพลาด'}`);
+    }
+  }, []);
+
+  /** Choosing a table or year starts a fresh preview once both are chosen. */
+  const selectUndoScope = useCallback((table: TargetTable | '', year: string) => {
+    setUndoTableState(table);
+    setUndoFiscalYearState(year);
+    setUndoResult(null);
+    setUndoError('');
+    void loadUndoPreview(table, year);
+  }, [loadUndoPreview]);
+  const setUndoTable = useCallback((table: TargetTable | '') => selectUndoScope(table, undoFiscalYear), [selectUndoScope, undoFiscalYear]);
+  const setUndoFiscalYear = useCallback((year: string) => selectUndoScope(undoTable, year), [selectUndoScope, undoTable]);
+
+  const cancelUndo = useCallback(() => selectUndoScope(undoTable, ''), [selectUndoScope, undoTable]);
+
+  /** One confirm click: the server re-checks everything against the previewed counts, then the summaries follow. */
+  const confirmUndo = useCallback(async () => {
+    const preview = undoPreview;
+    if (!preview?.eligible || isUndoing) return;
+    setIsUndoing(true);
+    setUndoError('');
+    try {
+      const res = await fetchApi('undoEpiImport', { batchId: preview.batchId,
+        expected: { wouldDeactivate: preview.wouldDeactivate, wouldReactivate: preview.wouldReactivate } });
+      const payload = res.data;
+      if (payload?.success !== true) {
+        const refusal = UNDO_REFUSAL_TEXT[payload?.reason as UndoRefusalReason];
+        setUndoError(refusal ? refusal.reason : `ย้อนการนำเข้าไม่สำเร็จ: ${payload?.error || 'เกิดข้อผิดพลาด'}`);
+        await loadUndoPreview(preview.targetTable, preview.fiscalYear); // show what the server sees now
+        return;
+      }
+      let summaryFailed = false;
+      // The server deletes the summaries itself when no Active Records remain (CONTEXT.md §44); otherwise rewrite them.
+      if (!payload.summariesRemoved) {
+        try {
+          await writeTableSummaries(preview.targetTable, preview.fiscalYear);
+        } catch (err) {
+          console.error(err);
+          summaryFailed = true;
+          toast.error('ย้อนการนำเข้าแล้ว แต่สร้างสรุป Dashboard ไม่สำเร็จ โปรดกด "ประมวลผล Dashboard ใหม่"');
+        }
+      }
+      setUndoResult({ targetTable: preview.targetTable, fiscalYear: preview.fiscalYear, deactivated: payload.deactivated,
+        reactivated: payload.reactivated, summariesRemoved: payload.summariesRemoved, summaryFailed });
+      setUndoPreview(null);
+      queryClient.invalidateQueries({ queryKey: ['dashboardSummaries'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboardSummariesMultiYear'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboardSummaryYears'] });
+      queryClient.invalidateQueries({ queryKey: ['epiData'] });
+    } catch (err: any) {
+      console.error(err);
+      setUndoError(`ย้อนการนำเข้าไม่สำเร็จ: ${err.message || 'เกิดข้อผิดพลาด'}`);
+    } finally {
+      setIsUndoing(false);
+    }
+  }, [undoPreview, isUndoing, loadUndoPreview, queryClient]);
+
   return {
     importMode, setImportMode, sourceColumns,
     file,
@@ -343,5 +447,15 @@ export function useUploadManager() {
     cancelPreflight,
     handleReset,
     handleSyncAll,
+    undoTable,
+    setUndoTable,
+    undoFiscalYear,
+    setUndoFiscalYear,
+    undoPreview,
+    undoResult,
+    undoError,
+    isUndoing,
+    confirmUndo,
+    cancelUndo,
   };
 }

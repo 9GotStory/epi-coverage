@@ -242,3 +242,23 @@ function getDashboardSummaryYears() {
     return { success: false, error: error.toString() };
   }
 }
+
+/**
+ * Issue #139: removes every Dashboard Summary row of one table and Fiscal Year (`_all`, Q1–Q4 and the legacy
+ * `<Table>_<FY>` id). Import Undo calls it when no Active Records remain (CONTEXT.md §44). Returns the rows removed.
+ */
+function deleteDashboardSummaries(targetTable, fiscalYear) {
+  const sheet = getSpreadsheet().getSheetByName(DASHBOARD_SUMMARY_SHEET);
+  if (!sheet) return 0;
+  const ids = ['all', 1, 2, 3, 4].map(q => `${targetTable}_${fiscalYear}_${q}`).concat(`${targetTable}_${fiscalYear}`);
+  const data = sheet.getDataRange().getValues();
+  let removed = 0;
+  for (let i = data.length - 1; i >= 1; i--) {
+    if (!ids.includes(String(data[i][0]))) continue;
+    // Sheets refuses to delete the last non-frozen row; clear it instead.
+    if (sheet.getMaxRows() <= 2) sheet.getRange(i + 1, 1, 1, data[0].length).clearContent();
+    else sheet.deleteRow(i + 1);
+    removed++;
+  }
+  return removed;
+}

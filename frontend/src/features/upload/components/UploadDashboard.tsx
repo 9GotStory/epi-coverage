@@ -1,5 +1,5 @@
 import { useDropzone } from 'react-dropzone';
-import { UploadCloud, FileSpreadsheet, CheckCircle2, AlertTriangle, RefreshCw } from 'lucide-react';
+import { UploadCloud, FileSpreadsheet, CheckCircle2, AlertTriangle, RefreshCw, Undo2 } from 'lucide-react';
 import { Button } from '../../../shared/components/ui/button';
 import { Progress } from '../../../shared/components/ui/progress';
 import { Alert, AlertDescription, AlertTitle } from '../../../shared/components/ui/alert';
@@ -7,7 +7,12 @@ import { SubNav } from '../../../widgets/layout/SubNav';
 import { ConfirmModal } from '../../../shared/components/ui/confirm-modal';
 import { getAgeString } from '../utils/uploadHelpers';
 import { useUploadManager, SUMMARY_REGENERATION_TABLES, TABLE_LABEL } from '../hooks/useUploadManager';
+import type { TargetTable } from '../hooks/useUploadManager';
 import { ImportPreflightPanel } from './ImportPreflightPanel';
+import { ImportUndoPanel } from './ImportUndoPanel';
+
+/** The Fiscal Years the selectors offer: two before the current one to two after. */
+const selectableFiscalYears = () => Array.from({ length: 5 }, (_, i) => (new Date().getFullYear() + 543) - 2 + i);
 
 export function UploadDashboard() {
   const {
@@ -33,6 +38,16 @@ export function UploadDashboard() {
     cancelPreflight,
     handleReset,
     handleSyncAll,
+    undoTable,
+    setUndoTable,
+    undoFiscalYear,
+    setUndoFiscalYear,
+    undoPreview,
+    undoResult,
+    undoError,
+    isUndoing,
+    confirmUndo,
+    cancelUndo,
   } = useUploadManager();
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -79,14 +94,11 @@ export function UploadDashboard() {
             >
               {/* Issue #136: no default year; the admin must choose one */}
               <option value="" disabled>เลือกปีงบประมาณ</option>
-              {Array.from({ length: 5 }, (_, i) => {
-                const y = (new Date().getFullYear() + 543) - 2 + i;
-                return (
-                  <option key={y} value={y.toString()}>
-                    ปีงบประมาณ {y}
-                  </option>
-                );
-              })}
+              {selectableFiscalYears().map(y => (
+                <option key={y} value={y.toString()}>
+                  ปีงบประมาณ {y}
+                </option>
+              ))}
             </select>
           </div>
         </div>
@@ -316,6 +328,55 @@ export function UploadDashboard() {
           </div>
         </div>
         )}
+
+        {/* Issue #139: Import Undo has its own table and year, with no defaults, so it never inherits the import's scope. */}
+        <section aria-labelledby="import-undo-heading" className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm mt-8 space-y-4">
+          <div>
+            <h3 id="import-undo-heading" className="text-base font-semibold text-slate-900 flex items-center gap-2 mb-2">
+              <Undo2 className="w-5 h-5 text-slate-400" />
+              ย้อนการนำเข้าล่าสุด
+            </h3>
+            <p className="text-sm text-slate-500">
+              ใช้เมื่อนำเข้าไฟล์ผิด ระบบจะปิดสถานะรายชื่อที่การนำเข้าครั้งล่าสุดเพิ่มเข้ามา และเปิดสถานะคืนให้รายชื่อที่การนำเข้านั้นปิดไป
+              ย้อนได้เฉพาะการนำเข้าที่ไม่ได้อัปเดตข้อมูลเด็กเดิม
+            </p>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-3">
+            <select
+              aria-label="กลุ่มอายุที่จะย้อนการนำเข้า"
+              className="w-full sm:w-64 h-10 px-3 rounded-md border border-slate-200 text-sm font-medium disabled:opacity-50"
+              value={undoTable}
+              onChange={event => setUndoTable(event.target.value as TargetTable)}
+              disabled={isUndoing || isUploading}
+            >
+              <option value="" disabled>เลือกกลุ่มอายุ</option>
+              {SUMMARY_REGENERATION_TABLES.map(table => <option key={table} value={table}>{TABLE_LABEL[table]}</option>)}
+            </select>
+            <select
+              aria-label="ปีงบประมาณที่จะย้อนการนำเข้า"
+              className="w-full sm:w-64 h-10 px-3 rounded-md border border-slate-200 text-sm font-medium disabled:opacity-50"
+              value={undoFiscalYear}
+              onChange={event => setUndoFiscalYear(event.target.value)}
+              disabled={isUndoing || isUploading}
+            >
+              <option value="" disabled>เลือกปีงบประมาณ</option>
+              {selectableFiscalYears().map(y => <option key={y} value={y.toString()}>ปีงบประมาณ {y}</option>)}
+            </select>
+          </div>
+          {undoPreview ? (
+            <ImportUndoPanel preview={undoPreview} isBusy={isUndoing || isUploading} errorMsg={undoError} onConfirm={confirmUndo} onCancel={cancelUndo} />
+          ) : undoError ? (
+            <p role="alert" className="text-sm text-[#ff3b30]">{undoError}</p>
+          ) : null}
+          {undoResult && (
+            <div role="status" className="bg-[#f0f9f0] rounded-[16px] p-4 text-[14px] text-[#1d1d1f] space-y-1">
+              <p className="font-semibold">ย้อนการนำเข้าล่าสุดของ{TABLE_LABEL[undoResult.targetTable]} ปีงบประมาณ {undoResult.fiscalYear} แล้ว</p>
+              <p>ปิดสถานะ {undoResult.deactivated.toLocaleString()} รายการ · เปิดสถานะคืน {undoResult.reactivated.toLocaleString()} รายการ</p>
+              {undoResult.summariesRemoved && <p>ไม่มีรายการที่เปิดใช้งานเหลือ จึงลบสรุป Dashboard ของกลุ่มอายุและปีงบประมาณนี้แล้ว</p>}
+              {undoResult.summaryFailed && <p className="text-[#ff3b30]">สร้างสรุป Dashboard ไม่สำเร็จ โปรดกด "ประมวลผล Dashboard ใหม่" ด้านล่าง</p>}
+            </div>
+          )}
+        </section>
 
         <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm mt-8">
           <h3 className="text-base font-semibold text-slate-900 flex items-center gap-2 mb-2">

@@ -25,11 +25,12 @@ function withEpiImportLock(work) {
 function epiBatchSheet(ss) {
   const columns = [
     'batch_id', 'target_table', 'fiscal_year', 'mode', 'total_chunks',
-    'completed_chunks', 'hoscodes', 'status', 'updated_at', 'preflight'
+    'completed_chunks', 'hoscodes', 'status', 'updated_at', 'preflight', 'finalize', 'undo'
   ];
   const sheet = setupSheetWithHeaders(ss, 'epi_import_batches', columns);
-  // Receipts sheets created before Issue #111 gain 'preflight' once; later calls only read the header row.
-  if (!sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].includes('preflight')) {
+  // Older receipts sheets gain 'preflight' (Issue #111) and 'finalize'/'undo' (Issue #139) once; later calls only read the header row.
+  const header = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  if (columns.some(column => !header.includes(column))) {
     syncAllSchemasToExistingSheets(ss, { epi_import_batches: columns });
   }
   return sheet;
@@ -212,7 +213,7 @@ function preflightEpiImport(keyChunks, batchId, auth, fiscalYear, targetTable = 
       chunkKeyFingerprints: keyChunks.map(chunk => epiChunkKeyFingerprint(chunk, fiscalYear, timeZone)),
       overlapSnapshot: epiOverlapSnapshot(receipts, batchId, targetTable, fiscalYear, hoscodes) };
     // hoscodes stay '[]' until the first chunk is written, so an abandoned preflight never counts as an overlapping import.
-    receipts.push([batchId, targetTable, String(fiscalYear), mode, keyChunks.length, '[]', '[]', 'preflight', record.preflightAt, JSON.stringify(record)]);
+    receipts.push([batchId, targetTable, String(fiscalYear), mode, keyChunks.length, '[]', '[]', 'preflight', record.preflightAt, JSON.stringify(record), '', '']);
     writeEpiRows(batches, receipts[0], receipts);
     return { success: true, batchId, targetTable, fiscalYear: String(fiscalYear), mode, ...summary };
   });
@@ -258,7 +259,7 @@ function upsertEpiData(chunk, batchId, auth, fiscalYear, targetTable = 'Epi_1_Ye
       !Number.isInteger(index) || index < 0 || index >= total || !Array.isArray(chunk) || chunk.length < 1 || chunk.length > 500) {
     return { success: false, error: 'Invalid import scope or chunk.' };
   }
-  const systemFields = ['batch_id', 'fiscal_year', 'last_seen_batch', 'is_active', 'ai_analysis', 'ai_analyzed_at', 'source_columns'];
+  const systemFields = ['batch_id', 'fiscal_year', 'last_seen_batch', 'is_active', 'ai_analysis', 'ai_analyzed_at', 'source_columns', 'deactivated_by_batch'];
   for (const record of chunk) {
     if (!epiRecordIdentityValid(record) || !record.name || !record.lname) return { success: false, error: 'Invalid HDC record.' };
     for (const field of Object.keys(record)) {
@@ -338,7 +339,7 @@ function upsertEpiData(chunk, batchId, auth, fiscalYear, targetTable = 'Epi_1_Ye
       // Legacy nonempty values are evidence; an empty legacy column is not.
       const evidenced = Object.keys(previous).filter(field => !systemFields.includes(field) && previous[field] !== '' && previous[field] != null);
       const merged = { ...previous, ...record, batch_id: batchId, fiscal_year: String(fiscalYear),
-        last_seen_batch: batchId, is_active: true,
+        last_seen_batch: batchId, is_active: true, deactivated_by_batch: '', // Issue #139: active again, so no batch deactivated it
         source_columns: JSON.stringify([...new Set([...known, ...evidenced, ...Object.keys(record)])]) };
       const values = headers.map(field => merged[field] == null ? '' : merged[field]);
       if (rowIndex === undefined) { lookup.set(key, rows.length); rows.push(values); inserted++; }
@@ -369,6 +370,7 @@ function cleanupEpiData(batchId, touchedHoscodes, adminEmail, fiscalYear, target
     const receipt = receipts[receiptIndex];
     if (receipt[1] !== targetTable || String(receipt[2]) !== String(fiscalYear)) return { success: false, error: 'Batch scope mismatch.' };
     if (receipt[7] === 'complete') return { success: true, deactivated: 0, replayed: true };
+    if (receipt[7] === 'undone') return { success: false, error: 'This import was undone.' }; // Issue #139: never finalize it again
     if (!receipt[9]) return { success: false, error: 'Run the import preflight first.' }; // Issue #111: legacy receipts cannot finalize
     if (JSON.parse(receipt[5]).length !== Number(receipt[4])) return { success: false, error: 'Cannot finalize an incomplete batch.' };
     const facilities = JSON.parse(receipt[6]); // Scope comes from validated records, never caller input.
@@ -378,24 +380,162 @@ function cleanupEpiData(batchId, touchedHoscodes, adminEmail, fiscalYear, target
     }
     let deactivated = 0;
     if (receipt[3] === 'sync') {
+      syncAllSchemasToExistingSheets(ss, { [targetTable]: getEpiSchemas()[targetTable] }); // a batch written before Issue #139 lacks the column
       const sheet = ss.getSheetByName(targetTable);
       const rows = sheet.getDataRange().getValues();
       const headers = rows[0];
       const activeIndex = headers.indexOf('is_active');
+      const deactivatedByIndex = headers.indexOf('deactivated_by_batch');
       rows.slice(1).forEach(row => {
         const record = arrayToObj(headers, row);
         if (String(record.fiscal_year) === String(fiscalYear) && facilities.includes(String(record.hoscode)) &&
             record.last_seen_batch !== batchId && String(record.is_active).toLowerCase() === 'true') {
-          row[activeIndex] = false; deactivated++;
+          row[activeIndex] = false; row[deactivatedByIndex] = batchId; deactivated++;
         }
       });
       if (deactivated) writeEpiRows(sheet, headers, rows);
     }
     receipt[7] = 'complete'; receipt[8] = new Date().toISOString();
+    // Issue #139: the marker that this batch's deactivations are recorded row by row, which Import Undo requires.
+    receipt[10] = JSON.stringify({ at: receipt[8], deactivated, deactivationRecorded: true });
     writeEpiRows(batches, receipts[0], receipts);
     // Issue #80: Router ส่งอีเมลจาก session ที่ตรวจสอบแล้วเสมอ — fallback 'unknown' แทน
     // ชื่อ 'Admin' แบบ generic เมื่อบัญชีไม่มีอีเมล
     logAction('SYSTEM', adminEmail || 'unknown', 'cleanup_epi_data', `Batch ${batchId}: ${deactivated} deactivated (${receipt[3]}).`);
     return { success: true, deactivated };
+  });
+}
+
+/** Issue #139: Thai-free reason codes; the client words them (ADR-0009). */
+const EPI_UNDO_REFUSAL_ERROR = {
+  no_batch: 'No import to undo for this table and fiscal year.',
+  in_progress: 'The latest import is still uploading.',
+  already_undone: 'The latest import was already undone.',
+  not_recorded: 'The latest import was made before Import Undo existed.',
+  updated_existing: 'The latest import updated existing records.',
+  newer_import: 'A newer import has written to the same facilities.',
+  stale: 'The undo preview is out of date. Review it again.',
+};
+
+/** Row index of the latest receipt of (table, FY) that wrote data; a receipt still in 'preflight' has written nothing. */
+function epiLatestWrittenReceipt(receipts, targetTable, fiscalYear) {
+  for (let i = receipts.length - 1; i > 0; i--) {
+    if (receipts[i][1] === targetTable && String(receipts[i][2]) === String(fiscalYear) && JSON.parse(receipts[i][6] || '[]').length > 0) return i;
+  }
+  return -1;
+}
+
+/** Issue #139: why a written receipt cannot be undone exactly, or null when it can (ADR-0009). */
+function epiUndoRefusal(receipts, index) {
+  const receipt = receipts[index];
+  if (receipt[7] === 'uploading') return 'in_progress';
+  if (receipt[7] === 'undone') return 'already_undone';
+  const finalize = receipt[10] ? JSON.parse(receipt[10]) : null;
+  const chunks = JSON.parse(receipt[5] || '[]');
+  if (receipt[7] !== 'complete' || !finalize || finalize.deactivationRecorded !== true ||
+      chunks.some(chunk => !chunk.audit || typeof chunk.audit.updated !== 'number')) return 'not_recorded';
+  if (chunks.some(chunk => chunk.audit.updated > 0)) return 'updated_existing';
+  const hoscodes = JSON.parse(receipt[6]);
+  if (receipts.slice(index + 1).some(row => row[1] === receipt[1] && String(row[2]) === String(receipt[2]) &&
+      JSON.parse(row[6] || '[]').some(code => hoscodes.includes(code)))) return 'newer_import';
+  return null;
+}
+
+/** What undoing a receipt would change: its active inserted rows go inactive, the rows its cleanup deactivated come back. */
+function epiUndoEffect(sheet, receipt) {
+  const batchId = receipt[0];
+  const rows = sheet && sheet.getLastRow() > 1 ? sheet.getDataRange().getValues() : [[]];
+  const headers = rows[0];
+  const facility = {};
+  const deactivate = [], reactivate = [];
+  let activeAfter = 0;
+  rows.forEach((row, i) => {
+    if (i === 0) return;
+    const record = arrayToObj(headers, row);
+    if (String(record.fiscal_year) !== String(receipt[2])) return;
+    const active = String(record.is_active).toLowerCase() === 'true';
+    const code = String(record.hoscode);
+    const stats = () => (facility[code] = facility[code] || { hoscode: code, wouldDeactivate: 0, wouldReactivate: 0 });
+    if (active && record.last_seen_batch === batchId) { deactivate.push(i); stats().wouldDeactivate++; }
+    else if (!active && record.deactivated_by_batch === batchId) { reactivate.push(i); stats().wouldReactivate++; activeAfter++; }
+    else if (active) activeAfter++;
+  });
+  const byHoscode = Object.keys(facility).sort().map(code => facility[code]);
+  return { headers, rows, deactivate, reactivate, byHoscode, activeAfter, wouldDeactivate: deactivate.length, wouldReactivate: reactivate.length };
+}
+
+/** Who wrote the batch, from the per-chunk audit metadata: an admin's email or user id, never a child's identity. */
+function epiImportedBy(receipt) {
+  const actors = JSON.parse(receipt[5] || '[]').map(chunk => chunk.audit && (chunk.audit.email || chunk.audit.userId)).filter(Boolean);
+  return [...new Set(actors)].join(', ') || null;
+}
+
+/**
+ * Issue #139: read-only preview of Import Undo for the latest written batch of one table and Fiscal Year.
+ * Counts and facility codes only; the server decides eligibility (ADR-0009).
+ */
+function previewEpiImportUndo(targetTable, fiscalYear, auth) {
+  if (!getEpiSchemas()[targetTable] || !/^\d{4}$/.test(String(fiscalYear))) return { success: false, error: 'Invalid import scope.' };
+  return withEpiImportLock(() => {
+    const ss = getSpreadsheet();
+    const scope = { success: true, targetTable, fiscalYear: String(fiscalYear) };
+    const batches = ss.getSheetByName('epi_import_batches'); // never created here: preview is read-only
+    const receipts = batches ? batches.getDataRange().getValues() : [];
+    const index = epiLatestWrittenReceipt(receipts, targetTable, fiscalYear);
+    if (index < 1) return { ...scope, eligible: false, reason: 'no_batch' };
+    const receipt = receipts[index];
+    const finalize = receipt[10] ? JSON.parse(receipt[10]) : null;
+    const batch = { ...scope, batchId: receipt[0], mode: receipt[3], importedAt: finalize ? finalize.at : null, importedBy: epiImportedBy(receipt) };
+    const reason = epiUndoRefusal(receipts, index);
+    if (reason) return { ...batch, eligible: false, reason };
+    const effect = epiUndoEffect(ss.getSheetByName(targetTable), receipt);
+    return { ...batch, eligible: true, wouldDeactivate: effect.wouldDeactivate, wouldReactivate: effect.wouldReactivate,
+      byHoscode: effect.byHoscode, activeAfter: effect.activeAfter, summariesWillBeRemoved: effect.activeAfter === 0 };
+  });
+}
+
+/**
+ * Issue #139: undo the batch the admin previewed. Under the import lock the server re-checks eligibility and the
+ * counts, then deactivates the rows the batch inserted and reactivates the rows its cleanup deactivated. Soft only.
+ */
+function undoEpiImport(batchId, expected, auth) {
+  if (!/^[\w-]{1,100}$/.test(batchId || '') || !expected || typeof expected !== 'object' ||
+      !Number.isInteger(expected.wouldDeactivate) || !Number.isInteger(expected.wouldReactivate)) {
+    return { success: false, error: 'Invalid undo request.' };
+  }
+  const refuse = reason => ({ success: false, reason, error: EPI_UNDO_REFUSAL_ERROR[reason] });
+  return withEpiImportLock(() => {
+    const ss = getSpreadsheet();
+    const batches = epiBatchSheet(ss);
+    const receipts = batches.getDataRange().getValues();
+    const index = receipts.findIndex((row, i) => i > 0 && row[0] === batchId);
+    if (index < 1) return refuse('no_batch');
+    const receipt = receipts[index];
+    const [, targetTable, fiscalYear, mode] = receipt;
+    // Undo is one step: only the latest written batch of the table and year, never an earlier one.
+    const reason = epiUndoRefusal(receipts, index) || (epiLatestWrittenReceipt(receipts, targetTable, fiscalYear) !== index ? 'newer_import' : null);
+    if (reason) return refuse(reason);
+    const sheet = ss.getSheetByName(targetTable);
+    const effect = epiUndoEffect(sheet, receipt);
+    if (effect.wouldDeactivate !== expected.wouldDeactivate || effect.wouldReactivate !== expected.wouldReactivate) return refuse('stale');
+
+    const activeIndex = effect.headers.indexOf('is_active');
+    const deactivatedByIndex = effect.headers.indexOf('deactivated_by_batch');
+    effect.deactivate.forEach(i => { effect.rows[i][activeIndex] = false; });
+    effect.reactivate.forEach(i => { effect.rows[i][activeIndex] = true; effect.rows[i][deactivatedByIndex] = ''; });
+    if (effect.deactivate.length || effect.reactivate.length) writeEpiRows(sheet, effect.headers, effect.rows);
+    // The receipt and audit follow the rows directly, so a later failure can never leave a reversal untraced.
+    const summariesRemoved = effect.activeAfter === 0;
+    const at = new Date().toISOString();
+    receipt[7] = 'undone'; receipt[8] = at; // the new updated_at makes overlapping open preflights stale
+    receipt[11] = JSON.stringify({ by: auth && (auth.email || auth.userId), at, deactivated: effect.wouldDeactivate,
+      reactivated: effect.wouldReactivate, summariesRemoved });
+    writeEpiRows(batches, receipts[0], receipts);
+    logAction(auth && auth.userId, auth && auth.email, 'undo_epi_import',
+      `Batch ${batchId} [${targetTable} FY ${fiscalYear} ${mode}]: deactivated ${effect.wouldDeactivate}, reactivated ${effect.wouldReactivate}; ` +
+      `facilities [${JSON.parse(receipt[6]).join(', ')}]; summaries removed ${summariesRemoved}`);
+    // CONTEXT.md §44: no Active Records means no Dashboard Summary, so none may outlive the rows it summarized.
+    if (summariesRemoved) deleteDashboardSummaries(targetTable, fiscalYear);
+    return { success: true, deactivated: effect.wouldDeactivate, reactivated: effect.wouldReactivate, summariesRemoved };
   });
 }
