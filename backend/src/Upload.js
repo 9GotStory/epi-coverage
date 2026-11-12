@@ -524,10 +524,8 @@ function undoEpiImport(batchId, expected, auth) {
     effect.deactivate.forEach(i => { effect.rows[i][activeIndex] = false; });
     effect.reactivate.forEach(i => { effect.rows[i][activeIndex] = true; effect.rows[i][deactivatedByIndex] = ''; });
     if (effect.deactivate.length || effect.reactivate.length) writeEpiRows(sheet, effect.headers, effect.rows);
-    // CONTEXT.md §44: no Active Records means no Dashboard Summary, so none may outlive the rows it summarized.
+    // The receipt and audit follow the rows directly, so a later failure can never leave a reversal untraced.
     const summariesRemoved = effect.activeAfter === 0;
-    if (summariesRemoved) deleteDashboardSummaries(targetTable, fiscalYear);
-
     const at = new Date().toISOString();
     receipt[7] = 'undone'; receipt[8] = at; // the new updated_at makes overlapping open preflights stale
     receipt[11] = JSON.stringify({ by: auth && (auth.email || auth.userId), at, deactivated: effect.wouldDeactivate,
@@ -536,6 +534,8 @@ function undoEpiImport(batchId, expected, auth) {
     logAction(auth && auth.userId, auth && auth.email, 'undo_epi_import',
       `Batch ${batchId} [${targetTable} FY ${fiscalYear} ${mode}]: deactivated ${effect.wouldDeactivate}, reactivated ${effect.wouldReactivate}; ` +
       `facilities [${JSON.parse(receipt[6]).join(', ')}]; summaries removed ${summariesRemoved}`);
+    // CONTEXT.md §44: no Active Records means no Dashboard Summary, so none may outlive the rows it summarized.
+    if (summariesRemoved) deleteDashboardSummaries(targetTable, fiscalYear);
     return { success: true, deactivated: effect.wouldDeactivate, reactivated: effect.wouldReactivate, summariesRemoved };
   });
 }

@@ -1171,3 +1171,16 @@ test('Import Undo routes are closed to the public and to facility users', () => 
   assert.equal(call('previewEpiImportUndo', actions.previewEpiImportUndo).data.reason, 'no_batch');
   assert.equal(call('undoEpiImport', actions.undoEpiImport).data.reason, 'no_batch');
 });
+
+test('a summary removal that fails after the rows are written still leaves the undo recorded and audited', () => {
+  const { context: c, sheets } = setup();
+  importBatch(c, cohort(2), 'only-import');
+  const audit = [];
+  c.logAction = (...entry) => audit.push(entry);
+  const preview = undoPreview(c);
+  c.deleteDashboardSummaries = () => { throw new Error('Sheets service failed'); };
+  assert.throws(() => c.undoEpiImport(preview.batchId, { wouldDeactivate: 2, wouldReactivate: 0 }, administrator), /Sheets service failed/);
+  const batches = sheets.get('epi_import_batches').cells;
+  assert.equal(batches.find(row => row[0] === 'only-import')[batches[0].indexOf('status')], 'undone');
+  assert.deepEqual(audit.map(entry => entry[2]), ['undo_epi_import']);
+});
