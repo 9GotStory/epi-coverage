@@ -116,3 +116,46 @@ describe('Issue #139 — Import Undo in useUploadManager', () => {
     expect(result.current.undoResult).toBeNull();
   });
 });
+
+/** Issue #140 (#142): an undo the server could not finish is shown and finished from its plan (ADR-0010). */
+const unfinished = {
+  success: true, eligible: true, unfinished: true, batchId: 'wrong-file', targetTable: 'Epi_1_Year', fiscalYear: '2569', mode: 'sync',
+  importedAt: '2026-11-11T03:00:00.000Z', importedBy: 'importer@example.test', startedBy: 'admin@example.test', startedAt: '2026-11-12T03:00:00.000Z',
+  wouldDeactivate: 143, wouldReactivate: 181, activeAfter: 181, summariesWillBeRemoved: false,
+};
+
+describe('Issue #140 — Unfinished Import Undo in useUploadManager', () => {
+  it('finishes an unfinished undo with the planned counts and follows the normal success path', async () => {
+    stubApi({ preview: unfinished });
+    const { result, invalidate } = await hookWithPreview();
+    expect(result.current.undoPreview).toMatchObject({ unfinished: true, startedBy: 'admin@example.test' });
+    await act(async () => { await result.current.confirmUndo(); });
+    expect(calls('undoEpiImport')).toEqual([{ batchId: 'wrong-file', expected: { wouldDeactivate: 143, wouldReactivate: 181 } }]);
+    expect(calls('saveDashboardSummary')).toHaveLength(5);
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['dashboardSummaries'] });
+    expect(result.current.undoResult).toMatchObject({ deactivated: 143, reactivated: 181 });
+  });
+
+  it('shows the current preview again when the undo request itself fails', async () => {
+    stubApi();
+    const { result } = await hookWithPreview();
+    const fetchApi = api.fetchApi.getMockImplementation()!;
+    api.fetchApi.mockImplementation(async (action: string, payload: unknown) => {
+      if (action === 'undoEpiImport') throw new Error('Network Error');
+      if (action === 'previewEpiImportUndo') return { data: unfinished };
+      return fetchApi(action, payload);
+    });
+    await act(async () => { await result.current.confirmUndo(); });
+    expect(result.current.undoError).toMatch(/ย้อนการนำเข้าไม่สำเร็จ/);
+    await waitFor(() => expect(result.current.undoPreview).toMatchObject({ unfinished: true }));
+    expect(calls('previewEpiImportUndo')).toHaveLength(2);
+  });
+
+  it('says in Thai to contact the system owner when the records no longer match the unfinished undo', async () => {
+    stubApi({ preview: unfinished, undo: { success: false, reason: 'unfinished_mismatch', error: 'The records no longer match the unfinished undo.' } });
+    const { result } = await hookWithPreview();
+    await act(async () => { await result.current.confirmUndo(); });
+    expect(result.current.undoError).toMatch(/ผู้ดูแลระบบ/);
+    expect(actions()).not.toContain('saveDashboardSummary');
+  });
+});

@@ -14,7 +14,7 @@ const eligible: ImportUndoPreview = {
   wouldDeactivate: 143, wouldReactivate: 181, activeAfter: 181, summariesWillBeRemoved: false,
   byHoscode: [{ hoscode: '00001', wouldDeactivate: 140, wouldReactivate: 181 }, { hoscode: '00002', wouldDeactivate: 3, wouldReactivate: 0 }],
 };
-const refused = (reason: Exclude<UndoRefusalReason, 'stale'>): ImportUndoPreview =>
+const refused = (reason: Exclude<UndoRefusalReason, 'stale' | 'unfinished_mismatch'>): ImportUndoPreview =>
   ({ eligible: false, reason, targetTable: 'Epi_2_Year', fiscalYear: '2570', batchId: 'b1', mode: 'merge', importedAt: null, importedBy: null });
 
 const renderPanel = (preview: ImportUndoPreview, handlers = { onConfirm: vi.fn(), onCancel: vi.fn() }) =>
@@ -59,7 +59,7 @@ describe('Issue #139 — ImportUndoPanel', () => {
   });
 
   it('explains each refusal in Thai and names the recovery where one exists, with no confirm button', () => {
-    const expected: Array<[Exclude<UndoRefusalReason, 'stale'>, RegExp, boolean]> = [
+    const expected: Array<[Exclude<UndoRefusalReason, 'stale' | 'unfinished_mismatch'>, RegExp, boolean]> = [
       ['no_batch', /ยังไม่มีการนำเข้า/, false],
       ['in_progress', /ยังอัปโหลดไม่เสร็จ/, true],
       ['already_undone', /ถูกย้อนไปแล้ว/, true],
@@ -75,5 +75,33 @@ describe('Issue #139 — ImportUndoPanel', () => {
       expect(screen.queryByRole('button', { name: /ยืนยันย้อนการนำเข้า/ })).toBeNull();
       cleanup();
     }
+  });
+});
+
+describe('Issue #140 — an Unfinished Import Undo in ImportUndoPanel', () => {
+  const unfinished: ImportUndoPreview = {
+    eligible: true, unfinished: true, batchId: 'wrong-file', targetTable: 'Epi_1_Year', fiscalYear: '2569', mode: 'sync',
+    importedAt: '2026-11-11T03:00:00.000Z', importedBy: 'importer@example.test', startedBy: 'admin@example.test', startedAt: '2026-11-12T03:00:00.000Z',
+    wouldDeactivate: 143, wouldReactivate: 181, activeAfter: 0, summariesWillBeRemoved: true,
+  };
+
+  it('says the undo is unfinished and shows who started it, when, and the planned totals', () => {
+    renderPanel(unfinished);
+    expect(screen.getByRole('heading', { name: /เด็ก 1 ปี.*ปีงบประมาณ 2569/ })).toBeTruthy();
+    expect(screen.getByText(/การย้อนที่ยังไม่เสร็จ/)).toBeTruthy();
+    expect(screen.getByText('admin@example.test')).toBeTruthy();
+    expect(screen.getByText(/12\/11\/2569|2569-11-12|12 พ\.ย\./)).toBeTruthy();
+    expect(screen.getByText('143')).toBeTruthy();
+    expect(screen.getByText('181')).toBeTruthy();
+    expect(screen.getByText(/ไม่มีข้อมูลสรุป/)).toBeTruthy();
+    expect(screen.queryByRole('cell', { name: /^\d{5}$/ })).toBeNull(); // no per-facility breakdown
+  });
+
+  it('finishes with one click on "ย้อนต่อให้เสร็จ"', () => {
+    const onConfirm = vi.fn(), onCancel = vi.fn();
+    renderPanel(unfinished, { onConfirm, onCancel });
+    expect(screen.queryByRole('button', { name: /ยืนยันย้อนการนำเข้า/ })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /ย้อนต่อให้เสร็จ/ }));
+    expect(onConfirm).toHaveBeenCalledTimes(1);
   });
 });

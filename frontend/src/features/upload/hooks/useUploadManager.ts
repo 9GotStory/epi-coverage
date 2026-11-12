@@ -100,8 +100,9 @@ export interface ImportPreflight {
   shrinkThreshold: number;
 }
 
-/** Issue #139: why the server refused Import Undo (ADR-0009); `stale` comes only from the undo call itself. */
-export type UndoRefusalReason = 'no_batch' | 'in_progress' | 'already_undone' | 'not_recorded' | 'updated_existing' | 'newer_import' | 'stale';
+/** Issue #139/#140: why the server refused Import Undo (ADR-0009, ADR-0010); `stale` and `unfinished_mismatch` come only from the undo call itself. */
+export type UndoRefusalReason = 'no_batch' | 'in_progress' | 'already_undone' | 'not_recorded' | 'updated_existing' | 'newer_import' | 'stale' | 'unfinished_mismatch';
+type UndoCallOnlyReason = 'stale' | 'unfinished_mismatch';
 
 const REIMPORT_RECOVERY = 'วิธีแก้: นำเข้าไฟล์ที่ถูกต้องอีกครั้งแบบ "ซิงค์ไฟล์เต็ม"';
 /** Thai wording of each refusal, with the recovery where one exists (CONTEXT.md §47). */
@@ -113,15 +114,27 @@ export const UNDO_REFUSAL_TEXT: Record<UndoRefusalReason, { reason: string; reco
   updated_existing: { reason: 'การนำเข้าล่าสุดอัปเดตข้อมูลเด็กที่มีอยู่แล้ว ระบบคืนค่าวัคซีนที่ถูกเขียนทับไม่ได้', recovery: REIMPORT_RECOVERY },
   newer_import: { reason: 'มีการนำเข้าที่ใหม่กว่าเขียนข้อมูลของกลุ่มอายุและปีงบประมาณนี้แล้ว', recovery: REIMPORT_RECOVERY },
   stale: { reason: 'ตัวอย่างล้าสมัยเพราะข้อมูลเปลี่ยนไปหลังแสดงผล โปรดตรวจตัวเลขใหม่แล้วยืนยันอีกครั้ง' },
+  unfinished_mismatch: { reason: 'ข้อมูลไม่ตรงกับการย้อนที่ยังไม่เสร็จแล้ว ระบบจึงย้อนต่อให้เสร็จไม่ได้ โปรดติดต่อผู้ดูแลระบบ' },
 };
+
+/** Issue #140: an Import is refused while an Import Undo of the same table and Fiscal Year is unfinished (ADR-0010). */
+function importRefusalText(payload: { reason?: string; error?: string } | undefined, table: TargetTable, year: string, fallback: string) {
+  if (payload?.reason === 'unfinished_undo') {
+    return `การย้อนการนำเข้าของ ${TABLE_LABEL[table]} · ปีงบประมาณ ${year} ยังไม่เสร็จ จึงยังนำเข้าไม่ได้ โปรดกด "ย้อนต่อให้เสร็จ" ในส่วน "ย้อนการนำเข้าล่าสุด" ก่อน`;
+  }
+  return payload?.error || fallback;
+}
 
 interface UndoScope { targetTable: TargetTable; fiscalYear: string }
 /** Issue #139: the server-computed preview of Import Undo for the latest written Batch — counts and facility codes only. */
 export type ImportUndoPreview = UndoScope & (
-  | { eligible: true; batchId: string; mode: 'merge' | 'sync'; importedAt: string | null; importedBy: string | null;
+  | { eligible: true; unfinished?: false; batchId: string; mode: 'merge' | 'sync'; importedAt: string | null; importedBy: string | null;
       wouldDeactivate: number; wouldReactivate: number; activeAfter: number; summariesWillBeRemoved: boolean;
       byHoscode: Array<{ hoscode: string; wouldDeactivate: number; wouldReactivate: number }> }
-  | { eligible: false; reason: Exclude<UndoRefusalReason, 'stale'>; batchId?: string; mode?: 'merge' | 'sync'; importedAt?: string | null; importedBy?: string | null }
+  // Issue #140: an Unfinished Import Undo; the counts are its plan, so there is no per-facility breakdown.
+  | { eligible: true; unfinished: true; batchId: string; mode: 'merge' | 'sync'; importedAt: string | null; importedBy: string | null;
+      startedBy: string | null; startedAt: string; wouldDeactivate: number; wouldReactivate: number; activeAfter: number; summariesWillBeRemoved: boolean }
+  | { eligible: false; reason: Exclude<UndoRefusalReason, UndoCallOnlyReason>; batchId?: string; mode?: 'merge' | 'sync'; importedAt?: string | null; importedBy?: string | null }
 );
 export interface ImportUndoResult extends UndoScope { deactivated: number; reactivated: number; summariesRemoved: boolean; summaryFailed: boolean }
 
@@ -200,7 +213,7 @@ export function useUploadManager() {
       for (let i = 0; i < rows.length; i += CHUNK_SIZE) keyChunks.push(rows.slice(i, i + CHUNK_SIZE).map(recordIdentityOf));
       const res = await fetchApi('preflightEpiImport', { keyChunks, batchId, fiscalYear, targetTable, mode: importMode });
       const payload = res.data;
-      if (!payload || payload.error || payload.success === false) throw new Error(payload?.error || 'ตรวจสอบไฟล์ก่อนนำเข้าไม่สำเร็จ');
+      if (!payload || payload.error || payload.success === false) throw new Error(importRefusalText(payload, targetTable, fiscalYear, 'ตรวจสอบไฟล์ก่อนนำเข้าไม่สำเร็จ'));
       pendingRef.current = { batchId, rows, fiscalYear, targetTable, importMode };
       setPreflight(payload as ImportPreflight);
       setStatus('confirming');
@@ -258,7 +271,7 @@ export function useUploadManager() {
         const res = await fetchApi('upsertEpiData', { chunk, batchId, fiscalYear, targetTable, options: { mode: importMode, chunkIndex: i / CHUNK_SIZE, totalChunks: Math.ceil(allRows.length / CHUNK_SIZE) } });
         const payload = res.data;
         
-        if (payload.error) throw new Error(payload.error);
+        if (payload.error) throw new Error(importRefusalText(payload, targetTable, fiscalYear, payload.error));
         inserted += payload.inserted || 0;
         updated += payload.updated || 0;
         setResults({ inserted, updated, deactivated: 0 });
@@ -419,6 +432,7 @@ export function useUploadManager() {
     } catch (err: any) {
       console.error(err);
       setUndoError(`ย้อนการนำเข้าไม่สำเร็จ: ${err.message || 'เกิดข้อผิดพลาด'}`);
+      await loadUndoPreview(preview.targetTable, preview.fiscalYear); // Issue #140: the undo may now be unfinished
     } finally {
       setIsUndoing(false);
     }

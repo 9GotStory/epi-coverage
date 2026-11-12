@@ -201,3 +201,4 @@ Creating an ADR documents an architectural decision. It does not authorize expan
 - [ADR-0007](0007-mandatory-import-preflight.md) — Every EPI import runs a read-only, server-enforced preflight; risky imports need a typed confirmation. **Accepted**
 - [ADR-0008](0008-vaccine-rule-birth-window-keyed-on-birth-date.md) — A schedule change between cohorts is a per-rule Birth Window keyed on birth date. **Accepted**
 - [ADR-0009](0009-import-undo-is-exact-or-refused.md) — Import Undo reverses only record activity, exactly or not at all; batches that updated existing records cannot be undone. **Accepted**
+- [ADR-0010](0010-import-undo-finishes-or-stays-unfinished.md) — Import Undo records an `undoing` plan first and is `undone` only when every step is complete; an Unfinished Import Undo is finished by running it again and blocks Imports into its table and Fiscal Year. **Accepted**

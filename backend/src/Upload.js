@@ -71,6 +71,12 @@ const EPI_SYNC_SHRINK_THRESHOLD = 0.2;
 /** Record Identity (CONTEXT.md §3): the only fields a preflight receives. */
 const EPI_RECORD_IDENTITY_FIELDS = ['hoscode', 'pid', 'cid', 'sex', 'birth', 'check_vhid'];
 
+/** Issue #140: while an Import Undo of a table and Fiscal Year is unfinished, no Import may write to it (ADR-0010). */
+const EPI_UNFINISHED_UNDO_REFUSAL = { success: false, reason: 'unfinished_undo', error: 'An Import Undo of this table and fiscal year is unfinished. Finish it first.' };
+function epiUndoUnfinished(receipts, targetTable, fiscalYear) {
+  return receipts.some((row, i) => i > 0 && row[1] === targetTable && String(row[2]) === String(fiscalYear) && row[7] === 'undoing');
+}
+
 function epiImportScopeValid(batchId, fiscalYear, targetTable, mode) {
   return !!getEpiSchemas()[targetTable] && /^\d{4}$/.test(String(fiscalYear)) && /^[\w-]{1,100}$/.test(batchId || '') && ['merge', 'sync'].includes(mode);
 }
@@ -154,6 +160,7 @@ function preflightEpiImport(keyChunks, batchId, auth, fiscalYear, targetTable = 
     const batches = epiBatchSheet(ss);
     const receipts = batches.getDataRange().getValues();
     if (receipts.some((row, i) => i > 0 && row[0] === batchId)) return { success: false, error: 'Batch already exists. Start a new import.' };
+    if (epiUndoUnfinished(receipts, targetTable, fiscalYear)) return EPI_UNFINISHED_UNDO_REFUSAL;
 
     const incoming = new Map(); // import key → Record Identity fields
     keyChunks.flat().forEach(key => incoming.set(epiImportKey(key, fiscalYear, timeZone), key));
@@ -308,6 +315,7 @@ function upsertEpiData(chunk, batchId, auth, fiscalYear, targetTable = 'Epi_1_Ye
     }
     // Staleness matters only before the first write; once writing, later progress elsewhere must not strand this batch half-done.
     const firstWrite = receipt[7] === 'preflight';
+    if (firstWrite && epiUndoUnfinished(receipts, targetTable, fiscalYear)) return EPI_UNFINISHED_UNDO_REFUSAL; // preflighted before the undo started
     if (firstWrite && JSON.stringify(epiOverlapSnapshot(receipts, batchId, targetTable, fiscalYear, preflight.hoscodes)) !== JSON.stringify(preflight.overlapSnapshot)) {
       return { success: false, error: 'Data changed since preflight. Start a new import.' };
     }
@@ -370,7 +378,7 @@ function cleanupEpiData(batchId, touchedHoscodes, adminEmail, fiscalYear, target
     const receipt = receipts[receiptIndex];
     if (receipt[1] !== targetTable || String(receipt[2]) !== String(fiscalYear)) return { success: false, error: 'Batch scope mismatch.' };
     if (receipt[7] === 'complete') return { success: true, deactivated: 0, replayed: true };
-    if (receipt[7] === 'undone') return { success: false, error: 'This import was undone.' }; // Issue #139: never finalize it again
+    if (['undoing', 'undone'].includes(receipt[7])) return { success: false, error: 'This import was undone.' }; // Issue #139/#140: never finalize it again
     if (!receipt[9]) return { success: false, error: 'Run the import preflight first.' }; // Issue #111: legacy receipts cannot finalize
     if (JSON.parse(receipt[5]).length !== Number(receipt[4])) return { success: false, error: 'Cannot finalize an incomplete batch.' };
     const facilities = JSON.parse(receipt[6]); // Scope comes from validated records, never caller input.
@@ -415,6 +423,7 @@ const EPI_UNDO_REFUSAL_ERROR = {
   updated_existing: 'The latest import updated existing records.',
   newer_import: 'A newer import has written to the same facilities.',
   stale: 'The undo preview is out of date. Review it again.',
+  unfinished_mismatch: 'The records no longer match the unfinished undo.',
 };
 
 /** Row index of the latest receipt of (table, FY) that wrote data; a receipt still in 'preflight' has written nothing. */
@@ -430,6 +439,7 @@ function epiUndoRefusal(receipts, index) {
   const receipt = receipts[index];
   if (receipt[7] === 'uploading') return 'in_progress';
   if (receipt[7] === 'undone') return 'already_undone';
+  if (receipt[7] === 'undoing') return null; // Issue #140: an Unfinished Import Undo passed every check when it started (ADR-0010)
   const finalize = receipt[10] ? JSON.parse(receipt[10]) : null;
   const chunks = JSON.parse(receipt[5] || '[]');
   if (receipt[7] !== 'complete' || !finalize || finalize.deactivationRecorded !== true ||
@@ -489,6 +499,12 @@ function previewEpiImportUndo(targetTable, fiscalYear, auth) {
     const reason = epiUndoRefusal(receipts, index);
     if (reason) return { ...batch, eligible: false, reason };
     const effect = epiUndoEffect(ss.getSheetByName(targetTable), receipt);
+    if (receipt[7] === 'undoing') {
+      // Issue #140: the counts are the plan's; the rows may already be reversed, so they cannot be recounted.
+      const plan = JSON.parse(receipt[11]);
+      return { ...batch, eligible: true, unfinished: true, startedBy: plan.by, startedAt: plan.at, wouldDeactivate: plan.deactivated,
+        wouldReactivate: plan.reactivated, activeAfter: effect.activeAfter, summariesWillBeRemoved: effect.activeAfter === 0 };
+    }
     return { ...batch, eligible: true, wouldDeactivate: effect.wouldDeactivate, wouldReactivate: effect.wouldReactivate,
       byHoscode: effect.byHoscode, activeAfter: effect.activeAfter, summariesWillBeRemoved: effect.activeAfter === 0 };
   });
@@ -517,25 +533,54 @@ function undoEpiImport(batchId, expected, auth) {
     if (reason) return refuse(reason);
     const sheet = ss.getSheetByName(targetTable);
     const effect = epiUndoEffect(sheet, receipt);
-    if (effect.wouldDeactivate !== expected.wouldDeactivate || effect.wouldReactivate !== expected.wouldReactivate) return refuse('stale');
+    let plan;
+    if (receipt[7] === 'undoing') {
+      // Issue #140: finish an Unfinished Import Undo from its plan. Its rows are either untouched or already reversed; anything else is refused.
+      plan = JSON.parse(receipt[11]);
+      if (expected.wouldDeactivate !== plan.deactivated || expected.wouldReactivate !== plan.reactivated) return refuse('stale');
+      const untouched = effect.wouldDeactivate === plan.deactivated && effect.wouldReactivate === plan.reactivated;
+      if (!untouched && (effect.wouldDeactivate || effect.wouldReactivate)) return refuse('unfinished_mismatch');
+    } else {
+      if (effect.wouldDeactivate !== expected.wouldDeactivate || effect.wouldReactivate !== expected.wouldReactivate) return refuse('stale');
+      // ADR-0010: the plan is recorded before any row changes, so an interrupted undo is never mistaken for a finished one.
+      plan = { by: auth && (auth.email || auth.userId), actor: { userId: auth && auth.userId, email: auth && auth.email },
+        at: new Date().toISOString(), deactivated: effect.wouldDeactivate, reactivated: effect.wouldReactivate };
+      receipt[7] = 'undoing'; receipt[8] = plan.at; // the new updated_at makes overlapping open preflights stale
+      receipt[11] = JSON.stringify(plan);
+      writeEpiRows(batches, receipts[0], receipts);
+    }
 
+    // Every step below is safe to repeat, so finishing an Unfinished Import Undo is running them again.
     const activeIndex = effect.headers.indexOf('is_active');
     const deactivatedByIndex = effect.headers.indexOf('deactivated_by_batch');
     effect.deactivate.forEach(i => { effect.rows[i][activeIndex] = false; });
     effect.reactivate.forEach(i => { effect.rows[i][activeIndex] = true; effect.rows[i][deactivatedByIndex] = ''; });
     if (effect.deactivate.length || effect.reactivate.length) writeEpiRows(sheet, effect.headers, effect.rows);
-    // The receipt and audit follow the rows directly, so a later failure can never leave a reversal untraced.
     const summariesRemoved = effect.activeAfter === 0;
-    const at = new Date().toISOString();
-    receipt[7] = 'undone'; receipt[8] = at; // the new updated_at makes overlapping open preflights stale
-    receipt[11] = JSON.stringify({ by: auth && (auth.email || auth.userId), at, deactivated: effect.wouldDeactivate,
-      reactivated: effect.wouldReactivate, summariesRemoved });
-    writeEpiRows(batches, receipts[0], receipts);
-    logAction(auth && auth.userId, auth && auth.email, 'undo_epi_import',
-      `Batch ${batchId} [${targetTable} FY ${fiscalYear} ${mode}]: deactivated ${effect.wouldDeactivate}, reactivated ${effect.wouldReactivate}; ` +
-      `facilities [${JSON.parse(receipt[6]).join(', ')}]; summaries removed ${summariesRemoved}`);
+    const finisher = auth && (auth.email || auth.userId);
+    ensureUndoAudit(batchId, plan,
+      `Batch ${batchId} [${targetTable} FY ${fiscalYear} ${mode}]: deactivated ${plan.deactivated}, reactivated ${plan.reactivated}; ` +
+      `facilities [${JSON.parse(receipt[6]).join(', ')}]; summaries removed ${summariesRemoved}` +
+      (finisher !== plan.by ? `; finished by ${finisher}` : ''));
     // CONTEXT.md §44: no Active Records means no Dashboard Summary, so none may outlive the rows it summarized.
     if (summariesRemoved) deleteDashboardSummaries(targetTable, fiscalYear);
-    return { success: true, deactivated: effect.wouldDeactivate, reactivated: effect.wouldReactivate, summariesRemoved };
+    const finishedAt = new Date().toISOString();
+    receipt[7] = 'undone'; receipt[8] = finishedAt; // undone only once every step is complete (ADR-0010)
+    receipt[11] = JSON.stringify({ ...plan, summariesRemoved, ...(finisher !== plan.by ? { finishedBy: finisher, finishedAt } : {}) });
+    writeEpiRows(batches, receipts[0], receipts);
+    return { success: true, deactivated: plan.deactivated, reactivated: plan.reactivated, summariesRemoved };
   });
+}
+
+/** Issue #140: exactly one undo_epi_import event per Batch, attributed to the admin who started the undo (ADR-0010). */
+function ensureUndoAudit(batchId, plan, details) {
+  const marker = `Batch ${batchId} [`;
+  const sheet = getSpreadsheet().getSheetByName('audit_logs');
+  if (sheet) {
+    const rows = sheet.getDataRange().getValues();
+    for (let i = 1; i < rows.length; i++) {
+      if (rows[i][3] === 'undo_epi_import' && String(rows[i][4]).startsWith(marker)) return; // already audited, incl. an ambiguous append failure
+    }
+  }
+  logAction(plan.actor.userId, plan.actor.email, 'undo_epi_import', details);
 }
