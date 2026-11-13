@@ -172,6 +172,7 @@ test('seed: 3yr/5yr carry the old polio regimen beside windowed IPV; 1yr/2yr hav
     assert.deepEqual(rules.filter(ipvDose).map(r => [r.display_name, r.born_on_or_after, r.born_before]), [
       ['IPV เข็ม 1', '2023-05-01', ''],
       ['IPV เข็ม 2', '2023-05-01', ''],
+      ['IPV 4 เดือน (สูตรเดิม)', '', '2023-05-01'],
     ], ageGroup);
   }
   for (const ageGroup of ['1yr', '2yr']) {
@@ -188,4 +189,27 @@ test('the old-regimen rules keep their own metric identity, separate from IPV', 
   const keyOf = name => rules.find(r => r.display_name === name).metric_key;
   assert.notEqual(keyOf('โปลิโอ เข็ม 1 (สูตรเดิม)'), keyOf('IPV เข็ม 1'));
   assert.notEqual(keyOf('โปลิโอ เข็ม 2 (สูตรเดิม)'), keyOf('IPV เข็ม 2'));
+});
+
+test('Issue #152 — seed: the Old Polio Regimen requires its single 4-month IPV in 3yr/5yr View 2', () => {
+  const { context, read } = setup([]);
+  context.seedVaccineRules(2570, 'admin');
+  const oldRegimenIpv = r => r.display_name === 'IPV 4 เดือน (สูตรเดิม)';
+
+  for (const [ageGroup, removeFrom] of [['3yr', '2570'], ['5yr', '2572']]) {
+    const rules = read(2570, ageGroup);
+    const matches = rules.filter(oldRegimenIpv);
+    assert.deepEqual(matches.map(r => [
+      r.view_type, r.vaccine_group, r.hdc_code, r.required_fields, r.logic_type,
+      r.is_required_for_v2, r.is_active, r.target_age_months, r.born_on_or_after, r.born_before,
+    ]), [[2, 'IPV', 'I12/D32/D42/D52', ['ipv2_date'], 'ALL', true, true, 4, '', '2023-05-01']], ageGroup);
+    const [rule] = matches;
+    assert.match(rule.note, /401/, `${ageGroup} note says HDC does not count IPV-P 401`);
+    assert.match(rule.note, new RegExp(`ปีงบ ${removeFrom}`), `${ageGroup} note says when to remove the rule`);
+    const ipv2 = rules.find(r => r.view_type === 2 && r.display_name === 'IPV เข็ม 2');
+    assert.notEqual(rule.metric_key, ipv2.metric_key, `${ageGroup} keeps its own metric identity`);
+  }
+  for (const ageGroup of ['1yr', '2yr']) {
+    assert.deepEqual(read(2570, ageGroup).filter(oldRegimenIpv), [], `${ageGroup} has no old-regimen IPV rule`);
+  }
 });

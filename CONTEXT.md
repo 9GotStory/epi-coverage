@@ -685,3 +685,17 @@ Do not call it a "rollback" or "revert". It is not a Full-File Sync and not a Su
 - Each Finalize has exactly one Audit Log (§32) event, which names the admin who finalized the Batch. The As-of Date (§31) is the time of the latest Finalize.
 
 Do not call it "cleanup". The name survives only in code identifiers (`cleanupEpiData`, `cleanup_epi_data`).
+
+---
+
+## 49. Polio Regimen
+
+A **Polio Regimen** is the MOPH polio vaccine schedule a child was vaccinated under. The regimen is chosen by the child's birth date, not by the child's current Age Group (Issue #126). Thai wording: "สูตรโปลิโอ".
+
+- The **Old Polio Regimen** ("สูตรเดิม") gives OPV at 2, 4 and 6 months and one IPV at 4 months, followed by the later OPV doses.
+- The **New Polio Regimen** ("สูตรใหม่") gives IPV at 2 and 4 months instead of OPV, followed by OPV from 6 months.
+- The switch took place in 2566. The birth-date cut-off and the rules for each regimen are defined in `docs/features.md`. An Age Group that spans the cut-off holds both regimens side by side through Birth Windows (§41).
+
+HDC applies one regimen to a whole Age Group, so its imported `result` (§17) can disagree with the rule result for a child born on the other side of the cut-off. That disagreement is an HDC Result Mismatch (§43), not a missing dose.
+
+Do not call the old regimen "OPV-only": it includes one IPV dose.
