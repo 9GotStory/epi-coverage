@@ -241,6 +241,26 @@ function arrayToObj(headers, row) {
 const APPROVAL_STATUSES = ['pending', 'approved', 'rejected'];
 const ROLES = ['user', 'admin', 'superadmin'];
 
+// Issue #166 (ADR-0013): role อื่นใดนอกจาก `superadmin` ตรงตัวได้สิทธิ์ระดับ admin (fail closed)
+function isSuperadmin_(auth) {
+  return Boolean(auth) && auth.role === 'superadmin';
+}
+
+/**
+ * Issue #166 (ADR-0013): ใครเปลี่ยนแถว User แถวไหนได้ — คืน { error } เมื่อปฏิเสธ, null เมื่ออนุญาต
+ * ไม่มีใครเปลี่ยนแถวของตัวเองได้ (เทียบ id ของแถวกับ userId ของ session ที่ตรวจแล้ว)
+ */
+function refuseUserRowChange_(headers, row, auth) {
+  if (auth && row[headers.indexOf('id')] === auth.userId) {
+    return { error: 'You cannot change your own account.' };
+  }
+  // admin เปลี่ยนได้เฉพาะแถวที่ Role เป็น `user` ตรงตัว — admin, superadmin และค่านอกเซตต้องเป็น superadmin
+  if (!isSuperadmin_(auth) && row[headers.indexOf('role')] !== 'user') {
+    return { error: 'This account can only be changed by a superadmin.' };
+  }
+  return null;
+}
+
 /**
  * อัปเดตสถานะและสิทธิ์ของผู้ใช้ (สำหรับ Admin)
  * Issue #80: audit ใช้ตัวตนจาก session ที่ตรวจสอบแล้ว (auth) ไม่ใช้ชื่อ 'Admin' แบบ generic
@@ -254,6 +274,10 @@ function updateUserStatus(googleId, newStatus, newRole, auth) {
   if (supplied(newRole) && !ROLES.includes(newRole)) {
     return { error: `Invalid role. Accepted values: ${ROLES.join(', ')}.` };
   }
+  // Issue #166 (ADR-0013): เฉพาะ superadmin เปลี่ยน Role ได้
+  if (supplied(newRole) && !isSuperadmin_(auth)) {
+    return { error: 'Only a superadmin may change a Role.' };
+  }
 
   const ss = getSpreadsheet();
   const sheet = ss.getSheetByName('Users');
@@ -266,6 +290,8 @@ function updateUserStatus(googleId, newStatus, newRole, auth) {
 
   for (let i = 1; i < data.length; i++) {
     if (data[i][idCol] === googleId) {
+      const refusal = refuseUserRowChange_(headers, data[i], auth);
+      if (refusal) return refusal;
       const email = data[i][headers.indexOf('email')];
       let details = [];
       if (supplied(newStatus)) {
@@ -302,6 +328,8 @@ function updateUserFacility(googleId, newHoscode, auth) {
 
   for (let i = 1; i < data.length; i++) {
     if (data[i][idCol] === googleId) {
+      const refusal = refuseUserRowChange_(headers, data[i], auth);
+      if (refusal) return refusal;
       const email = data[i][headers.indexOf('email')];
 
       if (newHoscode) {

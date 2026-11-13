@@ -524,6 +524,8 @@ A Role is exactly one of:
 
 Any other value is not a Role (Issue #162).
 
+`admin` and `superadmin` are distinct Roles, not synonyms (Issue #166). What each Role allows is defined in `docs/features.md`.
+
 Do not rely solely on hidden UI controls for role enforcement.
 
 Authorization-sensitive operations require the repository-defined backend/security enforcement.
