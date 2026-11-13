@@ -152,6 +152,7 @@ export function AdminDashboard() {
                 searchPlaceholder="ค้นหาชื่อผู้ใช้งาน..."
                 meta={{
                   currentUserId: currentUser?.google_id || '',
+                  currentUserRole: currentUser?.role,
                   isUpdating,
                   handleUpdateStatus,
                   handleUpdateFacility,

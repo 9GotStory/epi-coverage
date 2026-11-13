@@ -42,6 +42,7 @@ import {
 declare module '@tanstack/react-table' {
   interface TableMeta<TData extends unknown> {
     currentUserId?: string;
+    currentUserRole?: UserRole;
     isUpdating?: string | null;
     handleUpdateStatus?: (googleId: string, newStatus: UserStatus, newRole?: UserRole) => Promise<void>;
     handleUpdateFacility?: (googleId: string, newHoscode: string) => Promise<void>;
@@ -99,14 +100,16 @@ export const columns: ColumnDef<User>[] = [
       const meta = table.options.meta;
       
       const isSelf = user.google_id === meta?.currentUserId;
-      const disabled = meta?.isUpdating === user.google_id || isSelf;
+      // Issue #166 (ADR-0013): admin จัดการได้เฉพาะแถวที่ Role เป็น `user` — Role อื่นใดของผู้ใช้งานเท่ากับ admin (fail closed)
+      const isSuperadmin = meta?.currentUserRole === 'superadmin';
+      const disabled = meta?.isUpdating === user.google_id || isSelf || (!isSuperadmin && user.role !== 'user');
 
-      return <UserCellActions user={user} meta={meta as any} disabled={disabled} />;
+      return <UserCellActions user={user} meta={meta as any} disabled={disabled} canChangeRole={isSuperadmin} />;
     },
   },
 ];
 
-const UserCellActions = ({ user, meta, disabled }: { user: User; meta: any; disabled: boolean }) => {
+const UserCellActions = ({ user, meta, disabled, canChangeRole }: { user: User; meta: any; disabled: boolean; canChangeRole: boolean }) => {
   const [isAlertOpen, setIsAlertOpen] = useState(false);
   const [alertType, setAlertType] = useState<'approve' | 'reject' | 'promote' | null>(null);
   
@@ -176,7 +179,7 @@ const UserCellActions = ({ user, meta, disabled }: { user: User; meta: any; disa
             ย้ายสังกัด / เปลี่ยน รพ.สต.
           </DropdownMenuItem>
 
-          {user.role === 'user' && (
+          {canChangeRole && user.role === 'user' && (
             <>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => { setAlertType('promote'); setIsAlertOpen(true); }} className="cursor-pointer">
