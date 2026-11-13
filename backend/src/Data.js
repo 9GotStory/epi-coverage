@@ -360,10 +360,10 @@ function getTargetConfig() {
 /**
  * Utility: บันทึก Log การทำงาน
  */
-function logAction(userId, email, action, details) {
+function logAction(userId, email, action, details, at) {
   const ss = getSpreadsheet();
   const sheet = ss.getSheetByName('audit_logs');
-  const timestamp = new Date().toISOString();
+  const timestamp = at || new Date().toISOString(); // Issue #146: a rebuilt event keeps the time of the action it records
   const logId = Utilities.getUuid();
   
   // Issue #77: escape formula triggers (=, +, -, @) — email/details can embed user-supplied
