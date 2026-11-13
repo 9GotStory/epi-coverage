@@ -43,7 +43,7 @@ Read `getOpenData` with `{ payload: { tableName: ageReport.table, year: String(s
 - Aggregation uses **sum of monthly counts across eligible rows**; never mean of per-area percentages. API errors and unavailable years are surfaced as unavailable, not fabricated zeros or substituted EPI values.
 - Each row shows the HDC rate with its own `result/target` beside the View 1 result with its own `passed/total`. **No HDC − EPI difference is computed**, not even when the denominators are equal, and differing denominators raise no warning: HDC indicator criteria and the year's Vaccine Rules can differ (#126), so a gap would mix a difference in criteria with a difference in data. This is the same rule as the View 2 panel (#90 Q9). A note below the table says that HDC uses the Ministry's criteria, denominators and processing rounds.
 
-**Removed difference (Issue #188).** The panel previously showed a signed HDC − EPI percentage-point gap when HDC target = EPI group total = EPI vaccine item total, and a Target-mismatch warning otherwise. Both were removed, so no HDC − EPI difference appears anywhere on the dashboard.
+**Removed difference (Issue #188).** Until #188 the panel showed a signed HDC − EPI percentage-point gap when HDC target = EPI group total = EPI vaccine item total, and a Target-mismatch warning otherwise.
 
 ### Test/release contract
 

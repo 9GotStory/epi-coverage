@@ -38,7 +38,7 @@ function fixture(age:string,metric:string,denominator=4){
   </QueryClientProvider>);
 }
 afterEach(()=>{cleanup();vi.resetAllMocks()});
-describe('HDC read-only comparison for all 4 age groups',()=>{
+describe('HDC Dose Coverage panel for all 4 age groups',()=>{
   it.each([['1yr','s_epi1','bcg'],['2yr','s_epi2','dtp4'],['3yr','s_epi3','je3'],['5yr','s_epi5','opv5']] as const)(
     'is lazy and shows HDC beside EPI with no difference for %s, even with equal denominators',
     async(age,table,metric)=>{
@@ -70,6 +70,14 @@ describe('HDC read-only comparison for all 4 age groups',()=>{
     expect(screen.getByText('2/5')).toBeTruthy();
     expect(screen.queryByRole('alert')).toBeNull();
     expect(screen.queryByText(/จำนวนเด็กเป้าหมายต่างกัน|เทียบไม่ได้/)).toBeNull();
+  });
+  it('counts a matched vaccine whose EPI result is not evaluable as matched to the HDC report',async()=>{
+    vi.mocked(fetchApi).mockResolvedValue({status:200,data:{statusCode:200,data:[makeSource('1yr','bcg')]}});
+    fixture('1yr','bcg',0);
+    fireEvent.click(screen.getByRole('button',{name:'ความครอบคลุมรายวัคซีนตาม HDC'}));
+    expect(await screen.findByText('75.00%')).toBeTruthy();
+    expect(screen.getByText('ประเมินไม่ได้')).toBeTruthy();
+    expect(screen.getByText('จับคู่กับรายงาน HDC ได้ 1 จาก 1 รายการ')).toBeTruthy();
   });
   it('never substitutes a fabricated HDC percentage on an upstream error',async()=>{
     vi.mocked(fetchApi).mockResolvedValue({status:200,data:{statusCode:503}});

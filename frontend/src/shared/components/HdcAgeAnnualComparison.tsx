@@ -14,6 +14,10 @@ interface Props {
   updatedAt?:string|null;
 }
 
+/**
+ * HDC Dose Coverage (CONTEXT.md §56) beside the View 1 result, each with its own
+ * denominator. No HDC − EPI difference, even when the denominators match (Issue #188).
+ */
 export function HdcAgeAnnualComparison({fiscalYear,ageGroup,summary,rules,updatedAt}:Props){
   const [expanded,setExpanded]=useState(false);
   const panelId=useId();
@@ -26,7 +30,7 @@ export function HdcAgeAnnualComparison({fiscalYear,ageGroup,summary,rules,update
       item.total>0&&item.passed>=0&&item.passed<=item.total&&Number.isFinite(item.coverage);
     return {item,metric,valid};
   });
-  const matchedCount=rows.filter(r=>r.metric&&r.valid).length;
+  const matchedCount=rows.filter(r=>r.metric).length;
 
   return <div className="mt-3 rounded-lg border border-zinc-200 bg-white">
     <button

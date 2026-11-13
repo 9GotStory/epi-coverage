@@ -788,8 +788,7 @@ It is not a Target (§16). A Target is a denominator population; a Coverage Goal
 
 **HDC Dose Coverage** is the coverage that HDC OpenData (§15) reports for one vaccine dose of one Age Group (§9) and Fiscal Year (§10), from the Ministry's per-age dose report: that dose's Result (§17) over the report's Target (§16) (Issue #188). Thai UI wording: "ความครอบคลุมรายวัคซีนตาม HDC".
 
-- It belongs to a different indicator family from HDC Coverage (§53), which is the Fully Immunized figure. The two families can have different Targets for the same Age Group and Fiscal Year; never mix one family's Target into the other.
+- It belongs to a different indicator family from HDC Coverage (§53), which is the Fully Immunized figure. The two families can have different Targets for the same Age Group and Fiscal Year.
 - It is stated with the HDC processing round it comes from. When HDC OpenData has no valid figure for a dose, there is no HDC Dose Coverage for it. It is never zero, and an Imported-Data Evaluation (§54) never stands in for it.
-- It is linked to an Imported-Data Evaluation only through a confirmed mapping to one Vaccine Rule (§19). A shared name or label is not a link.
 
 Do not call it HDC Coverage, and do not call it bare "Coverage" where an Imported-Data Evaluation is shown beside it.
