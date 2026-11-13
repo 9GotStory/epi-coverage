@@ -73,6 +73,8 @@ async function importRows(count: number) {
 
 const finalizedPreview: Preview = batchId => ({ targetTable: 'Epi_1_Year', fiscalYear: '2569', eligible: false, reason: 'updated_existing',
   batchId, mode: 'sync', importedAt: '2026-11-12T03:00:00.000Z', importedBy: 'admin@example.test' });
+const notFinalizedPreview: Preview = batchId => ({ targetTable: 'Epi_1_Year', fiscalYear: '2569', eligible: false, reason: 'in_progress',
+  batchId, mode: 'sync', importedAt: null, importedBy: 'admin@example.test' });
 
 beforeEach(() => { api.fetchApi.mockReset(); parser.parseHdcFile.mockReset(); vi.spyOn(console, 'error').mockImplementation(() => {}); });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
@@ -90,8 +92,7 @@ describe('Issue #156 — an Import checks its own Batch after a Lost Response', 
   });
 
   it.each<[string, Preview]>([
-    ['this Batch is not finalized', batchId => ({ targetTable: 'Epi_1_Year', fiscalYear: '2569', eligible: false, reason: 'in_progress',
-      batchId, mode: 'sync', importedAt: null, importedBy: 'admin@example.test' })],
+    ['this Batch is not finalized', notFinalizedPreview],
     ['the latest receipt is another Batch', () => ({ ...(finalizedPreview('another-batch') as object) })],
     ['no receipt exists yet', () => ({ targetTable: 'Epi_1_Year', fiscalYear: '2569', eligible: false, reason: 'no_batch' })],
   ])('when %s, the Import is not finished and no summary is written', async (_case, preview) => {
@@ -102,6 +103,7 @@ describe('Issue #156 — an Import checks its own Batch after a Lost Response', 
     expect(result.current.errorMsg).toBe(NOT_FINALIZED);
     expect(calls('saveDashboardSummary')).toHaveLength(0);
     expect(result.current.countsNotReceived).toBe(false);
+    expect(chunkIndexesSent()).toEqual([0, 1, 2]);
   });
 
   it.each<[string, Preview]>([
@@ -115,11 +117,12 @@ describe('Issue #156 — an Import checks its own Batch after a Lost Response', 
     expect(result.current.errorMsg).toContain(LOST);
     expect(result.current.errorMsg).toContain('ย้อนการนำเข้าล่าสุด');
     expect(calls('saveDashboardSummary')).toHaveLength(0);
+    expect(result.current.countsNotReceived).toBe(false);
+    expect(chunkIndexesSent()).toEqual([0, 1, 2]);
   });
 
   it('a lost middle-chunk answer sends no later chunk and follows the check', async () => {
-    stubApi({ lostChunk: 1, preview: batchId => ({ targetTable: 'Epi_1_Year', fiscalYear: '2569', eligible: false, reason: 'in_progress',
-      batchId, mode: 'sync', importedAt: null, importedBy: 'admin@example.test' }) });
+    stubApi({ lostChunk: 1, preview: notFinalizedPreview });
     const result = await importRows(1001);
 
     expect(chunkIndexesSent()).toEqual([0, 1]);

@@ -709,6 +709,6 @@ A **Lost Response** is a request that the server received and ran, but whose ans
 
 - It is not a session expiry: the User (§33) stays signed in.
 - It is not a server failure: the request may have completed, for example a chunk of an Import (§27) may already be written and its Batch (§28) finalized (§48).
-- Before repeating the request, check its outcome. Repeating an Import whose Batch already completed writes a new Batch that updates existing records, and Import Undo (§47) cannot reverse that Batch.
+- How an Import checks its outcome after a Lost Response is defined in `docs/features.md`.
 
 Do not call it a "mangled request", "replayed GET", or "logout".

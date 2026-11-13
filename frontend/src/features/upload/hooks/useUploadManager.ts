@@ -138,8 +138,6 @@ export type ImportUndoPreview = UndoScope & (
 );
 export interface ImportUndoResult extends UndoScope { deactivated: number; reactivated: number; summariesRemoved: boolean; summaryFailed: boolean }
 
-const NOT_FINALIZED_TEXT = 'ระบบยังไม่ปิดการนำเข้าชุดนี้ กรุณานำเข้าไฟล์ใหม่อีกครั้ง';
-
 /**
  * Issue #156: after a Lost Response (CONTEXT.md §50) on a chunk, the Import Undo preview's latest written receipt
  * tells whether the server finalized this Batch. Only `batchId` and `importedAt` are read; nothing is resent.
@@ -284,7 +282,7 @@ export function useUploadManager() {
       let updated = 0;
       let finalized = false;
       let deactivated = 0;
-      let countsLost = false;
+      let lostResponse = false;
 
       // Chunking
       for (let i = 0; i < allRows.length; i += CHUNK_SIZE) {
@@ -297,7 +295,7 @@ export function useUploadManager() {
           if (!(err instanceof LostResponseError)) throw err;
           // Issue #156: stop sending chunks and check this Batch instead; a chunk is never resent automatically.
           finalized = await isBatchFinalized(batchId, targetTable, fiscalYear);
-          countsLost = true;
+          lostResponse = true;
           break;
         }
         const payload = res.data;
@@ -314,7 +312,7 @@ export function useUploadManager() {
       }
 
       // Issue #144 (ADR-0011): the server finalizes the batch with its last chunk; there is no separate cleanup request.
-      if (!finalized) throw new Error(NOT_FINALIZED_TEXT);
+      if (!finalized) throw new Error('ระบบยังไม่ปิดการนำเข้าชุดนี้ กรุณานำเข้าไฟล์ใหม่อีกครั้ง');
 
       // Generate and Save Dashboard Summary
       setStatus('generating_summary');
@@ -324,7 +322,7 @@ export function useUploadManager() {
 
       setProgress(100);
       setResults({ inserted, updated, deactivated });
-      setCountsNotReceived(countsLost);
+      setCountsNotReceived(lostResponse);
       setStatus('success');
       
       // Invalidate relevant queries to force dashboard and rules refresh
