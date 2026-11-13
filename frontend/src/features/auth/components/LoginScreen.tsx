@@ -75,7 +75,7 @@ export function LoginScreen() {
         </div>
 
         {sessionEnded && (
-          <div className="mb-6 p-4 bg-muted text-muted-foreground rounded-xl text-sm font-medium">
+          <div className="mb-6 p-4 bg-muted text-ink-muted-80 rounded-xl text-sm font-medium">
             {SESSION_END_NOTICE}
           </div>
         )}

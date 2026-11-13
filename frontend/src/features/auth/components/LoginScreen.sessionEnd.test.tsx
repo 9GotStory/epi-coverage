@@ -3,9 +3,10 @@
  * Issue #159 (spec for #155) — the LoginScreen explains a Session End (CONTEXT.md §51).
  *
  * Seam: the rendered sign-in flow — the real AuthProvider, App root, ProtectedRoute and LoginScreen in a
- * memory router with a public page and a page that requires sign-in. The global `fetch` is stubbed per
+ * memory router with a public page and a page that requires sign-in, under StrictMode as in the app. The global `fetch` is stubbed per
  * action and Google sign-in is mocked. Assertions are on what the User sees. All data is synthetic.
  */
+import { StrictMode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
@@ -70,8 +71,17 @@ function renderApp(initialPath: string) {
       },
     ],
   }], { initialEntries: [initialPath] });
-  render(<AuthProvider><RouterProvider router={router} /></AuthProvider>);
+  render(<StrictMode><AuthProvider><RouterProvider router={router} /></AuthProvider></StrictMode>);
   return router;
+}
+
+/** Each distinct arrival at the LoginScreen, so a test can check that a Session End redirects once. */
+function countLoginArrivals(router: ReturnType<typeof renderApp>) {
+  const arrivals = new Set<string>();
+  router.subscribe(state => {
+    if (state.location.pathname === '/login') arrivals.add(state.location.key);
+  });
+  return arrivals;
 }
 
 async function click(label: string) {
@@ -107,22 +117,24 @@ describe('Issue #159 — a Session End is explained on the LoginScreen', () => {
   it('a 401 on a page that requires sign-in leads to the LoginScreen with the Session End notice', async () => {
     seedSession();
     answer('getEpiData', { status: 401, data: { error: 'Unauthorized: Token expired' } });
-    renderApp('/records');
+    const router = renderApp('/records');
 
     await click('Load records');
 
     expect(await screen.findByText('Continue with Google')).toBeTruthy();
+    expect(router.state.location.pathname).toBe('/login');
     expect(screen.getByText(SESSION_END_NOTICE)).toBeTruthy();
   });
 
   it('a 401 on the public dashboard also leads to the LoginScreen with the notice', async () => {
     seedSession();
     answer('getDashboardSummaries', { status: 401, data: { error: 'Unauthorized: Token expired' } });
-    renderApp('/dashboard');
+    const router = renderApp('/dashboard');
 
     await click('Load public');
 
     expect(await screen.findByText('Continue with Google')).toBeTruthy();
+    expect(router.state.location.pathname).toBe('/login');
     expect(screen.getByText(SESSION_END_NOTICE)).toBeTruthy();
   });
 
@@ -144,11 +156,12 @@ describe('Issue #159 — a Session End is explained on the LoginScreen', () => {
 
   it('a Sign-out leads to the LoginScreen without the notice', async () => {
     seedSession();
-    renderApp('/records');
+    const router = renderApp('/records');
 
     await click('Sign out');
 
     expect(await screen.findByText('Continue with Google')).toBeTruthy();
+    expect(router.state.location.pathname).toBe('/login');
     expect(screen.queryByText(SESSION_END_NOTICE)).toBeNull();
   });
 
@@ -204,19 +217,23 @@ describe('Issue #159 — a Session End is explained on the LoginScreen', () => {
     expect(screen.queryByText(SESSION_END_NOTICE)).toBeNull();
   });
 
-  it('several refused requests at once show the notice once', async () => {
-    seedSession();
-    answer('getEpiData', { status: 401, data: { error: 'Unauthorized: Token expired' } });
-    renderApp('/records');
+  it('several refused requests at once redirect no more than one does, and show the notice once', async () => {
+    // ProtectedRoute and SessionEndRedirect both replace to /login in one commit, which the User sees as one
+    // LoginScreen; what must not happen is extra redirects per refused request
+    async function arrivalsAfter(clicks: number) {
+      seedSession();
+      answer('getEpiData', { status: 401, data: { error: 'Unauthorized: Token expired' } });
+      const arrivals = countLoginArrivals(renderApp('/records'));
+      await act(async () => {
+        const load = screen.getByText('Load records');
+        for (let i = 0; i < clicks; i++) fireEvent.click(load);
+      });
+      expect(await screen.findAllByText(SESSION_END_NOTICE)).toHaveLength(1);
+      cleanup();
+      return arrivals.size;
+    }
 
-    await act(async () => {
-      const load = screen.getByText('Load records');
-      fireEvent.click(load);
-      fireEvent.click(load);
-      fireEvent.click(load);
-    });
-
-    expect(await screen.findAllByText(SESSION_END_NOTICE)).toHaveLength(1);
+    expect(await arrivalsAfter(3)).toBe(await arrivalsAfter(1));
   });
 
   it('after a Session End the User can still leave the LoginScreen for the public dashboard', async () => {
