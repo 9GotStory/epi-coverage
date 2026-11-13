@@ -244,7 +244,8 @@ export interface HdcFullyImmunizedReference {
 export function summarizeHdcFullyImmunized(
   rows: unknown[], fiscalYear: number, ageGroup: string,
 ): HdcFullyImmunizedReference | null {
-  if(!(ageGroup in HDC_FULLY_IMMUNIZED_REPORT_IDS) || !Array.isArray(rows))return null;
+  if(!(ageGroup in HDC_FULLY_IMMUNIZED_REPORT_IDS) || !Number.isInteger(fiscalYear) || fiscalYear<2500 ||
+     !Array.isArray(rows))return null;
   const reportId=HDC_FULLY_IMMUNIZED_REPORT_IDS[ageGroup as HdcAgeGroup];
   const seen=new Set<string>();
   let result=0;
@@ -274,7 +275,7 @@ export function summarizeHdcFullyImmunized(
     rowCount++;
   }
   if(!rowCount)return null;
-  if(target===0)throw new Error('HDC ไม่มีประชากรเป้าหมายสำหรับรายงานนี้');
+  if(target===0)throw new Error('HDC ไม่มีเด็กเป้าหมายสำหรับรายงานนี้');
   return {ageGroup:ageGroup as HdcAgeGroup,reportId,fiscalYear,result,target,dateCom,rowCount};
 }
 

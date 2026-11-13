@@ -107,8 +107,11 @@ describe('Issue #186 — View 2 shows HDC Coverage as a reference panel', () => 
     expect(panel.getByText(counts)).toBeTruthy();
   });
 
-  it('shows ยังไม่มีข้อมูลจาก HDC and no percentage when the year has no report', async () => {
-    respond([row('1yr', { b_year: '2568' })]);
+  it.each([
+    ['an empty response', []],
+    ['only rows of another year', [row('1yr', { b_year: '2568' })]],
+  ])('shows ยังไม่มีข้อมูลจาก HDC and no percentage for %s', async (_case, rows) => {
+    respond(rows);
     renderView('1yr');
     const panel = openPanel();
     expect(await panel.findByText('ยังไม่มีข้อมูลจาก HDC ปีงบประมาณ 2569')).toBeTruthy();

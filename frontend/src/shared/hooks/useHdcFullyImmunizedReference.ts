@@ -29,7 +29,7 @@ export function useHdcFullyImmunizedReference(fiscalYear:number,ageGroup:string,
       return source.data as unknown[];
     }
   });
-  const summary=useMemo(()=>{
+  const figure=useMemo(()=>{
     if(!query.data)return {reference:null,invalidReason:null};
     try{
       return {reference:summarizeHdcFullyImmunized(query.data,fiscalYear,ageGroup),invalidReason:null};
@@ -38,7 +38,7 @@ export function useHdcFullyImmunizedReference(fiscalYear:number,ageGroup:string,
     }
   },[query.data,fiscalYear,ageGroup]);
   return {
-    ...summary,
+    ...figure,
     isLoading:enabled && query.isLoading,
     requestError:query.error?query.error.message:null,
   };
