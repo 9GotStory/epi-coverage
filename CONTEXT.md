@@ -546,6 +546,7 @@ Preferred examples:
 - Inapplicable Rule for a rule outside the child's Birth Window, never "not applicable" for a rule that is pending or not evaluable
 - Cohort Birth Range for the birth dates an Age Group reports on in a Fiscal Year, never "Birth Window" (which belongs to one Vaccine Rule)
 - HDC Result Mismatch for a disagreement between the rule result and the HDC `result`, never "HDC override"
+- Lost Response ("ไม่ได้รับคำตอบจากเซิร์ฟเวอร์") for a request whose answer never reached the client (§50), never "logout" or "session expired"
 - "ตรวจสอบประวัติ" (review history, code `REVIEW` / `review*`) for a rule or record held back only by a date-check warning (§23), never "missing" or "ไม่ผ่าน"
 
 When a new domain concept appears repeatedly and cannot be expressed clearly using this vocabulary, update `CONTEXT.md` deliberately instead of inventing several competing names in code.
@@ -699,3 +700,15 @@ A **Polio Regimen** is the MOPH polio vaccine schedule a child was vaccinated un
 How HDC's regimen choice differs from the rules, and which resulting disagreements are an HDC Result Mismatch (§43), is defined in `docs/features.md`.
 
 Do not call the old regimen "OPV-only": it includes one IPV dose.
+
+---
+
+## 50. Lost Response
+
+A **Lost Response** is a request that the server received and ran, but whose answer never reached the client, so from the client's side the outcome is unknown (Issue #154). Thai UI wording: "ไม่ได้รับคำตอบจากเซิร์ฟเวอร์".
+
+- It is not a session expiry: the User (§33) stays signed in.
+- It is not a server failure: the request may have completed, for example a chunk of an Import (§27) may already be written and its Batch (§28) finalized (§48).
+- How an Import checks its outcome after a Lost Response is defined in `docs/features.md`.
+
+Do not call it a "mangled request", "replayed GET", or "logout".

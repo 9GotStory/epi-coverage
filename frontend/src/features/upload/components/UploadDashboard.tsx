@@ -30,6 +30,7 @@ export function UploadDashboard() {
     errorMsg,
     results,
     summarySkipped,
+    countsNotReceived,
     isSyncing,
     handleDrop,
     handleUpload,
@@ -175,9 +176,12 @@ export function UploadDashboard() {
           <CheckCircle2 className="h-5 w-5 text-[#34c759] mt-0.5" />
           <AlertTitle className="text-[#1d1d1f] font-semibold text-[17px] tracking-[-0.374px]">นำเข้าข้อมูลสำเร็จ</AlertTitle>
           <AlertDescription className="text-[#7a7a7a] text-[14px] mt-2">
-            ประมวลผลข้อมูลสำเร็จจำนวน <strong className="text-[#1d1d1f] font-semibold">{results.inserted + results.updated}</strong> รายการ
+            {/* Issue #156: after a Lost Response the server's counts never arrived, so none are shown. */}
+            {countsNotReceived
+              ? <p role="status" className="text-[#1d1d1f]">นำเข้าและปิดการนำเข้าเรียบร้อยแล้ว — ไม่ได้รับจำนวนรายการจากเซิร์ฟเวอร์</p>
+              : <>ประมวลผลข้อมูลสำเร็จจำนวน <strong className="text-[#1d1d1f] font-semibold">{results.inserted + results.updated}</strong> รายการ</>}
             {summarySkipped && <p role="status" className="mt-2 text-[#1d1d1f]">ไม่ได้สร้างสรุปเพราะไม่มีรายการที่เปิดใช้งาน</p>}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4">
+            {!countsNotReceived && <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4">
               <div className="bg-white p-4 rounded-[16px] border border-[#e0e0e0] flex flex-col">
                 <span className="text-[12px] text-[#7a7a7a] font-medium uppercase tracking-[0.231px]">เพิ่มข้อมูลใหม่</span>
                 <span className="text-[28px] font-semibold text-[#1d1d1f] mt-1">{results.inserted.toLocaleString()}</span>
@@ -190,7 +194,7 @@ export function UploadDashboard() {
                 <span className="text-[12px] text-[#7a7a7a] font-medium uppercase tracking-[0.231px]">ปิดสถานะจากการซิงค์</span>
                 <span className="text-[28px] font-semibold text-[#1d1d1f] mt-1">{results.deactivated.toLocaleString()}</span>
               </div>
-            </div>
+            </div>}
           </AlertDescription>
         </Alert>
       )}

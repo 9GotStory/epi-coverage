@@ -4,7 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { parseHdcFile } from '../utils/parseHdcFile';
 import { v4 as uuidv4 } from 'uuid';
 import { toast } from 'sonner';
-import { fetchApi } from '../../../shared/lib/api';
+import { fetchApi, LostResponseError, LOST_RESPONSE_MESSAGE } from '../../../shared/lib/api';
 import { calcGroupSummary } from '../../../shared/utils/dashboardLogic';
 
 import { evaluateDynamicV1, evaluateDynamicV2, markSourceAware } from '../../../shared/utils/vaccine/ruleEngine';
@@ -138,6 +138,22 @@ export type ImportUndoPreview = UndoScope & (
 );
 export interface ImportUndoResult extends UndoScope { deactivated: number; reactivated: number; summariesRemoved: boolean; summaryFailed: boolean }
 
+/**
+ * Issue #156: after a Lost Response (CONTEXT.md §50) on a chunk, the Import Undo preview's latest written receipt
+ * tells whether the server finalized this Batch. Only `batchId` and `importedAt` are read; nothing is resent.
+ */
+async function isBatchFinalized(batchId: string, targetTable: TargetTable, fiscalYear: string): Promise<boolean> {
+  try {
+    const res = await fetchApi('previewEpiImportUndo', { targetTable, fiscalYear });
+    const payload = res.data;
+    if (!payload || payload.error || payload.success === false) throw new Error(payload?.error || 'เกิดข้อผิดพลาด');
+    return payload.batchId === batchId && !!payload.importedAt;
+  } catch (err) {
+    console.error(err);
+    throw new Error(`${LOST_RESPONSE_MESSAGE} — ดูส่วน "ย้อนการนำเข้าล่าสุด" ก่อนนำเข้าไฟล์อีกครั้ง`);
+  }
+}
+
 /** Record Identity (CONTEXT.md §3): the only fields sent to preflight. */
 const RECORD_IDENTITY_FIELDS = ['hoscode', 'pid', 'cid', 'sex', 'birth', 'check_vhid'] as const;
 const recordIdentityOf = (row: Record<string, unknown>) =>
@@ -162,6 +178,8 @@ export function useUploadManager() {
   const [isSyncing, setIsSyncing] = useState(false);
   /** Issue #134: the last import wrote no Dashboard Summary because its table has no Active Records left. */
   const [summarySkipped, setSummarySkipped] = useState(false);
+  /** Issue #156: the last import succeeded, but a Lost Response means its counts never arrived. */
+  const [countsNotReceived, setCountsNotReceived] = useState(false);
   const [preflight, setPreflight] = useState<ImportPreflight | null>(null);
   // The parsed rows and the scope they were preflighted for; the import uses exactly these.
   const pendingRef = useRef<{ batchId: string; rows: any[]; fiscalYear: string; targetTable: TargetTable; importMode: 'merge' | 'sync' } | null>(null);
@@ -256,6 +274,7 @@ export function useUploadManager() {
     setProgress(0);
     setResults({inserted: 0, updated: 0, deactivated: 0});
     setSummarySkipped(false);
+    setCountsNotReceived(false);
     const { batchId, rows: allRows, fiscalYear, targetTable, importMode } = pending;
 
     try {
@@ -263,12 +282,22 @@ export function useUploadManager() {
       let updated = 0;
       let finalized = false;
       let deactivated = 0;
+      let lostResponse = false;
 
       // Chunking
       for (let i = 0; i < allRows.length; i += CHUNK_SIZE) {
         const chunk = allRows.slice(i, i + CHUNK_SIZE);
-        
-        const res = await fetchApi('upsertEpiData', { chunk, batchId, fiscalYear, targetTable, options: { mode: importMode, chunkIndex: i / CHUNK_SIZE, totalChunks: Math.ceil(allRows.length / CHUNK_SIZE) } });
+
+        let res;
+        try {
+          res = await fetchApi('upsertEpiData', { chunk, batchId, fiscalYear, targetTable, options: { mode: importMode, chunkIndex: i / CHUNK_SIZE, totalChunks: Math.ceil(allRows.length / CHUNK_SIZE) } });
+        } catch (err) {
+          if (!(err instanceof LostResponseError)) throw err;
+          // Issue #156: stop sending chunks and check this Batch instead; a chunk is never resent automatically.
+          finalized = await isBatchFinalized(batchId, targetTable, fiscalYear);
+          lostResponse = true;
+          break;
+        }
         const payload = res.data;
         
         if (payload.error) throw new Error(importRefusalText(payload, targetTable, fiscalYear, payload.error));
@@ -293,6 +322,7 @@ export function useUploadManager() {
 
       setProgress(100);
       setResults({ inserted, updated, deactivated });
+      setCountsNotReceived(lostResponse);
       setStatus('success');
       
       // Invalidate relevant queries to force dashboard and rules refresh
@@ -327,6 +357,7 @@ export function useUploadManager() {
     setProgress(0);
     setErrorMsg('');
     setSummarySkipped(false);
+    setCountsNotReceived(false);
   }, []);
 
   const handleSyncAll = useCallback(async () => {
@@ -452,6 +483,7 @@ export function useUploadManager() {
     errorMsg,
     results,
     summarySkipped,
+    countsNotReceived,
     isSyncing,
     handleDrop,
     handleUpload,

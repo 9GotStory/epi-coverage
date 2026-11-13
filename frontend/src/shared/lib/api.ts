@@ -5,6 +5,20 @@
 
 const GAS_URL = import.meta.env.VITE_GAS_API_URL;
 
+export const LOST_RESPONSE_MESSAGE = 'ไม่ได้รับคำตอบจากเซิร์ฟเวอร์ — คำขออาจทำงานสำเร็จแล้ว โปรดตรวจสอบก่อนทำซ้ำ';
+
+/**
+ * Issue #156: a Lost Response (CONTEXT.md §50). The server received the request and may have run it, but its
+ * answer never arrived: the backend answers status 405 to the body-less GET the browser made from a redirect.
+ * The User stays signed in; the outcome is unknown, so the caller must check it before repeating the request.
+ */
+export class LostResponseError extends Error {
+  constructor(message = LOST_RESPONSE_MESSAGE) {
+    super(message);
+    this.name = 'LostResponseError';
+  }
+}
+
 export async function fetchApi(action: string, payload: any = {}) {
   if (!GAS_URL) {
     throw new Error('VITE_GAS_API_URL is missing in .env');
@@ -39,6 +53,8 @@ export async function fetchApi(action: string, payload: any = {}) {
         window.dispatchEvent(new Event('auth:unauthorized'));
         throw new Error(data.data?.error || "Unauthorized");
       }
+      // Issue #156: never a session problem, so no auth:unauthorized
+      if (data.status === 405) throw new LostResponseError();
       throw new Error(data.data?.error || `API returned status ${data.status}`);
     }
     

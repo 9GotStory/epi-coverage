@@ -1,5 +1,11 @@
+// Issue #156: the API is POST-only. A GET here is a POST whose redirect the browser followed
+// without its body, so its answer is a Lost Response (CONTEXT.md §50), not a session problem.
+// Refuse it before any token lookup, dispatch or spreadsheet access (fail closed), and log only
+// the parameter names and `action` so the next occurrence shows what the redirect target kept.
 function doGet(e) {
-  return handleRequest('GET', e);
+  const parameter = (e && e.parameter) || {};
+  console.log(JSON.stringify({ event: 'doGet refused', parameterNames: Object.keys(parameter), action: parameter.action || null }));
+  return responseJson({ error: 'GET is not supported' }, 405);
 }
 
 function doPost(e) {
