@@ -23,5 +23,7 @@ it('a superadmin keeps today\'s actions on every other row, including promote on
   expect(await isMenuDisabled('other-superadmin')).toBe(false);
 
   const staff = await openMenuOf('staff');
-  expect(within(staff).getByText('ตั้งเป็น Admin')).toBeTruthy();
+  for (const action of ['อนุมัติสิทธิ์เข้าใช้งาน', 'ระงับสิทธิ์ / ปฏิเสธ', 'ย้ายสังกัด / เปลี่ยน รพ.สต.', 'ตั้งเป็น Admin']) {
+    expect(within(staff).getByText(action)).toBeTruthy();
+  }
 });

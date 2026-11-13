@@ -241,6 +241,11 @@ function arrayToObj(headers, row) {
 const APPROVAL_STATUSES = ['pending', 'approved', 'rejected'];
 const ROLES = ['user', 'admin', 'superadmin'];
 
+// Issue #166 (ADR-0013): role อื่นใดนอกจาก `superadmin` ตรงตัวได้สิทธิ์ระดับ admin (fail closed)
+function isSuperadmin_(auth) {
+  return Boolean(auth) && auth.role === 'superadmin';
+}
+
 /**
  * Issue #166 (ADR-0013): ใครเปลี่ยนแถว User แถวไหนได้ — คืน { error } เมื่อปฏิเสธ, null เมื่ออนุญาต
  * ไม่มีใครเปลี่ยนแถวของตัวเองได้ (เทียบ id ของแถวกับ userId ของ session ที่ตรวจแล้ว)
@@ -250,8 +255,7 @@ function refuseUserRowChange_(headers, row, auth) {
     return { error: 'You cannot change your own account.' };
   }
   // admin เปลี่ยนได้เฉพาะแถวที่ Role เป็น `user` ตรงตัว — admin, superadmin และค่านอกเซตต้องเป็น superadmin
-  const isSuperadmin = Boolean(auth) && auth.role === 'superadmin';
-  if (!isSuperadmin && row[headers.indexOf('role')] !== 'user') {
+  if (!isSuperadmin_(auth) && row[headers.indexOf('role')] !== 'user') {
     return { error: 'This account can only be changed by a superadmin.' };
   }
   return null;
@@ -270,9 +274,8 @@ function updateUserStatus(googleId, newStatus, newRole, auth) {
   if (supplied(newRole) && !ROLES.includes(newRole)) {
     return { error: `Invalid role. Accepted values: ${ROLES.join(', ')}.` };
   }
-  // Issue #166 (ADR-0013): เฉพาะ superadmin เปลี่ยน Role ได้ — role อื่นใดได้สิทธิ์ระดับ admin (fail closed)
-  const isSuperadmin = Boolean(auth) && auth.role === 'superadmin';
-  if (supplied(newRole) && !isSuperadmin) {
+  // Issue #166 (ADR-0013): เฉพาะ superadmin เปลี่ยน Role ได้
+  if (supplied(newRole) && !isSuperadmin_(auth)) {
     return { error: 'Only a superadmin may change a Role.' };
   }
 
