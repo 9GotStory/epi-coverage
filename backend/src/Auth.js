@@ -166,7 +166,13 @@ function loginWithGoogle(accessToken, ipAddress, userAgent) {
       };
     }
 
-    return { success: false, error: 'Account rejected or suspended.' };
+    // Issue #171/#175: `rejected` คือ "ระงับสิทธิ์" (CONTEXT.md §34) — ข้อความอยู่ใน docs/features.md §1
+    if (user.status === 'rejected') {
+      return { success: false, error: 'บัญชีนี้ถูกระงับสิทธิ์การเข้าใช้งาน กรุณาติดต่อผู้ดูแลระบบ' };
+    }
+
+    // ค่านอกเซต Approval Status ไม่มี admin คนใดตัดสิน — จึงไม่เอ่ยชื่อสถานะใด
+    return { success: false, error: 'ไม่สามารถเข้าสู่ระบบได้ เนื่องจากสถานะบัญชีไม่ถูกต้อง กรุณาติดต่อผู้ดูแลระบบ' };
 
   } catch (error) {
     console.error('loginWithGoogle error:', error);

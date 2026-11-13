@@ -506,6 +506,8 @@ An Approval Status is exactly one of:
 
 Any other value is not an Approval Status (Issue #162).
 
+`rejected` ("ระงับสิทธิ์") covers both an applicant who was never approved and a User whose approval was withdrawn. "Suspended" is another name for `rejected`, not a further Approval Status (Issue #171).
+
 Authentication and approval are separate concerns.
 
 A Role (§35) never stands in for Approval Status (Issue #158). What each Approval Status allows is defined in `docs/features.md`.
@@ -551,6 +553,7 @@ Preferred examples:
 - Finalize ("ปิดการนำเข้า") for finishing a Batch whose chunks are all written (§48), never "cleanup"
 - Summary Regeneration for recomputing Dashboard Summaries, never "Sync Summaries" or "sync"
 - View 2 Pending for the record-level not-yet-due state, never bare "pending" (which is an Approval Status)
+- "ระงับสิทธิ์" for the Approval Status `rejected` (§34), never "suspended" as if it were a separate status and never "ไม่อนุมัติ" (which also describes `pending`)
 - Inapplicable Rule for a rule outside the child's Birth Window, never "not applicable" for a rule that is pending or not evaluable
 - Cohort Birth Range for the birth dates an Age Group reports on in a Fiscal Year, never "Birth Window" (which belongs to one Vaccine Rule)
 - HDC Result Mismatch for a disagreement between the rule result and the HDC `result`, never "HDC override"

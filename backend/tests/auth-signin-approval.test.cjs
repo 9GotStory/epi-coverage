@@ -13,6 +13,9 @@
  *     for it (CONTEXT.md §34).
  *   - Sign-in creates a Session exactly when request validation would accept one.
  *   - Unknown accounts still register; `pending` still gets the pending response.
+ *   - A refused sign-in names `rejected` ("ระงับสิทธิ์") only for `rejected`; a stored
+ *     value outside the Approval Statuses gets a refusal that names no status
+ *     (Issue #175, docs/features.md §1).
  *
  * All fixtures are synthetic; no real accounts, tokens, or person data.
  */
@@ -21,6 +24,10 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
+
+// Issue #171 / #175: the sign-in refusal names `rejected` ("ระงับสิทธิ์") and nothing else (docs/features.md §1)
+const REJECTED_REFUSAL = 'บัญชีนี้ถูกระงับสิทธิ์การเข้าใช้งาน กรุณาติดต่อผู้ดูแลระบบ';
+const INVALID_STATUS_REFUSAL = 'ไม่สามารถเข้าสู่ระบบได้ เนื่องจากสถานะบัญชีไม่ถูกต้อง กรุณาติดต่อผู้ดูแลระบบ';
 
 const USERS_HEADER = ['id', 'google_id', 'email', 'name', 'hoscode', 'role', 'status', 'created_at', 'last_login'];
 const SESSIONS_HEADER = ['session_id', 'user_id', 'token_digest', 'ip_address', 'user_agent', 'expires_at', 'created_at'];
@@ -80,7 +87,7 @@ test('a rejected admin is refused at sign-in and gets no Session (Issue #158)', 
   const result = h.signIn('sub-admin');
 
   assert.equal(result.success, false);
-  assert.equal(result.error, 'Account rejected or suspended.');
+  assert.equal(result.error, REJECTED_REFUSAL);
   assert.equal(result.session_id, undefined);
   assert.equal(h.sessionRows().length, 0);
 });
@@ -125,14 +132,28 @@ test('an approved admin or superadmin still signs in and keeps their Role on req
   }
 });
 
-test('a rejected superadmin and an admin with a blank Approval Status are refused like any rejected User (Issue #158)', () => {
-  for (const [role, status] of [['superadmin', 'rejected'], ['admin', ''], ['user', 'rejected']]) {
-    const h = setup([user(role, status)]);
+test('a rejected User of every Role is refused with the ระงับสิทธิ์ message and no Session (Issue #158, #175)', () => {
+  for (const role of ['user', 'admin', 'superadmin']) {
+    const h = setup([user(role, 'rejected')]);
 
     const result = h.signIn(`sub-${role}`);
 
-    assert.deepEqual({ ...result }, { success: false, error: 'Account rejected or suspended.' }, `${role}/${status}`);
-    assert.equal(h.sessionRows().length, 0, `${role}/${status}`);
+    assert.deepEqual({ ...result }, { success: false, error: REJECTED_REFUSAL }, role);
+    assert.equal(h.sessionRows().length, 0, role);
+  }
+});
+
+test('a stored status outside the Approval Statuses is refused with a message that names no status, and no Session (Issue #175)', () => {
+  for (const role of ['user', 'admin', 'superadmin']) {
+    for (const status of ['', 'admin', 'Approved', 'suspended']) {
+      const h = setup([user(role, status)]);
+      const label = `role=${role} status=${JSON.stringify(status)}`;
+
+      const result = h.signIn(`sub-${role}`);
+
+      assert.deepEqual({ ...result }, { success: false, error: INVALID_STATUS_REFUSAL }, label);
+      assert.equal(h.sessionRows().length, 0, label);
+    }
   }
 });
 
