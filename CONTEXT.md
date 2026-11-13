@@ -562,7 +562,7 @@ Preferred examples:
 - HDC Result Mismatch for a disagreement between the rule result and the HDC `result`, never "HDC override"
 - Lost Response ("ไม่ได้รับคำตอบจากเซิร์ฟเวอร์") for a request whose answer never reached the client (§50), never "logout" or "session expired"
 - Session End ("เซสชันสิ้นสุด") for the server no longer accepting a Session the User did not sign out of (§51), never "session expired" for the general case, and Sign-out ("ออกจากระบบ") only when the User chose to end it
-- HDC Coverage (§53) and Imported-Data Evaluation (§54) whenever both appear together, never bare "Coverage" and never "the real number" for either
+- HDC Coverage (§53), HDC Dose Coverage (§56) and Imported-Data Evaluation (§54) whenever an HDC figure and an Imported-Data Evaluation appear together, never bare "Coverage" and never "the real number" for any of them
 - Coverage Goal (§55) for the staff-set percentage aim, never "Target", which is a denominator population (§16)
 - "ตรวจสอบประวัติ" (review history, code `REVIEW` / `review*`) for a rule or record held back only by a date-check warning (§23), never "missing" or "ไม่ผ่าน"
 
@@ -761,7 +761,7 @@ Do not call it a "dry run" or "validation".
 **HDC Coverage** is the Fully Immunized Coverage (§13, §18) that HDC OpenData (§15) reports for one Age Group (§9) and Fiscal Year (§10): the report's Result (§17) over its Target (§16) (Issue #90). Thai UI wording: "ความครอบคลุมตาม HDC".
 
 - It is the Ministry's own indicator ("ตัวชี้วัด"): the Ministry defines its criteria and processing rounds, and EPI Coverage only reads it. Beside it, EPI Coverage shows its own Imported-Data Evaluation (§54); neither replaces the other.
-- It is one number per Age Group and Fiscal Year, stated with the HDC processing round it comes from. It cannot be broken down into children, doses or follow-up items.
+- It is one number per Age Group and Fiscal Year, stated with the HDC processing round it comes from. It cannot be broken down into children, doses or follow-up items. The per-dose figures are HDC Dose Coverage (§56), a separate indicator family.
 - When HDC OpenData has no valid figure, there is no HDC Coverage. It is never zero, and an Imported-Data Evaluation (§54) never stands in for it.
 
 Do not call it bare "Coverage" where an Imported-Data Evaluation is shown beside it, and never call either one "the real number".
@@ -781,3 +781,14 @@ It is the basis for operational follow-up: it can be traced to individual childr
 A **Coverage Goal** is the percentage that staff set as the aim for a coverage value, per period, view and optionally vaccine (Issue #90). Thai UI wording: "เป้าหมายร้อยละ".
 
 It is not a Target (§16). A Target is a denominator population; a Coverage Goal is a percentage that a coverage value is compared against. Where Thai UI says "เป้าหมาย" alone, it means the Coverage Goal; the Target population is "เด็กเป้าหมาย".
+
+---
+
+## 56. HDC Dose Coverage
+
+**HDC Dose Coverage** is the coverage that HDC OpenData (§15) reports for one vaccine dose of one Age Group (§9) and Fiscal Year (§10), from the Ministry's per-age dose report: that dose's Result (§17) over the report's Target (§16) (Issue #188). Thai UI wording: "ความครอบคลุมรายวัคซีนตาม HDC".
+
+- It belongs to a different indicator family from HDC Coverage (§53), which is the Fully Immunized figure. The two families can have different Targets for the same Age Group and Fiscal Year.
+- It is stated with the HDC processing round it comes from. When HDC OpenData has no valid figure for a dose, there is no HDC Dose Coverage for it. It is never zero, and an Imported-Data Evaluation (§54) never stands in for it.
+
+Do not call it HDC Coverage, and do not call it bare "Coverage" where an Imported-Data Evaluation is shown beside it.

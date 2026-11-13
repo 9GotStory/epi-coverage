@@ -19,7 +19,7 @@ vi.mock('../hooks/useVaccineRules', () => ({
   useVaccineRules: () => ({ rules: [], isLoading: false, error: null }),
 }));
 vi.mock('./HdcAgeAnnualComparison', () => ({
-  HdcAgeAnnualComparison: () => <button type="button">เปรียบเทียบกับ HDC OpenData</button>,
+  HdcAgeAnnualComparison: () => <button type="button">ความครอบคลุมรายวัคซีนตาม HDC</button>,
 }));
 
 afterEach(cleanup);
@@ -51,12 +51,12 @@ describe('age-group dashboard views have distinct responsibilities', () => {
       expect(screen.getByText('ผลการประเมินวัคซีนครบชุด')).toBeTruthy();
       expect(screen.getByText('ความครอบคลุมวัคซีนครบชุด แยกตามหน่วยบริการ')).toBeTruthy();
       expect(screen.getByRole('button', { name: 'ความครอบคลุมตาม HDC (Fully Immunized)' })).toBeTruthy();
-      expect(screen.queryByRole('button', { name: 'เปรียบเทียบกับ HDC OpenData' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'ความครอบคลุมรายวัคซีนตาม HDC' })).toBeNull();
       expect(screen.queryByRole('button', { name: /ความครอบคลุมรายเข็มจาก HDC/ })).toBeNull();
 
       // Radix Tabs selects on primary mouseDown (not click) in jsdom.
       fireEvent.mouseDown(screen.getByRole('tab', { name: 'มุมมองที่ 1 (รายวัคซีน)' }), { button: 0 });
-      expect(screen.getByRole('button', { name: 'เปรียบเทียบกับ HDC OpenData' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'ความครอบคลุมรายวัคซีนตาม HDC' })).toBeTruthy();
       expect(screen.queryByRole('button', { name: 'ความครอบคลุมตาม HDC (Fully Immunized)' })).toBeNull();
       expect(screen.getByText('ผลการประเมินวัคซีนรายเข็ม')).toBeTruthy();
     },
