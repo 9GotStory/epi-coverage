@@ -40,7 +40,6 @@ export const renderAdminDashboardAs = (signedInRole: UserRole, extraRows: UserRo
   vi.mocked(fetchApi).mockImplementation(async (action: string) => {
     if (action === 'getAllUsers') return { data: users };
     if (action === 'getFacilities') return { data: [] };
-    if (action === 'updateUserStatus') return { data: { success: true } };
     throw new Error(`unexpected ${action}`);
   });
   const auth = { user: self } as unknown as React.ContextType<typeof AuthContext>;

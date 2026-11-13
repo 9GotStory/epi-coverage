@@ -127,7 +127,7 @@ const UserCellActions = ({ user, meta, disabled, canChangeRole }: { user: UserRo
   const handleConfirm = () => {
     if (alertType === 'approve') meta?.handleUpdateStatus?.(user.google_id, { status: 'approved' });
     if (alertType === 'reject') meta?.handleUpdateStatus?.(user.google_id, { status: 'rejected' });
-    // Issue #179: ตั้งเป็น Admin เปลี่ยนเฉพาะ Role — ไม่ส่งสถานะที่เก็บไว้ ซึ่งอาจไม่ใช่ Approval Status
+    // Issue #179: ตั้งเป็น Admin เปลี่ยนเฉพาะ Role
     if (alertType === 'promote') meta?.handleUpdateStatus?.(user.google_id, { role: 'admin' });
     setIsAlertOpen(false);
   };

@@ -20,6 +20,10 @@ afterEach(() => {
 
 it('a superadmin promoting a row whose stored status is not an Approval Status sends the Role alone, with no status (Issue #179)', async () => {
   renderAdminDashboardAs('superadmin', [userWithStoredStatus('broken', 'admin')]);
+  // Only this file expects an update: the harness still refuses any other action
+  const harnessApi = vi.mocked(fetchApi).getMockImplementation()!;
+  vi.mocked(fetchApi).mockImplementation(async (action: string, payload?: unknown) =>
+    action === 'updateUserStatus' ? { data: { success: true } } : harnessApi(action, payload));
 
   const menu = await openMenuOf('broken');
   fireEvent.click(within(menu).getByText('ตั้งเป็น Admin'));
