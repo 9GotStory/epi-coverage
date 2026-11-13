@@ -2,11 +2,10 @@ import { useEffect, useState } from 'react';
 import { fetchApi } from '../../../shared/lib/api';
 import { useAuth } from '../../../shared/contexts/AuthContext';
 import { DataTable } from './data-table';
-import { columns } from './columns';
+import { columns, type UserRow, type UserRowChange } from './columns';
 import { FacilitiesTab } from './FacilitiesTab';
 import { AuditLogsTab } from './AuditLogsTab';
 import { VaccineRuleManager } from './VaccineRuleManager';
-import type { User, UserRole, UserStatus } from '../../../shared/types';
 import { Users, Building2, ScrollText, ShieldAlert, AlertCircle } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../../shared/components/ui/tabs';
 import { Button } from '../../../shared/components/ui/button';
@@ -16,7 +15,7 @@ import { toast } from 'sonner';
 
 export function AdminDashboard() {
   const { user: currentUser } = useAuth();
-  const [users, setUsers] = useState<User[]>([]);
+  const [users, setUsers] = useState<UserRow[]>([]);
   const [facilities, setFacilities] = useState<{hoscode: string, hosname: string, is_active: boolean}[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -27,13 +26,10 @@ export function AdminDashboard() {
   
   const queryClient = useQueryClient();
 
-  const handleUpdateStatus = async (googleId: string, newStatus: UserStatus, newRole?: UserRole) => {
+  const handleUpdateStatus = async (googleId: string, change: UserRowChange) => {
     setIsUpdating(googleId);
     try {
-      const payload: any = { googleId, status: newStatus };
-      if (newRole) payload.role = newRole;
-      
-      const res = await fetchApi('updateUserStatus', payload);
+      const res = await fetchApi('updateUserStatus', { googleId, ...change });
       if (res.data?.success) {
         toast.success(`อัปเดตสิทธิ์ผู้ใช้งานเรียบร้อยแล้ว`);
         loadUsers();

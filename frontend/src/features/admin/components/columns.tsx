@@ -1,4 +1,4 @@
-import type { ColumnDef } from '@tanstack/react-table';
+import type { ColumnDef, TableMeta } from '@tanstack/react-table';
 import type { User, UserRole, UserStatus } from '../../../shared/types';
 import { Badge } from '../../../shared/components/ui/badge';
 import { Button } from '../../../shared/components/ui/button';
@@ -38,20 +38,26 @@ import {
   SelectValue,
 } from '../../../shared/components/ui/select';
 
+// Issue #179: `getAllUsers` คืนค่าสถานะที่เก็บในชีตตรงตัว ซึ่งอาจไม่ใช่ Approval Status (CONTEXT.md §34) — ห้ามส่งค่านี้กลับเป็นสถานะ
+export type UserRow = Omit<User, 'status'> & { status: unknown };
+
+/** การเปลี่ยนแถวผู้ใช้หนึ่งครั้ง: สถานะหรือ Role อย่างใดอย่างหนึ่ง — ช่องที่ไม่ส่ง เซิร์ฟเวอร์คงค่าเดิม (Issue #162) */
+export type UserRowChange = { status: UserStatus } | { role: UserRole };
+
 // We extend the TableMeta interface in a global declaration to have strong typing for our custom meta
 declare module '@tanstack/react-table' {
   interface TableMeta<TData extends unknown> {
     currentUserId?: string;
     currentUserRole?: UserRole;
     isUpdating?: string | null;
-    handleUpdateStatus?: (googleId: string, newStatus: UserStatus, newRole?: UserRole) => Promise<void>;
+    handleUpdateStatus?: (googleId: string, change: UserRowChange) => Promise<void>;
     handleUpdateFacility?: (googleId: string, newHoscode: string) => Promise<void>;
     facilities?: {hoscode: string, hosname: string, is_active: boolean}[];
     handleToggleActive?: (hoscode: string, currentActive: boolean) => Promise<void>;
   }
 }
 
-export const columns: ColumnDef<User>[] = [
+export const columns: ColumnDef<UserRow>[] = [
   {
     accessorKey: 'name',
     header: 'ชื่อ-สกุล',
@@ -106,12 +112,12 @@ export const columns: ColumnDef<User>[] = [
       const isSuperadmin = meta?.currentUserRole === 'superadmin';
       const disabled = meta?.isUpdating === user.google_id || isSelf || (!isSuperadmin && user.role !== 'user');
 
-      return <UserCellActions user={user} meta={meta as any} disabled={disabled} canChangeRole={isSuperadmin} />;
+      return <UserCellActions user={user} meta={meta} disabled={disabled} canChangeRole={isSuperadmin} />;
     },
   },
 ];
 
-const UserCellActions = ({ user, meta, disabled, canChangeRole }: { user: User; meta: any; disabled: boolean; canChangeRole: boolean }) => {
+const UserCellActions = ({ user, meta, disabled, canChangeRole }: { user: UserRow; meta: TableMeta<UserRow> | undefined; disabled: boolean; canChangeRole: boolean }) => {
   const [isAlertOpen, setIsAlertOpen] = useState(false);
   const [alertType, setAlertType] = useState<'approve' | 'reject' | 'promote' | null>(null);
   
@@ -119,9 +125,10 @@ const UserCellActions = ({ user, meta, disabled, canChangeRole }: { user: User; 
   const [selectedHoscode, setSelectedHoscode] = useState<string>(user.hoscode || '');
 
   const handleConfirm = () => {
-    if (alertType === 'approve') meta?.handleUpdateStatus?.(user.google_id, 'approved');
-    if (alertType === 'reject') meta?.handleUpdateStatus?.(user.google_id, 'rejected');
-    if (alertType === 'promote') meta?.handleUpdateStatus?.(user.google_id, user.status, 'admin');
+    if (alertType === 'approve') meta?.handleUpdateStatus?.(user.google_id, { status: 'approved' });
+    if (alertType === 'reject') meta?.handleUpdateStatus?.(user.google_id, { status: 'rejected' });
+    // Issue #179: ตั้งเป็น Admin เปลี่ยนเฉพาะ Role
+    if (alertType === 'promote') meta?.handleUpdateStatus?.(user.google_id, { role: 'admin' });
     setIsAlertOpen(false);
   };
 
