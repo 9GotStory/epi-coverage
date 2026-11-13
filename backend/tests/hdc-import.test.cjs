@@ -434,6 +434,10 @@ test('logout deletes only the authenticated session, never a caller-supplied for
 function auditSheet(createSheet) {
   return createSheet('audit_logs', [['log_id', 'user_id', 'email', 'action', 'details', 'timestamp']]);
 }
+/** A logAction stub that records each call and writes it to audit_logs, where the Finalize sweep finds it again (Issue #146). */
+function recordAudit(auditLogs, audit) {
+  return (...entry) => { audit.push(entry); auditLogs.appendRow(['uuid', ...entry.slice(0, 4), 'at']); };
+}
 const importer = { userId: 'u1', email: 'importer@example.test' };
 
 test('accepted chunks audit one logical upload_excel event with server-derived identity and durable repair metadata', () => {
@@ -511,7 +515,7 @@ test('legacy index+fingerprint receipts replay without fabricating audit history
   const { context: c, createSheet, sheets } = setup();
   const auditLogs = auditSheet(createSheet);
   const audit = [];
-  c.logAction = (...entry) => { audit.push(entry); auditLogs.appendRow(['uuid', ...entry.slice(0, 4), 'at']); }; // Issue #146: found again by the Finalize sweep
+  c.logAction = recordAudit(auditLogs, audit);
   assert.equal(c.upsertEpiData([person()], 'legacy-1', importer, 2569).success, true);
   const batchSheet = sheets.get('epi_import_batches');
   const completed = JSON.parse(batchSheet.cells[1][5]);
@@ -526,7 +530,7 @@ test('rejections never audit; each finalized batch has one cleanup_epi_data even
   const { context: c, createSheet } = setup();
   const auditLogs = auditSheet(createSheet);
   const audit = [];
-  c.logAction = (...entry) => { audit.push(entry); auditLogs.appendRow(['uuid', ...entry.slice(0, 4), 'at']); }; // Issue #146: found again by the Finalize sweep
+  c.logAction = recordAudit(auditLogs, audit);
   assert.equal(c.upsertEpiData([person({ birth: '2025-02-30' })], 'bad', importer, 2569).success, false);        // invalid record
   assert.equal(c.upsertEpiData([person()], 'bad2', importer, '20X9').success, false);                            // invalid scope
   assert.equal(audit.length, 0);
@@ -1494,7 +1498,7 @@ function realAudit({ context, createSheet, realLogAction }) {
 }
 const finalizeEvents = auditLogs => auditLogs.cells.filter(row => row[3] === 'cleanup_epi_data');
 
-test('the Finalize marker records the admin who finalized the batch, from the last chunk or from cleanup', () => {
+test('the Finalize marker records the admin who finalized the batch, from the last chunk or from cleanupEpiData', () => {
   const env = setup();
   const { context: c, sheets } = env;
   realAudit(env);

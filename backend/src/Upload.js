@@ -304,7 +304,7 @@ function upsertEpiData(chunk, batchId, auth, fiscalYear, targetTable = 'Epi_1_Ye
       ensureUploadAudit(batchId, index, replay.audit); // repair a missing audit from ORIGINAL metadata; never duplicate an existing one
       const replayed = { success: true, inserted: 0, updated: 0, replayed: true, batch_id: batchId };
       if (receipt[7] === 'complete') {
-        ensureFinalizeAudits(receipts, receiptIndex, false);
+        ensureFinalizeAudits(receipts, receiptIndex); // a replay: this batch's missing event is rebuilt too
         return { ...replayed, finalized: true, deactivated: epiRecordedDeactivations(receipt) };
       }
       // Every chunk is written but the finalize was cut off, so resending a chunk finishes it.
@@ -393,7 +393,7 @@ function cleanupEpiData(batchId, touchedHoscodes, auth, fiscalYear, targetTable 
     if (receipt[1] !== targetTable || String(receipt[2]) !== String(fiscalYear)) return { success: false, error: 'Batch scope mismatch.' };
     // Issue #144 (ADR-0011): the last chunk already finalized it; this endpoint is a replay for the previous frontend.
     if (receipt[7] === 'complete') {
-      ensureFinalizeAudits(receipts, receiptIndex, false);
+      ensureFinalizeAudits(receipts, receiptIndex); // a replay: this batch's missing event is rebuilt too
       return { success: true, deactivated: epiRecordedDeactivations(receipt), replayed: true };
     }
     return epiFinalizeBatch(ss, batches, receipts, receiptIndex, auth);
@@ -445,7 +445,7 @@ function epiFinalizeBatch(ss, batches, receipts, receiptIndex, auth) {
   const actor = { userId: auth && auth.userId, email: auth && auth.email };
   receipt[10] = JSON.stringify({ at: receipt[8], deactivated, deactivationRecorded: true, actor });
   writeEpiRows(batches, receipts[0], receipts);
-  ensureFinalizeAudits(receipts, receiptIndex, true);
+  ensureFinalizeAudits(receipts, receiptIndex, { finalizedNow: true });
   return { success: true, deactivated };
 }
 
@@ -454,7 +454,7 @@ function epiFinalizeBatch(ss, batches, receipts, receiptIndex, auth) {
  * its failure surfaces; then the lost event of every other complete receipt with a recorded actor is rebuilt, best-effort.
  * A legacy receipt has no actor and nothing truthful to rebuild from.
  */
-function ensureFinalizeAudits(receipts, currentIndex, finalizedNow) {
+function ensureFinalizeAudits(receipts, currentIndex, { finalizedNow = false } = {}) {
   const sheet = getSpreadsheet().getSheetByName('audit_logs');
   const audited = new Set((sheet ? sheet.getDataRange().getValues().slice(1) : [])
     .filter(row => row[3] === 'cleanup_epi_data').map(row => (/^Batch ([^:]+):/.exec(String(row[4])) || [])[1]));
