@@ -24,6 +24,10 @@ vi.mock('@react-oauth/google', () => ({
   },
 }));
 
+// Issue #171 / #175: the refusal texts in docs/features.md §1
+const REJECTED_REFUSAL = 'บัญชีนี้ถูกระงับสิทธิ์การเข้าใช้งาน กรุณาติดต่อผู้ดูแลระบบ';
+const INVALID_STATUS_REFUSAL = 'ไม่สามารถเข้าสู่ระบบได้ เนื่องจากสถานะบัญชีไม่ถูกต้อง กรุณาติดต่อผู้ดูแลระบบ';
+
 let loginAnswer: unknown;
 
 function renderLogin() {
@@ -70,7 +74,7 @@ describe('Issue #172 — the LoginScreen signs a User in on Approval Status appr
 
     await signInWithGoogle();
 
-    expect(screen.getByText('Account rejected or suspended.')).toBeTruthy();
+    expect(screen.getByText(INVALID_STATUS_REFUSAL)).toBeTruthy();
     expect(screen.queryByText('Dashboard page')).toBeNull();
     expect(localStorage.getItem('token')).toBeNull();
   });
@@ -89,5 +93,18 @@ describe('Issue #172 — the LoginScreen signs a User in on Approval Status appr
 
     expect(screen.getByText('Dashboard page')).toBeTruthy();
     expect(localStorage.getItem('token')).toBe('synthetic-session-id');
+  });
+});
+
+describe('Issue #175 — a refused sign-in shows the server\'s refusal as given', () => {
+  it('shows the server\'s ระงับสิทธิ์ refusal and stores no session', async () => {
+    loginAnswer = { success: false, error: REJECTED_REFUSAL };
+    renderLogin();
+
+    await signInWithGoogle();
+
+    expect(screen.getByText(REJECTED_REFUSAL)).toBeTruthy();
+    expect(screen.queryByText('Dashboard page')).toBeNull();
+    expect(localStorage.getItem('token')).toBeNull();
   });
 });
