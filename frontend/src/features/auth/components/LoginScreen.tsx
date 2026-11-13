@@ -35,7 +35,8 @@ export function LoginScreen() {
             navigate('/setup', { state: { googleData: res.data.googleData }, replace: true });
           } else if (res.data.status === 'pending') {
             navigate('/pending', { replace: true });
-          } else if (res.data.status === 'approved' || res.data.user?.role === 'admin' || res.data.user?.role === 'superadmin') {
+          } else if (res.data.status === 'approved') {
+            // Issue #172: Approval Status alone signs a User in; a Role never stands in for it (CONTEXT.md §34)
             login(res.data.user, res.data.session_id);
             navigate('/dashboard', { replace: true });
           } else {
