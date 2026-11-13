@@ -57,7 +57,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('LoginScreen sign-in decision', () => {
+describe('Issue #172 — the LoginScreen signs a User in on Approval Status approved alone', () => {
   it.each(['admin', 'superadmin'])('keeps a %s whose Approval Status is not approved signed out', async role => {
     loginAnswer = {
       success: true,
@@ -75,7 +75,7 @@ describe('LoginScreen sign-in decision', () => {
     expect(localStorage.getItem('token')).toBeNull();
   });
 
-  it('signs in a user whose Approval Status is approved and takes them to the dashboard', async () => {
+  it('signs in a User whose Approval Status is approved and takes them to the dashboard', async () => {
     loginAnswer = {
       success: true,
       isNewUser: false,
