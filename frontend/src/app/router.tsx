@@ -1,6 +1,7 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { lazy, Suspense } from 'react';
 import { ProtectedRoute } from '../shared/components/ProtectedRoute';
+import { SessionEndRedirect } from '../shared/components/SessionEndRedirect';
 import { AppLayout } from './layouts/AppLayout';
 import { AdminDashboard } from '../features/admin/components/AdminDashboard';
 import { UploadDashboard } from '../features/upload/components/UploadDashboard';
@@ -26,76 +27,82 @@ const SuspenseWrapper = ({ children }: { children: React.ReactNode }) => (
 
 export const router = createBrowserRouter([
   {
-    path: '/login',
-    element: <SuspenseWrapper><LoginScreen /></SuspenseWrapper>
-  },
-  {
-    path: '/pending',
-    element: <SuspenseWrapper><PendingScreen /></SuspenseWrapper>
-  },
-  {
-    path: '/setup',
-    element: <SuspenseWrapper><FirstTimeSetup /></SuspenseWrapper>
-  },
-  {
-    path: '/',
-    element: <SuspenseWrapper><AppRoot /></SuspenseWrapper>,
-    errorElement: <RouteErrorBoundary />,
+    // Issue #159: wraps every route so a Session End reaches the LoginScreen from anywhere
+    element: <SessionEndRedirect />,
     children: [
       {
-        path: '',
-        element: <Navigate to="/dashboard" replace />
+        path: '/login',
+        element: <SuspenseWrapper><LoginScreen /></SuspenseWrapper>
       },
       {
-        element: <AppLayout />,
+        path: '/pending',
+        element: <SuspenseWrapper><PendingScreen /></SuspenseWrapper>
+      },
+      {
+        path: '/setup',
+        element: <SuspenseWrapper><FirstTimeSetup /></SuspenseWrapper>
+      },
+      {
+        path: '/',
+        element: <SuspenseWrapper><AppRoot /></SuspenseWrapper>,
+        errorElement: <RouteErrorBoundary />,
         children: [
           {
-            path: 'dashboard',
-            element: <Dashboard />
+            path: '',
+            element: <Navigate to="/dashboard" replace />
           },
           {
-            element: <ProtectedRoute />,
+            element: <AppLayout />,
             children: [
               {
-                element: <ProtectedRoute allowedRoles={['superadmin', 'admin', 'user']} />,
-                children: [
-                  {
-                    path: 'dashboard/epi-1yr',
-                    element: <EpiDashboard />
-                  },
-                  {
-                    path: 'dashboard/epi-2yr',
-                    element: <EpiDashboard2Yr />
-                  },
-                  {
-                    path: 'dashboard/epi-3yr',
-                    element: <EpiDashboard3Yr />
-                  },
-                  {
-                    path: 'dashboard/epi-5yr',
-                    element: <EpiDashboard5Yr />
-                  },
-                  {
-                    path: 'dashboard/comparison',
-                    element: <YearComparison />
-                  }
-                ]
+                path: 'dashboard',
+                element: <Dashboard />
               },
               {
-                element: <ProtectedRoute allowedRoles={['admin', 'superadmin']} />,
+                element: <ProtectedRoute />,
                 children: [
                   {
-                    path: 'admin',
-                    element: <AdminDashboard />
-                  }
-                ]
-              },
-              {
-                element: <ProtectedRoute allowedHoscodes={['00588']} />,
-                children: [
+                    element: <ProtectedRoute allowedRoles={['superadmin', 'admin', 'user']} />,
+                    children: [
+                      {
+                        path: 'dashboard/epi-1yr',
+                        element: <EpiDashboard />
+                      },
+                      {
+                        path: 'dashboard/epi-2yr',
+                        element: <EpiDashboard2Yr />
+                      },
+                      {
+                        path: 'dashboard/epi-3yr',
+                        element: <EpiDashboard3Yr />
+                      },
+                      {
+                        path: 'dashboard/epi-5yr',
+                        element: <EpiDashboard5Yr />
+                      },
+                      {
+                        path: 'dashboard/comparison',
+                        element: <YearComparison />
+                      }
+                    ]
+                  },
                   {
-                    path: 'upload',
-                    element: <UploadDashboard />
+                    element: <ProtectedRoute allowedRoles={['admin', 'superadmin']} />,
+                    children: [
+                      {
+                        path: 'admin',
+                        element: <AdminDashboard />
+                      }
+                    ]
+                  },
+                  {
+                    element: <ProtectedRoute allowedHoscodes={['00588']} />,
+                    children: [
+                      {
+                        path: 'upload',
+                        element: <UploadDashboard />
+                      }
+                    ]
                   }
                 ]
               }

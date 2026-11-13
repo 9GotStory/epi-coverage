@@ -547,6 +547,7 @@ Preferred examples:
 - Cohort Birth Range for the birth dates an Age Group reports on in a Fiscal Year, never "Birth Window" (which belongs to one Vaccine Rule)
 - HDC Result Mismatch for a disagreement between the rule result and the HDC `result`, never "HDC override"
 - Lost Response ("ไม่ได้รับคำตอบจากเซิร์ฟเวอร์") for a request whose answer never reached the client (§50), never "logout" or "session expired"
+- Session End ("เซสชันสิ้นสุด") for the server no longer accepting a Session the User did not sign out of (§51), never "session expired" for the general case, and Sign-out ("ออกจากระบบ") only when the User chose to end it
 - "ตรวจสอบประวัติ" (review history, code `REVIEW` / `review*`) for a rule or record held back only by a date-check warning (§23), never "missing" or "ไม่ผ่าน"
 
 When a new domain concept appears repeatedly and cannot be expressed clearly using this vocabulary, update `CONTEXT.md` deliberately instead of inventing several competing names in code.
@@ -707,8 +708,21 @@ Do not call the old regimen "OPV-only": it includes one IPV dose.
 
 A **Lost Response** is a request that the server received and ran, but whose answer never reached the client, so from the client's side the outcome is unknown (Issue #154). Thai UI wording: "ไม่ได้รับคำตอบจากเซิร์ฟเวอร์".
 
-- It is not a session expiry: the User (§33) stays signed in.
+- It is not a Session End (§51): the User (§33) stays signed in.
 - It is not a server failure: the request may have completed, for example a chunk of an Import (§27) may already be written and its Batch (§28) finalized (§48).
 - How an Import checks its outcome after a Lost Response is defined in `docs/features.md`.
 
 Do not call it a "mangled request", "replayed GET", or "logout".
+
+---
+
+## 51. Session
+
+A **Session** is the period a User (§33) is signed in. It begins at sign-in and ends either by Sign-out or by Session End.
+
+- **Sign-out** ("ออกจากระบบ") is the User choosing to end their own Session.
+- **Session End** ("เซสชันสิ้นสุด") is the server no longer accepting a Session the User did not sign out of: the Session expired, the User's Approval Status (§34) changed, or the Session was removed (Issue #155).
+
+A Session End is one outcome whatever its cause. A Sign-out in one browser tab is a Session End for the User's other open tabs. A Lost Response (§50) is never a Session End. What the User sees on a Session End is defined in `docs/features.md`.
+
+Do not call a Session End "logout" or "session expired"/"หมดอายุ" in general: expiry is only one of its causes.
