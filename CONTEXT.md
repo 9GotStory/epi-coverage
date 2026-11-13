@@ -554,6 +554,7 @@ Preferred examples:
 - Summary Regeneration for recomputing Dashboard Summaries, never "Sync Summaries" or "sync"
 - View 2 Pending for the record-level not-yet-due state, never bare "pending" (which is an Approval Status)
 - "ระงับสิทธิ์" for the Approval Status `rejected` (§34), never "suspended" as if it were a separate status and never "ไม่อนุมัติ" (which also describes `pending`)
+- "สถานะไม่ถูกต้อง" for a stored status value that is not an Approval Status (§34), never "ระงับสิทธิ์" or "รออนุมัติ", which name Approval Statuses (Issue #174)
 - Inapplicable Rule for a rule outside the child's Birth Window, never "not applicable" for a rule that is pending or not evaluable
 - Cohort Birth Range for the birth dates an Age Group reports on in a Fiscal Year, never "Birth Window" (which belongs to one Vaccine Rule)
 - HDC Result Mismatch for a disagreement between the rule result and the HDC `result`, never "HDC override"
