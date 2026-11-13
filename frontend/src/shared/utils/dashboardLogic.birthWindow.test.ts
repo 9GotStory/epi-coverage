@@ -193,57 +193,60 @@ describe('Issue #121 — Birth Window in the shared rule engine and the summary'
 describe('Issue #152 — the Old Polio Regimen requires its 4-month IPV', () => {
   const oldIpv = rule({ rule_id: 'old-ipv', display_name: 'IPV 4 เดือน (สูตรเดิม)', vaccine_group: 'IPV', required_fields: ['ipv2_date'], target_age_months: 4, born_before: CUT_OFF });
   const rules = markSourceAware([bcg, ipv1, ipv2, polio1, polio2, oldIpv]);
-  const evalOld = (r: EpiRecord) => evaluateDynamicV2(r, rules, EVALUATION_DATE);
-  const summarizeOld = (data: EpiRecord[]) => calcGroupSummary(data, evalV1, evalOld, 2569, [...v1Rules, ...rules]);
+  const evalWithOldIpv = (r: EpiRecord) => evaluateDynamicV2(r, rules, EVALUATION_DATE);
+  const summarizeWithOldIpv = (data: EpiRecord[]) => calcGroupSummary(data, evalV1, evalWithOldIpv, 2569, [...v1Rules, ...rules]);
   const oldRegimen = { bcg_date: '2023-03-02', opv1_date: '2023-05-02', opv2_date: '2023-07-02' };
 
   it('counts a pre-switch child without the 4-month IPV as a Confirmed Missing Dose in the rule denominator', () => {
     const noIpv = child('PRE-NO-IPV', PRE_SWITCH, oldRegimen);
-    const v2 = evalOld(noIpv);
+    const v2 = evalWithOldIpv(noIpv);
     expect(v2.status).toBe('FAIL');
     expect(v2.missingVaccines).toEqual(['IPV 4 เดือน (สูตรเดิม)']);
 
-    const s = summarizeOld([noIpv, child('PRE-IPV', PRE_SWITCH, { ...oldRegimen, ipv2_date: '2023-07-02' })]);
+    const s = summarizeWithOldIpv([noIpv, child('PRE-IPV', PRE_SWITCH, { ...oldRegimen, ipv2_date: '2023-07-02' })]);
     expect(s.view2Passed).toBe(1);
     expect(v2Entry(s, 'IPV 4 เดือน (สูตรเดิม)')).toMatchObject({ passed: 1, total: 2 });
   });
 
   it('passes a pre-switch child who received the 4-month IPV', () => {
-    const v2 = evalOld(child('PRE-IPV', PRE_SWITCH, { ...oldRegimen, ipv2_date: '2023-07-02' }));
+    const v2 = evalWithOldIpv(child('PRE-IPV', PRE_SWITCH, { ...oldRegimen, ipv2_date: '2023-07-02' }));
     expect(v2.status).toBe('PASS');
     expect(v2.passedVaccines).toContain('IPV 4 เดือน (สูตรเดิม)');
   });
 
   it('is an Inapplicable Rule for a post-switch child, outside the rule denominator', () => {
     const post = child('POST-IPV', POST_SWITCH, { bcg_date: '2023-08-02', ipv1_date: '2023-10-02', ipv2_date: '2023-12-02' });
-    const v2 = evalOld(post);
+    const v2 = evalWithOldIpv(post);
     expect(v2.status).toBe('PASS');
-    expect(v2.passedVaccines).not.toContain('IPV 4 เดือน (สูตรเดิม)');
+    expect([...v2.passedVaccines, ...v2.missingVaccines, ...(v2.notEvaluableVaccines ?? [])]).not.toContain('IPV 4 เดือน (สูตรเดิม)');
     expect(v2.inapplicableRules?.map(r => r.display_name)).toEqual(['โปลิโอ เข็ม 1 (สูตรเดิม)', 'โปลิโอ เข็ม 2 (สูตรเดิม)', 'IPV 4 เดือน (สูตรเดิม)']);
-    expect(v2Entry(summarizeOld([post]), 'IPV 4 เดือน (สูตรเดิม)')).toBeUndefined();
+    expect(v2Entry(summarizeWithOldIpv([post]), 'IPV 4 เดือน (สูตรเดิม)')).toBeUndefined();
   });
 
-  it('places children born on the cut-off and the day before under exactly one regimen', () => {
-    const names = (v: ReturnType<typeof evalOld>) => [...v.missingVaccines, ...v.passedVaccines];
-    expect(names(evalOld(child('ON-CUT-OFF', '2023-05-01')))).toEqual(['BCG 1 เข็ม', 'IPV เข็ม 1', 'IPV เข็ม 2']);
-    expect(names(evalOld(child('DAY-BEFORE', '2023-04-30')))).toEqual(['BCG 1 เข็ม', 'โปลิโอ เข็ม 1 (สูตรเดิม)', 'โปลิโอ เข็ม 2 (สูตรเดิม)', 'IPV 4 เดือน (สูตรเดิม)']);
+  it('applies the 4-month IPV rule to the day before the cut-off and not to the cut-off itself', () => {
+    const onCutOff = evalWithOldIpv(child('ON-CUT-OFF', '2023-05-01'));
+    const dayBefore = evalWithOldIpv(child('DAY-BEFORE', '2023-04-30'));
+    expect(onCutOff.missingVaccines).toEqual(['BCG 1 เข็ม', 'IPV เข็ม 1', 'IPV เข็ม 2']);
+    expect(onCutOff.inapplicableRules?.map(r => r.display_name)).toEqual(['โปลิโอ เข็ม 1 (สูตรเดิม)', 'โปลิโอ เข็ม 2 (สูตรเดิม)', 'IPV 4 เดือน (สูตรเดิม)']);
+    expect(dayBefore.missingVaccines).toEqual(['BCG 1 เข็ม', 'โปลิโอ เข็ม 1 (สูตรเดิม)', 'โปลิโอ เข็ม 2 (สูตรเดิม)', 'IPV 4 เดือน (สูตรเดิม)']);
+    expect(dayBefore.inapplicableRules?.map(r => r.display_name)).toEqual(['IPV เข็ม 1', 'IPV เข็ม 2']);
   });
 
   it('is not evaluable without a valid birth date, and the child stays FAIL on another Confirmed Missing Dose (#103)', () => {
-    const v2 = evalOld(child('NO-BIRTH-NO-BCG', '', { ipv2_date: '2023-07-02' }));
+    const v2 = evalWithOldIpv(child('NO-BIRTH-NO-BCG', '', { ipv2_date: '2023-07-02' }));
     expect(v2.status).toBe('FAIL');
     expect(v2.missingVaccines).toEqual(['BCG 1 เข็ม']);
     expect(v2.notEvaluableVaccines).toContain('IPV 4 เดือน (สูตรเดิม)');
   });
 
   it('flags an HDC Result Mismatch when a pre-switch child with only the 4-month IPV passes but HDC says ไม่ผ่าน', () => {
-    const v2 = evalOld(child('PRE-IPV-HDC-FAIL', PRE_SWITCH, { ...oldRegimen, ipv2_date: '2023-07-02', result: 'ไม่ผ่าน' }));
+    const v2 = evalWithOldIpv(child('PRE-IPV-HDC-FAIL', PRE_SWITCH, { ...oldRegimen, ipv2_date: '2023-07-02', result: 'ไม่ผ่าน' }));
     expect(v2.status).toBe('PASS');
     expect(v2.hdcMismatch).toBe(true);
   });
 
   it('raises no mismatch when the child misses the 4-month IPV and HDC also says ไม่ผ่าน', () => {
-    const v2 = evalOld(child('PRE-NO-IPV-HDC-FAIL', PRE_SWITCH, { ...oldRegimen, result: 'ไม่ผ่าน' }));
+    const v2 = evalWithOldIpv(child('PRE-NO-IPV-HDC-FAIL', PRE_SWITCH, { ...oldRegimen, result: 'ไม่ผ่าน' }));
     expect(v2.status).toBe('FAIL');
     expect(v2.hdcMismatch).toBe(false);
   });

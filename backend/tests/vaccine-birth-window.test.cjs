@@ -191,7 +191,7 @@ test('the old-regimen rules keep their own metric identity, separate from IPV', 
   assert.notEqual(keyOf('โปลิโอ เข็ม 2 (สูตรเดิม)'), keyOf('IPV เข็ม 2'));
 });
 
-test('Issue #152 — seed: the Old Polio Regimen requires its single 4-month IPV in 3yr/5yr View 2', () => {
+test('seed: the Old Polio Regimen requires its single 4-month IPV in 3yr/5yr View 2 (Issue #152)', () => {
   const { context, read } = setup([]);
   context.seedVaccineRules(2570, 'admin');
   const oldRegimenIpv = r => r.display_name === 'IPV 4 เดือน (สูตรเดิม)';

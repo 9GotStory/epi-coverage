@@ -606,7 +606,7 @@ A **Birth Window** is the optional range of birth dates a Vaccine Rule applies t
 
 - The start is inclusive and the end is exclusive, so two rules that share a cut-off date leave no gap and no overlap.
 - An open side means "no limit". A rule with no Birth Window applies to every child in its fiscal year, age group and view.
-- It is how one age group holds two vaccine schedules side by side, for example IPV rules for children born on or after the 2566 polio-regimen switch and polio dose 1/2 rules for children born before it.
+- It is how one age group holds two vaccine schedules side by side, for example IPV rules for children born on or after the 2566 polio-regimen switch and the Old Polio Regimen rules (§49) for children born before it.
 
 A Birth Window is about birth date. It is not Target Age (§22), which is about the child's current age.
 
@@ -696,6 +696,6 @@ A **Polio Regimen** is the MOPH polio vaccine schedule a child was vaccinated un
 - The **New Polio Regimen** ("สูตรใหม่") gives IPV at 2 and 4 months instead of OPV, followed by OPV from 6 months.
 - The switch took place in 2566. The birth-date cut-off and the rules for each regimen are defined in `docs/features.md`. An Age Group that spans the cut-off holds both regimens side by side through Birth Windows (§41).
 
-HDC applies one regimen to a whole Age Group, so its imported `result` (§17) can disagree with the rule result for a child born on the other side of the cut-off. That disagreement is an HDC Result Mismatch (§43), not a missing dose.
+How HDC's regimen choice differs from the rules, and which resulting disagreements are an HDC Result Mismatch (§43), is defined in `docs/features.md`.
 
 Do not call the old regimen "OPV-only": it includes one IPV dose.
