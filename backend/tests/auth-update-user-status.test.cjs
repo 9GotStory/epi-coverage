@@ -116,7 +116,7 @@ test('every Approval Status and Role is written and audited as before (Issue #16
   }
 });
 
-test('an absent, null or empty field leaves that column unchanged — promote keeps the Approval Status (Issue #162)', () => {
+test('an absent, null or empty field leaves that column unchanged (Issue #162)', () => {
   for (const absent of [undefined, null, '']) {
     const promote = setup({ role: 'user', status: 'approved' });
     assert.equal(promote.update('sub-1', absent, 'admin').success, true);
@@ -135,4 +135,20 @@ test('an unknown User: an invalid value is refused as invalid, valid values stil
   assert.deepEqual(h.update('sub-unknown', 'approved', null), { error: 'User not found.' });
   assert.deepEqual(h.row(), setup().row());
   assert.deepEqual(h.audit, []);
+});
+
+test('the admin UI promote resends the stored Approval Status: it works for every Approval Status, and a stored out-of-set value is refused unchanged (Issue #162)', () => {
+  for (const status of ['pending', 'approved', 'rejected']) {
+    const h = setup({ role: 'user', status });
+
+    assert.equal(h.update('sub-1', status, 'admin').success, true, status);
+    assert.deepEqual([h.row().status, h.row().role], [status, 'admin'], status);
+  }
+
+  // No migration (#162): a row already holding a non-Approval-Status value is not promoted
+  // until an admin sets a real Approval Status first.
+  const legacy = setup({ role: 'user', status: 'Approved' });
+  assert.match(legacy.update('sub-1', 'Approved', 'admin').error, /status/);
+  assert.deepEqual([legacy.row().status, legacy.row().role], ['Approved', 'user']);
+  assert.deepEqual(legacy.audit, []);
 });

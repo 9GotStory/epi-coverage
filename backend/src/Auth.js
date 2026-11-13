@@ -268,11 +268,11 @@ function updateUserStatus(googleId, newStatus, newRole, auth) {
     if (data[i][idCol] === googleId) {
       const email = data[i][headers.indexOf('email')];
       let details = [];
-      if (newStatus) {
+      if (supplied(newStatus)) {
         sheet.getRange(i + 1, statusCol + 1).setValue(sanitizeSheetText(newStatus)); // Issue #77: escape formula triggers
         details.push(`status to ${newStatus}`);
       }
-      if (newRole) {
+      if (supplied(newRole)) {
         sheet.getRange(i + 1, roleCol + 1).setValue(sanitizeSheetText(newRole)); // Issue #77: escape formula triggers
         details.push(`role to ${newRole}`);
       }
