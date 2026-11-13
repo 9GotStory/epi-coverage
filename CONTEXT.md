@@ -262,6 +262,8 @@ It is not an Individual EPI Record count unless the particular report explicitly
 
 Do not infer target semantics from UI labels alone.
 
+A Target is not a Coverage Goal (§55), which is a percentage aim rather than a population.
+
 ---
 
 ## 17. Result
@@ -560,6 +562,8 @@ Preferred examples:
 - HDC Result Mismatch for a disagreement between the rule result and the HDC `result`, never "HDC override"
 - Lost Response ("ไม่ได้รับคำตอบจากเซิร์ฟเวอร์") for a request whose answer never reached the client (§50), never "logout" or "session expired"
 - Session End ("เซสชันสิ้นสุด") for the server no longer accepting a Session the User did not sign out of (§51), never "session expired" for the general case, and Sign-out ("ออกจากระบบ") only when the User chose to end it
+- HDC Coverage (§53) and Imported-Data Evaluation (§54) whenever both appear together, never bare "Coverage" and never "the real number" for either
+- Coverage Goal (§55) for the staff-set percentage aim, never "Target", which is a denominator population (§16)
 - "ตรวจสอบประวัติ" (review history, code `REVIEW` / `review*`) for a rule or record held back only by a date-check warning (§23), never "missing" or "ไม่ผ่าน"
 
 When a new domain concept appears repeatedly and cannot be expressed clearly using this vocabulary, update `CONTEXT.md` deliberately instead of inventing several competing names in code.
@@ -749,3 +753,31 @@ A **Preflight** is the read-only check that every Import (§27) runs on its Batc
 - A Preflight that has written nothing does not count as progress of its Batch, so it never makes another Preflight stale.
 
 Do not call it a "dry run" or "validation".
+
+---
+
+## 53. HDC Coverage
+
+**HDC Coverage** is the Fully Immunized Coverage (§13, §18) that HDC OpenData (§15) reports for one Age Group (§9) and Fiscal Year (§10): the report's Result (§17) over its Target (§16) (Issue #90). Thai UI wording: "ความครอบคลุมตาม HDC".
+
+- It is the Ministry's own indicator ("ตัวชี้วัด"): the Ministry defines its criteria and processing rounds, and EPI Coverage only reads it. Beside it, EPI Coverage shows its own Imported-Data Evaluation (§54); neither replaces the other.
+- It is one number per Age Group and Fiscal Year, stated with the HDC processing round it comes from. It cannot be broken down into children, doses or follow-up items.
+- When HDC OpenData has no valid figure, there is no HDC Coverage. It is never zero, and an Imported-Data Evaluation (§54) never stands in for it.
+
+Do not call it bare "Coverage" where an Imported-Data Evaluation is shown beside it, and never call either one "the real number".
+
+---
+
+## 54. Imported-Data Evaluation
+
+An **Imported-Data Evaluation** is a result EPI Coverage computes itself from Active Records (§30) under the Fiscal Year's Vaccine Rules (§19) (Issue #90). Thai UI wording: "ผลประเมินจากข้อมูลที่นำเข้า". View 1 (§11), View 2 (§12) and every Dashboard Summary (§44) are Imported-Data Evaluations.
+
+It is the basis for operational follow-up: it can be traced to individual children and facilities. It depends on how complete the imported files are, so it can legitimately differ from HDC Coverage (§53).
+
+---
+
+## 55. Coverage Goal
+
+A **Coverage Goal** is the percentage that staff set as the aim for a coverage value, per period, view and optionally vaccine (Issue #90). Thai UI wording: "เป้าหมายร้อยละ".
+
+It is not a Target (§16). A Target is a denominator population; a Coverage Goal is a percentage that a coverage value is compared against. Where Thai UI says "เป้าหมาย" alone, it means the Coverage Goal; the Target population is "เด็กเป้าหมาย".
