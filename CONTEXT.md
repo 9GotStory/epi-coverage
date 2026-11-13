@@ -745,7 +745,7 @@ Do not call a Session End "logout" or "session expired"/"หมดอายุ" 
 
 A **Preflight** is the read-only check that every Import (§27) runs on its Batch (§28) before anything is written (Issue #111, ADR-0007). Thai UI wording: "ตรวจสอบก่อนนำเข้า". It reports how the file would change the Active Records (§30) and decides whether a typed confirmation is required.
 
-- A **Stale Preflight** is a Preflight that another Batch of the same Age Group and Fiscal Year, touching the same facilities, has made out of date by progressing since it ran (Issue #177). Progress means writing a chunk, a Finalize (§48), or an Import Undo (§47). Staleness is checked only before the first chunk is written. A Stale Preflight is never used. The Import starts again with a new Preflight.
+- A **Stale Preflight** is a Preflight that another Batch of the same Age Group (§9) and Fiscal Year (§10), touching the same facilities, has made out of date by progressing since it ran (Issue #177). Progress means writing a chunk, a Finalize (§48), or an Import Undo (§47). Staleness matters only before the Batch's first chunk is written. How an Import refuses a Stale Preflight is defined in ADR-0007.
 - A Preflight that has written nothing does not count as progress of its Batch, so it never makes another Preflight stale.
 
 Do not call it a "dry run" or "validation".
