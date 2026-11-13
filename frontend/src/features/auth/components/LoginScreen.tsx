@@ -4,8 +4,11 @@ import { useGoogleLogin, type TokenResponse } from '@react-oauth/google';
 import { useAuth } from '../../../shared/contexts/AuthContext';
 import { fetchApi } from '../../../shared/lib/api';
 
+// Issue #159: one message for every Session End, whatever its cause (CONTEXT.md §51)
+const SESSION_END_NOTICE = 'เซสชันสิ้นสุดแล้ว กรุณาเข้าสู่ระบบอีกครั้ง';
+
 export function LoginScreen() {
-  const { login, user, isLoading: authLoading } = useAuth();
+  const { login, user, isLoading: authLoading, sessionEnded, clearSessionEnded } = useAuth();
   const navigate = useNavigate();
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -71,6 +74,12 @@ export function LoginScreen() {
           <p className="text-slate-500 text-[15px]">Sign in to manage EPI coverage data</p>
         </div>
 
+        {sessionEnded && (
+          <div className="mb-6 p-4 bg-muted text-muted-foreground rounded-xl text-sm font-medium">
+            {SESSION_END_NOTICE}
+          </div>
+        )}
+
         {error && (
           <div className="mb-6 p-4 bg-red-50 text-red-600 rounded-xl text-sm font-medium">
             {error}
@@ -84,7 +93,7 @@ export function LoginScreen() {
             </div>
           )}
           <button
-            onClick={() => loginWithGoogle()}
+            onClick={() => { clearSessionEnded(); loginWithGoogle(); }}
             disabled={isLoading}
             className="w-full max-w-[280px] bg-white border border-slate-200 text-slate-700 font-medium py-3 px-4 rounded-full flex items-center justify-center gap-3 hover:bg-slate-50 transition-colors shadow-sm disabled:opacity-50"
           >
