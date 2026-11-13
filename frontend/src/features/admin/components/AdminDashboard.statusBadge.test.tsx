@@ -23,8 +23,7 @@ it('a stored status that is not an Approval Status shows สถานะไม�
   for (const id of Object.keys(stored)) {
     const row = await rowOf(id);
     expect(within(row).getByText('สถานะไม่ถูกต้อง')).toBeTruthy();
-    expect(within(row).queryByText('ระงับสิทธิ์')).toBeNull();
-    expect(within(row).queryByText('อนุญาต')).toBeNull();
+    for (const name of ['อนุญาต', 'รออนุมัติ', 'ระงับสิทธิ์']) expect(within(row).queryByText(name)).toBeNull();
   }
 });
 

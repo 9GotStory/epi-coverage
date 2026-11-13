@@ -87,7 +87,7 @@ export const columns: ColumnDef<User>[] = [
     accessorKey: 'status',
     header: 'สถานะ',
     cell: ({ row }) => {
-      // Issue #174: ค่าที่เก็บในชีตอาจไม่ใช่ Approval Status (CONTEXT.md §34) — ตรงตัวเท่านั้น ไม่ normalize เหมือนการเข้าสู่ระบบ
+      // Issue #174: ค่าที่เก็บในชีตอาจไม่ใช่ Approval Status (CONTEXT.md §34) — ตรงตัวเท่านั้น ไม่ normalize (กติกาเดียวกับการเข้าสู่ระบบ, Issue #175)
       const status: unknown = row.getValue('status');
       if (status === 'approved') return <Badge className="bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border-0">อนุญาต</Badge>;
       if (status === 'pending') return <Badge className="bg-amber-50 text-amber-600 hover:bg-amber-100 border-0">รออนุมัติ</Badge>;
