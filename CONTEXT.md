@@ -498,11 +498,13 @@ Do not equate Google authentication alone with authorization to application data
 
 **Approval Status** represents whether an application user is permitted to proceed through the application's approval workflow.
 
-Current concepts include:
+An Approval Status is exactly one of:
 
 - `pending`
 - `approved`
 - `rejected`
+
+Any other value is not an Approval Status (Issue #162).
 
 Authentication and approval are separate concerns.
 
@@ -514,11 +516,13 @@ A Role (§35) never stands in for Approval Status (Issue #158). What each Approv
 
 A **Role** defines application authorization capability.
 
-Current role concepts include:
+A Role is exactly one of:
 
 - `user`
 - `admin`
 - `superadmin`
+
+Any other value is not a Role (Issue #162).
 
 Do not rely solely on hidden UI controls for role enforcement.
 

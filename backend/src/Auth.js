@@ -237,11 +237,24 @@ function arrayToObj(headers, row) {
   return obj;
 }
 
+// Issue #162: Approval Status และ Role เป็นเซตปิด (CONTEXT.md §34/§35) — ค่าอื่นไม่ใช่สถานะหรือสิทธิ์
+const APPROVAL_STATUSES = ['pending', 'approved', 'rejected'];
+const ROLES = ['user', 'admin', 'superadmin'];
+
 /**
  * อัปเดตสถานะและสิทธิ์ของผู้ใช้ (สำหรับ Admin)
  * Issue #80: audit ใช้ตัวตนจาก session ที่ตรวจสอบแล้ว (auth) ไม่ใช้ชื่อ 'Admin' แบบ generic
  */
 function updateUserStatus(googleId, newStatus, newRole, auth) {
+  // ช่องที่ไม่ได้ส่ง (undefined/null/'') = ไม่เปลี่ยน; ค่าที่ส่งมาต้องอยู่ในเซตตรงตัว ไม่ normalize
+  const supplied = value => value !== undefined && value !== null && value !== '';
+  if (supplied(newStatus) && !APPROVAL_STATUSES.includes(newStatus)) {
+    return { error: `Invalid status. Accepted values: ${APPROVAL_STATUSES.join(', ')}.` };
+  }
+  if (supplied(newRole) && !ROLES.includes(newRole)) {
+    return { error: `Invalid role. Accepted values: ${ROLES.join(', ')}.` };
+  }
+
   const ss = getSpreadsheet();
   const sheet = ss.getSheetByName('Users');
   const data = sheet.getDataRange().getValues();
