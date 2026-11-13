@@ -506,6 +506,8 @@ Current concepts include:
 
 Authentication and approval are separate concerns.
 
+A Role (§35) never stands in for Approval Status: an `admin` or `superadmin` whose Approval Status is not `approved` has no access (Issue #158).
+
 ---
 
 ## 35. Role

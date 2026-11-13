@@ -31,6 +31,15 @@ function verifyGoogleToken(idToken) {
 }
 
 /**
+ * Issue #158: กฎเดียวที่ตัดสินว่า Approval Status ให้สิทธิ์เข้าถึงหรือไม่ — ใช้ร่วมกันทั้ง
+ * loginWithGoogle และ validateTokenAndGetRole เพื่อไม่ให้สองที่ตัดสินไม่ตรงกันอีก
+ * (sign-in ได้แต่ทุก request ถูกปฏิเสธ = วน Session End) Role ไม่เคยใช้แทนสถานะ (CONTEXT.md §34)
+ */
+function isApprovedForAccess_(status) {
+  return status === 'approved';
+}
+
+/**
  * เช็กสิทธิ์ว่า Token ถูกต้อง และดึงข้อมูล User ว่ามี role อะไร
  * (เพื่อทำ Role-Based Access Control)
  */
@@ -73,7 +82,7 @@ function validateTokenAndGetRole(token) {
   for (let i = 1; i < userData.length; i++) {
     if (userData[i][idCol] === userId) {
       const status = userData[i][statusCol];
-      if (status !== 'approved' && status !== 'admin') return { valid: false, error: 'Account is not approved' };
+      if (!isApprovedForAccess_(status)) return { valid: false, error: 'Account is not approved' };
       return { 
         valid: true, 
         userId: userId, 
@@ -141,7 +150,7 @@ function loginWithGoogle(accessToken, ipAddress, userAgent) {
       return { success: true, isNewUser: false, status: 'pending', user: user };
     }
 
-    if (user.status === 'approved' || user.role === 'admin' || user.role === 'superadmin') {
+    if (isApprovedForAccess_(user.status)) {
       // Update last login
       updateLastLogin(user.google_id);
       
