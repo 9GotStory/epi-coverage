@@ -3,7 +3,7 @@ import { ChevronDown, ChevronUp, GitCompareArrows } from 'lucide-react';
 import type { LegacyCompatibleGroupSummary } from '../utils/dashboardLogic';
 import type { VaccineRule } from '../utils/vaccine/ruleEngine';
 import { useHdcAgeAnnualReference } from '../hooks/useHdcAgeAnnualReference';
-import { findHdcAgeMetric } from '../utils/hdcAnnualReference';
+import { findHdcAgeMetric, formatHdcProcessingDate } from '../utils/hdcAnnualReference';
 import { formatDateTimeStr } from '../utils/dateUtils';
 
 interface Props {
@@ -12,11 +12,6 @@ interface Props {
   summary:LegacyCompatibleGroupSummary;
   rules:VaccineRule[];
   updatedAt?:string|null;
-}
-
-function formatProcessingDate(date:string):string{
-  // HDC supplies YYYYMMDDHHMM (ages 2/3/5) or YYYYMMDDHHMMSS (age 1).
-  return `${date.slice(6,8)}/${date.slice(4,6)}/${date.slice(0,4)} ${date.slice(8,10)}:${date.slice(10,12)}${date.length===14?`:${date.slice(12,14)}`:''}`;
 }
 
 export function HdcAgeAnnualComparison({fiscalYear,ageGroup,summary,rules,updatedAt}:Props){
@@ -105,7 +100,7 @@ export function HdcAgeAnnualComparison({fiscalYear,ageGroup,summary,rules,update
           ตัวเลขอาจต่างกันเพราะช่วงเวลาและเกณฑ์การนับไม่เหมือนกัน
         </p>
         <p className="mt-2 text-[11px] text-zinc-500">
-          รายงาน HDC ({reference.table}) · รหัส {reference.reportId} · ประมวลผล {formatProcessingDate(reference.dateCom)}
+          รายงาน HDC ({reference.table}) · รหัส {reference.reportId} · ประมวลผล {formatHdcProcessingDate(reference.dateCom)}
           {updatedAt && <> · EPI อัปเดต {formatDateTimeStr(updatedAt)}</>}
         </p>
       </>}

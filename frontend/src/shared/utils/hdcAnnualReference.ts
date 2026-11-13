@@ -215,3 +215,71 @@ export function findHdcAgeMetric(
     (m.legacyShapes??[]).some(shape=>shapeMatches(shape,[shape.code],rule)));
   return metric.length===1 ? metric[0].metric:null;
 }
+
+/**
+ * HDC Fully Immunized report (s_epi_complete, CONTEXT.md §53): one shared table,
+ * one report id per Age Group. IDs established with FY2569 parity and
+ * re-verified 2026-10-31 (docs/hdc-opendata-comparison.md). A re-keyed report
+ * is simply not found, never another group's number.
+ */
+export const HDC_FULLY_IMMUNIZED_TABLE='s_epi_complete';
+const HDC_FULLY_IMMUNIZED_REPORT_IDS:Record<HdcAgeGroup,string>={
+  '1yr':'28dd2c7955ce926456240b2ff0100bde',
+  '2yr':'35f4a8d465e6e1edc05f3d8ab658c551',
+  '3yr':'d1fe173d08e959397adf34b1d77e88d7',
+  '5yr':'f033ab37c30201f73f142449d037028d',
+};
+
+export interface HdcFullyImmunizedReference {
+  ageGroup: HdcAgeGroup;
+  reportId: string;
+  fiscalYear: number;
+  result: number;
+  target: number;
+  dateCom: string;
+  rowCount: number;
+}
+
+/** Sum the annual result/target of the Age Group's report across district rows. */
+export function summarizeHdcFullyImmunized(
+  rows: unknown[], fiscalYear: number, ageGroup: string,
+): HdcFullyImmunizedReference | null {
+  if(!(ageGroup in HDC_FULLY_IMMUNIZED_REPORT_IDS) || !Number.isInteger(fiscalYear) || fiscalYear<2500 ||
+     !Array.isArray(rows))return null;
+  const reportId=HDC_FULLY_IMMUNIZED_REPORT_IDS[ageGroup as HdcAgeGroup];
+  const seen=new Set<string>();
+  let result=0;
+  let target=0;
+  let dateCom='';
+  let rowCount=0;
+  for(const input of rows){
+    const row=asRecord(input);
+    if(!row || row.id!==reportId || String(row.b_year)!==String(fiscalYear) ||
+       !String(row.areacode??'').startsWith(HDC_SONG_DISTRICT_PREFIX)) continue;
+    if(typeof row.hospcode!=='string' || !/^\d{5}$/.test(row.hospcode) ||
+       typeof row.areacode!=='string' || !/^\d{8}$/.test(row.areacode) ||
+       typeof row.date_com!=='string' || !/^\d{12}(?:\d{2})?$/.test(row.date_com)){
+      throw new Error('รหัสหน่วยบริการ พื้นที่ หรือรอบประมวลผล HDC ไม่ถูกต้อง');
+    }
+    const location=`${row.hospcode}|${row.areacode}`;
+    if(seen.has(location)) throw new Error('แหล่ง HDC มีข้อมูลซ้ำของหน่วยบริการและพื้นที่');
+    seen.add(location);
+    if(dateCom && row.date_com!==dateCom) throw new Error('แหล่ง HDC มีข้อมูลคนละรอบประมวลผล');
+    dateCom=row.date_com;
+    const rowTarget=checkCounts(row,'target');
+    const rowResult=checkCounts(row,'result');
+    if(rowResult>rowTarget)throw new Error('ผล HDC มากกว่าเด็กเป้าหมายของหน่วยบริการเดียวกัน');
+    target+=rowTarget;
+    result+=rowResult;
+    if(!Number.isSafeInteger(target))throw new Error('จำนวนรวม HDC เกินขอบเขตที่รองรับ');
+    rowCount++;
+  }
+  if(!rowCount)return null;
+  if(target===0)throw new Error('HDC ไม่มีเด็กเป้าหมายสำหรับรายงานนี้');
+  return {ageGroup:ageGroup as HdcAgeGroup,reportId,fiscalYear,result,target,dateCom,rowCount};
+}
+
+export function formatHdcProcessingDate(date:string):string{
+  // HDC supplies YYYYMMDDHHMM (ages 2/3/5) or YYYYMMDDHHMMSS (age 1).
+  return `${date.slice(6,8)}/${date.slice(4,6)}/${date.slice(0,4)} ${date.slice(8,10)}:${date.slice(10,12)}${date.length===14?`:${date.slice(12,14)}`:''}`;
+}

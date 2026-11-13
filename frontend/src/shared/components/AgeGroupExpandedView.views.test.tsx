@@ -1,8 +1,16 @@
 /** @vitest-environment jsdom */
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import type { ReactElement } from 'react';
+import { cleanup, fireEvent, render as rtlRender, screen } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AgeGroupExpandedView } from './AgeGroupExpandedView';
 import type { LegacyCompatibleGroupSummary } from '../utils/dashboardLogic';
+
+// The View 2 HDC panel (Issue #186) queries only when opened; these tests keep it collapsed.
+vi.mock('../lib/api', () => ({ fetchApi: vi.fn() }));
+function render(ui: ReactElement) {
+  return rtlRender(<QueryClientProvider client={new QueryClient()}>{ui}</QueryClientProvider>);
+}
 
 vi.mock('../hooks/useTargetSettings', () => ({
   useTargetSettings: () => ({ getTarget: () => undefined }),
@@ -37,18 +45,28 @@ const summary: LegacyCompatibleGroupSummary = {
 
 describe('age-group dashboard views have distinct responsibilities', () => {
   it.each(['1yr', '2yr', '3yr', '5yr'])(
-    'keeps View 2 rule results but offers HDC comparison only in View 1: %s', (ageGroup) => {
+    'keeps View 2 rule results with the HDC Fully Immunized panel, and the per-dose HDC comparison only in View 1: %s', (ageGroup) => {
       render(<AgeGroupExpandedView summary={summary} fiscalYear={2569}
         ageGroup={ageGroup} quarter="all" />);
       expect(screen.getByText('ผลการประเมินวัคซีนครบชุด')).toBeTruthy();
       expect(screen.getByText('ความครอบคลุมวัคซีนครบชุด แยกตามหน่วยบริการ')).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'ความครอบคลุมตาม HDC (Fully Immunized)' })).toBeTruthy();
       expect(screen.queryByRole('button', { name: 'เปรียบเทียบกับ HDC OpenData' })).toBeNull();
       expect(screen.queryByRole('button', { name: /ความครอบคลุมรายเข็มจาก HDC/ })).toBeNull();
 
       // Radix Tabs selects on primary mouseDown (not click) in jsdom.
       fireEvent.mouseDown(screen.getByRole('tab', { name: 'มุมมองที่ 1 (รายวัคซีน)' }), { button: 0 });
       expect(screen.getByRole('button', { name: 'เปรียบเทียบกับ HDC OpenData' })).toBeTruthy();
+      expect(screen.queryByRole('button', { name: 'ความครอบคลุมตาม HDC (Fully Immunized)' })).toBeNull();
       expect(screen.getByText('ผลการประเมินวัคซีนรายเข็ม')).toBeTruthy();
+    },
+  );
+
+  it.each([1, 2, 3, 4] as const)(
+    'offers the annual HDC Fully Immunized panel only for the whole fiscal year, not quarter %s', (quarter) => {
+      render(<AgeGroupExpandedView summary={summary} fiscalYear={2569} ageGroup="1yr" quarter={quarter} />);
+      expect(screen.getByText('ผลการประเมินวัคซีนครบชุด')).toBeTruthy();
+      expect(screen.queryByRole('button', { name: 'ความครอบคลุมตาม HDC (Fully Immunized)' })).toBeNull();
     },
   );
 });
