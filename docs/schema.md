@@ -88,7 +88,7 @@
 | `email` | String | อีเมลผู้กระทำ (เก็บไว้เพื่ออ่านได้ง่ายโดยไม่ต้อง JOIN) |
 | `action` | String | การกระทำ (เช่น `login`, `upload_excel`, `approve_user`, `export_data`) |
 | `details` | String | รายละเอียด (เช่น "อัปเดตไฟล์ วัคซีน 1 ปี จำนวน 500 records") |
-| `timestamp` | DateTime | วันเวลาที่กระทำ (ใช้แสดง As of Date ใน Dashboard) |
+| `timestamp` | DateTime | วันเวลาที่กระทำ (ใช้แสดง As of Date ใน Dashboard) เหตุการณ์ `cleanup_epi_data` ที่สร้างคืนภายหลังใช้เวลาของการ finalize เดิม แถวจึงอาจไม่เรียงตามเวลา (ADR-0012) |
 
 ## 7. `configs_system` (ค่าตั้งต้นระบบ)
 | Column | Type | Description |

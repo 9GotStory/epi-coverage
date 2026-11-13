@@ -296,14 +296,17 @@ function upsertEpiData(chunk, batchId, auth, fiscalYear, targetTable = 'Epi_1_Ye
     const replay = completed.find(item => item.index === index);
     // Issue #144 (ADR-0011): finalize a batch whose chunks are all written, reporting the result on top of this chunk's.
     const finalizeOnto = result => {
-      const finalized = epiFinalizeBatch(ss, batches, receipts, receiptIndex, auth && auth.email);
+      const finalized = epiFinalizeBatch(ss, batches, receipts, receiptIndex, auth);
       return finalized.success ? { ...result, finalized: true, deactivated: finalized.deactivated } : finalized;
     };
     if (replay) {
       if (replay.fingerprint !== fingerprint) return { success: false, error: 'Chunk contents differ from the original submission.' };
       ensureUploadAudit(batchId, index, replay.audit); // repair a missing audit from ORIGINAL metadata; never duplicate an existing one
       const replayed = { success: true, inserted: 0, updated: 0, replayed: true, batch_id: batchId };
-      if (receipt[7] === 'complete') return { ...replayed, finalized: true, deactivated: epiRecordedDeactivations(receipt) };
+      if (receipt[7] === 'complete') {
+        ensureFinalizeAudits(receipts, receiptIndex); // a replay: this batch's missing event is rebuilt too
+        return { ...replayed, finalized: true, deactivated: epiRecordedDeactivations(receipt) };
+      }
       // Every chunk is written but the finalize was cut off, so resending a chunk finishes it.
       if (receipt[7] === 'uploading' && completed.length === total) return finalizeOnto(replayed);
       return { ...replayed, finalized: false };
@@ -379,7 +382,7 @@ function upsertEpiData(chunk, batchId, auth, fiscalYear, targetTable = 'Epi_1_Ye
 }
 
 /** Finalize only a complete batch; merge imports never deactivate absent people. */
-function cleanupEpiData(batchId, touchedHoscodes, adminEmail, fiscalYear, targetTable = 'Epi_1_Year') {
+function cleanupEpiData(batchId, touchedHoscodes, auth, fiscalYear, targetTable = 'Epi_1_Year') {
   return withEpiImportLock(() => {
     const ss = getSpreadsheet();
     const batches = epiBatchSheet(ss);
@@ -389,8 +392,11 @@ function cleanupEpiData(batchId, touchedHoscodes, adminEmail, fiscalYear, target
     const receipt = receipts[receiptIndex];
     if (receipt[1] !== targetTable || String(receipt[2]) !== String(fiscalYear)) return { success: false, error: 'Batch scope mismatch.' };
     // Issue #144 (ADR-0011): the last chunk already finalized it; this endpoint is a replay for the previous frontend.
-    if (receipt[7] === 'complete') return { success: true, deactivated: epiRecordedDeactivations(receipt), replayed: true };
-    return epiFinalizeBatch(ss, batches, receipts, receiptIndex, adminEmail);
+    if (receipt[7] === 'complete') {
+      ensureFinalizeAudits(receipts, receiptIndex); // a replay: this batch's missing event is rebuilt too
+      return { success: true, deactivated: epiRecordedDeactivations(receipt), replayed: true };
+    }
+    return epiFinalizeBatch(ss, batches, receipts, receiptIndex, auth);
   });
 }
 
@@ -403,7 +409,7 @@ function epiRecordedDeactivations(receipt) {
  * Issue #144 (ADR-0011): finalize a batch whose chunks are all written, under the caller's import lock.
  * Repeatable: a finalize cut off after its row write is finished, and the count is every row this batch deactivated.
  */
-function epiFinalizeBatch(ss, batches, receipts, receiptIndex, actorEmail) {
+function epiFinalizeBatch(ss, batches, receipts, receiptIndex, auth) {
   const receipt = receipts[receiptIndex];
   const [batchId, targetTable, fiscalYear, mode] = receipt;
   if (['undoing', 'undone'].includes(receipt[7])) return { success: false, error: 'This import was undone.' }; // Issue #139/#140: never finalize it again
@@ -435,12 +441,38 @@ function epiFinalizeBatch(ss, batches, receipts, receiptIndex, actorEmail) {
   }
   receipt[7] = 'complete'; receipt[8] = new Date().toISOString();
   // Issue #139: the marker that this batch's deactivations are recorded row by row, which Import Undo requires.
-  receipt[10] = JSON.stringify({ at: receipt[8], deactivated, deactivationRecorded: true });
+  // Issue #146 (ADR-0012): the actor lets a lost cleanup_epi_data event be rebuilt with the admin who finalized.
+  const actor = { userId: auth && auth.userId, email: auth && auth.email };
+  receipt[10] = JSON.stringify({ at: receipt[8], deactivated, deactivationRecorded: true, actor });
   writeEpiRows(batches, receipts[0], receipts);
-  // Issue #80: Router ส่งอีเมลจาก session ที่ตรวจสอบแล้วเสมอ — fallback 'unknown' แทน
-  // ชื่อ 'Admin' แบบ generic เมื่อบัญชีไม่มีอีเมล
-  logAction('SYSTEM', actorEmail || 'unknown', 'cleanup_epi_data', `Batch ${batchId}: ${deactivated} deactivated (${mode}).`);
+  ensureFinalizeAudits(receipts, receiptIndex, { finalizedNow: true });
   return { success: true, deactivated };
+}
+
+/**
+ * Issue #146 (ADR-0012): exactly one cleanup_epi_data event per finalized batch. The current batch's event comes first and
+ * its failure surfaces; then the lost event of every other complete receipt with a recorded actor is rebuilt, best-effort.
+ * A legacy receipt has no actor and nothing truthful to rebuild from.
+ */
+function ensureFinalizeAudits(receipts, currentIndex, { finalizedNow = false } = {}) {
+  const sheet = getSpreadsheet().getSheetByName('audit_logs');
+  const audited = new Set((sheet ? sheet.getDataRange().getValues().slice(1) : [])
+    .filter(row => row[3] === 'cleanup_epi_data').map(row => (/^Batch ([^:]+):/.exec(String(row[4])) || [])[1]));
+  const ensure = (receipt, rebuilt) => {
+    const finalize = receipt[10] ? JSON.parse(receipt[10]) : null;
+    if (receipt[7] !== 'complete' || !finalize || !finalize.actor || audited.has(receipt[0])) return;
+    // Issue #80: fallback 'unknown' แทนชื่อ 'Admin' แบบ generic เมื่อบัญชีไม่มีอีเมล
+    const email = finalize.actor.email || 'unknown';
+    const details = `Batch ${receipt[0]}: ${finalize.deactivated} deactivated (${receipt[3]}).`;
+    // A rebuilt event keeps the Finalize time, so the As-of Date never moves past the latest real Finalize.
+    if (rebuilt) logAction('SYSTEM', email, 'cleanup_epi_data', `${details} Recorded late at ${new Date().toISOString()}.`, finalize.at);
+    else logAction('SYSTEM', email, 'cleanup_epi_data', details);
+  };
+  ensure(receipts[currentIndex], !finalizedNow);
+  receipts.forEach((receipt, i) => {
+    if (i < 1 || i === currentIndex) return;
+    try { ensure(receipt, true); } catch (error) { /* left for the next sweep: another batch's event never fails this request */ }
+  });
 }
 
 /** Issue #139: Thai-free reason codes; the client words them (ADR-0009). */

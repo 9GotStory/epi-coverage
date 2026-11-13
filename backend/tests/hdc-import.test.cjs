@@ -54,6 +54,7 @@ function setup({ autoPreflight = true } = {}) {
     Utilities: { formatDate: (value, timeZone) => new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(value), getUuid: () => 'uuid', DigestAlgorithm: { SHA_256: 'sha256' }, computeDigest: (_, data) => crypto.createHash('sha256').update(data).digest(), base64Encode: data => Buffer.from(data).toString('base64') },
   });
   for (const file of ['SheetText.js', 'Setup.js', 'Upload.js', 'Data.js', 'DashboardCache.js']) vm.runInContext(fs.readFileSync(path.join(__dirname, '../src', file), 'utf8'), context);
+  const realLogAction = context.logAction;
   context.logAction = () => {};
   if (autoPreflight) {
     // Issue #111 makes preflight mandatory. Single-chunk uploads in pre-#111 tests run the real
@@ -71,7 +72,7 @@ function setup({ autoPreflight = true } = {}) {
     const values = sheets.get(table).getDataRange().getValues();
     return values.slice(1).map(row => Object.fromEntries(values[0].map((field, index) => [field, row[index]])));
   };
-  return { context, sheets, createSheet, read, isLocked: () => locked, numberFormats };
+  return { context, sheets, createSheet, read, isLocked: () => locked, numberFormats, realLogAction };
 }
 const RECORD_IDENTITY_FIELDS = ['hoscode', 'pid', 'cid', 'sex', 'birth', 'check_vhid'];
 const keysOf = rows => rows.map(row => Object.fromEntries(RECORD_IDENTITY_FIELDS.filter(field => row && field in row).map(field => [field, row[field]])));
@@ -433,6 +434,10 @@ test('logout deletes only the authenticated session, never a caller-supplied for
 function auditSheet(createSheet) {
   return createSheet('audit_logs', [['log_id', 'user_id', 'email', 'action', 'details', 'timestamp']]);
 }
+/** A logAction stub that records each call and writes it to audit_logs, where the Finalize sweep finds it again (Issue #146). */
+function recordAudit(auditLogs, audit) {
+  return (...entry) => { audit.push(entry); auditLogs.appendRow(['uuid', ...entry.slice(0, 4), 'at']); };
+}
 const importer = { userId: 'u1', email: 'importer@example.test' };
 
 test('accepted chunks audit one logical upload_excel event with server-derived identity and durable repair metadata', () => {
@@ -508,9 +513,9 @@ test('an audit append that physically succeeded but threw is deduplicated on ret
 
 test('legacy index+fingerprint receipts replay without fabricating audit history', () => {
   const { context: c, createSheet, sheets } = setup();
-  auditSheet(createSheet);
+  const auditLogs = auditSheet(createSheet);
   const audit = [];
-  c.logAction = (...entry) => audit.push(entry);
+  c.logAction = recordAudit(auditLogs, audit);
   assert.equal(c.upsertEpiData([person()], 'legacy-1', importer, 2569).success, true);
   const batchSheet = sheets.get('epi_import_batches');
   const completed = JSON.parse(batchSheet.cells[1][5]);
@@ -523,9 +528,9 @@ test('legacy index+fingerprint receipts replay without fabricating audit history
 
 test('rejections never audit; each finalized batch has one cleanup_epi_data event', () => {
   const { context: c, createSheet } = setup();
-  auditSheet(createSheet);
+  const auditLogs = auditSheet(createSheet);
   const audit = [];
-  c.logAction = (...entry) => audit.push(entry);
+  c.logAction = recordAudit(auditLogs, audit);
   assert.equal(c.upsertEpiData([person({ birth: '2025-02-30' })], 'bad', importer, 2569).success, false);        // invalid record
   assert.equal(c.upsertEpiData([person()], 'bad2', importer, '20X9').success, false);                            // invalid scope
   assert.equal(audit.length, 0);
@@ -945,7 +950,7 @@ function importBatch(c, rows, batch, { year = 2569, table = 'Epi_1_Year', mode =
   prepare(c, [rows], batch, { year, table, mode, auth });
   const written = c.upsertEpiData(rows, batch, auth, year, table, { mode });
   assert.equal(written.success, true, written.error);
-  const finalized = c.cleanupEpiData(batch, [], auth.email, year, table);
+  const finalized = c.cleanupEpiData(batch, [], auth, year, table);
   assert.equal(finalized.success, true, finalized.error);
   return { ...written, deactivated: finalized.deactivated };
 }
@@ -1381,12 +1386,12 @@ test('an undoing receipt is never finalized, and a resent chunk of its batch wri
 test('the only chunk of a sync finalizes it: absent children deactivated, receipt complete, one audit after the receipt', () => {
   const { context: c, sheets, read, createSheet } = setup();
   const auditLogs = auditSheet(createSheet);
-  importBatch(c, cohort(3), 'existing');
   const statusAtAudit = [];
   c.logAction = (userId, email, action, details) => {
-    if (action === 'cleanup_epi_data') statusAtAudit.push(receiptOf(sheets, 'sync').status);
+    if (action === 'cleanup_epi_data' && details.startsWith('Batch sync:')) statusAtAudit.push(receiptOf(sheets, 'sync').status);
     auditLogs.appendRow(['uuid', userId, email, action, details, 'at']);
   };
+  importBatch(c, cohort(3), 'existing');
   prepare(c, [cohort(2)], 'sync', { mode: 'sync', auth: importer });
   const written = plain(c.upsertEpiData(cohort(2), 'sync', importer, 2569, 'Epi_1_Year', { mode: 'sync' }));
   assert.deepEqual([written.success, written.updated, written.finalized, written.deactivated], [true, 2, true, 1]);
@@ -1396,7 +1401,7 @@ test('the only chunk of a sync finalizes it: absent children deactivated, receip
   assert.equal(receipt.status, 'complete');
   const finalize = JSON.parse(receipt.finalize);
   assert.deepEqual([finalize.deactivated, finalize.deactivationRecorded], [1, true]);
-  const events = auditLogs.cells.filter(row => row[3] === 'cleanup_epi_data');
+  const events = auditLogs.cells.filter(row => row[3] === 'cleanup_epi_data' && row[4].startsWith('Batch sync:'));
   assert.deepEqual(events.map(row => [row[1], row[2], row[4]]), [['SYSTEM', 'importer@example.test', 'Batch sync: 1 deactivated (sync).']]);
   assert.deepEqual(statusAtAudit, ['complete']);
 });
@@ -1482,4 +1487,144 @@ test('Import Undo of a sync whose finalize was finished by a resent chunk restor
   assert.deepEqual([preview.eligible, preview.batchId, preview.wouldDeactivate, preview.wouldReactivate], [true, 'wrong', 2, 3]);
   assert.equal(undo(c, preview).success, true);
   assert.deepEqual(activeCids(read), cohort(3).map(row => row.cid));
+});
+
+/* ─────────────── Issue #146 (#150, ADR-0012): the Finalize audit is rebuilt from the receipt ─────────────── */
+/** The real logAction writing to a fake audit_logs sheet, so a Finalize event that exists can be found again. */
+function realAudit({ context, createSheet, realLogAction }) {
+  const auditLogs = auditSheet(createSheet);
+  context.logAction = realLogAction;
+  return auditLogs;
+}
+const finalizeEvents = auditLogs => auditLogs.cells.filter(row => row[3] === 'cleanup_epi_data');
+
+test('the Finalize marker records the admin who finalized the batch, from the last chunk or from cleanupEpiData', () => {
+  const env = setup();
+  const { context: c, sheets } = env;
+  realAudit(env);
+  importBatch(c, cohort(1), 'by-chunk');
+  assert.deepEqual(JSON.parse(receiptOf(sheets, 'by-chunk').finalize).actor, { userId: 'u1', email: 'importer@example.test' });
+
+  prepare(c, [cohort(1, '00589')], 'by-cleanup', { auth: importer });
+  failNextWrite(sheets, 'epi_import_batches', values => values.some(row => row[0] === 'by-cleanup' && row[7] === 'complete'));
+  assert.throws(() => c.upsertEpiData(cohort(1, '00589'), 'by-cleanup', importer, 2569), /Sheets service failed/);
+  const finisher = { userId: 'a1', email: 'admin@example.test' };
+  assert.equal(c.cleanupEpiData('by-cleanup', [], finisher, 2569).success, true);
+  assert.deepEqual(JSON.parse(receiptOf(sheets, 'by-cleanup').finalize).actor, finisher);
+});
+
+/** The next cleanup_epi_data append throws before anything is written, as a Sheets error or a timeout would. */
+function failNextFinalizeEvent(env) {
+  let failed = false;
+  env.context.logAction = (...args) => {
+    if (!failed && args[2] === 'cleanup_epi_data') { failed = true; throw new Error('audit append failed'); }
+    return env.realLogAction(...args);
+  };
+}
+
+test('a Finalize event lost after the receipt is complete is rebuilt by the next Import, with the original admin and Finalize time', () => {
+  const env = setup();
+  const { context: c, sheets } = env;
+  const auditLogs = realAudit(env);
+  prepare(c, [cohort(1)], 'lost', { auth: importer });
+  failNextFinalizeEvent(env);
+  assert.throws(() => c.upsertEpiData(cohort(1), 'lost', importer, 2569), /audit append failed/); // never a false audited success
+  assert.equal(receiptOf(sheets, 'lost').status, 'complete');
+  assert.equal(finalizeEvents(auditLogs).length, 0);
+
+  importBatch(c, cohort(1, '00589'), 'next', { auth: administrator }); // another admin's next Import, in another facility
+  const [own, rebuilt] = finalizeEvents(auditLogs);
+  assert.deepEqual([own[2], own[4]], ['admin@example.test', 'Batch next: 0 deactivated (merge).']); // its own event has no note
+  assert.deepEqual([rebuilt[1], rebuilt[2]], ['SYSTEM', 'importer@example.test']);
+  assert.equal(rebuilt[5], JSON.parse(receiptOf(sheets, 'lost').finalize).at);
+  assert.match(rebuilt[4], /^Batch lost: 0 deactivated \(merge\)\. Recorded late at \d{4}-\d\d-\d\dT[\d:.]+Z\.$/);
+  assert.equal(/\d{13}/.test(rebuilt[4]), false); // counts only, never an identity
+  // The As-of Date is the latest real Finalize, never the time the older event was rebuilt.
+  assert.equal(c.getLatestImportTime().timestamp, own[5]);
+});
+
+test('a replay of a complete batch from either endpoint rebuilds its lost Finalize event once and reports the recorded count', () => {
+  for (const replay of [
+    c => c.upsertEpiData(cohort(1), 'lost', administrator, 2569, 'Epi_1_Year', { mode: 'sync' }),
+    c => c.cleanupEpiData('lost', [], administrator, 2569),
+  ]) {
+    const env = setup();
+    const { context: c, sheets } = env;
+    const auditLogs = realAudit(env);
+    importBatch(c, cohort(3), 'existing');
+    prepare(c, [cohort(1)], 'lost', { mode: 'sync', auth: importer });
+    failNextFinalizeEvent(env);
+    assert.throws(() => c.upsertEpiData(cohort(1), 'lost', importer, 2569, 'Epi_1_Year', { mode: 'sync' }), /audit append failed/);
+
+    assert.deepEqual([plain(replay(c)).deactivated, plain(replay(c)).deactivated], [2, 2]);
+    const events = finalizeEvents(auditLogs).filter(row => row[4].startsWith('Batch lost:'));
+    assert.equal(events.length, 1);
+    assert.deepEqual([events[0][2], events[0][5]], ['importer@example.test', JSON.parse(receiptOf(sheets, 'lost').finalize).at]);
+    assert.match(events[0][4], /^Batch lost: 2 deactivated \(sync\)\. Recorded late at /);
+  }
+});
+
+test('a Finalize event that was appended although its append threw is never written twice', () => {
+  const env = setup();
+  const { context: c } = env;
+  const auditLogs = realAudit(env);
+  prepare(c, [cohort(1)], 'ambiguous', { auth: importer });
+  c.logAction = (...args) => {
+    env.realLogAction(...args);
+    if (args[2] === 'cleanup_epi_data') throw new Error('ambiguous append failure');
+  };
+  assert.throws(() => c.upsertEpiData(cohort(1), 'ambiguous', importer, 2569), /ambiguous append failure/);
+  c.logAction = env.realLogAction;
+  c.upsertEpiData(cohort(1), 'ambiguous', importer, 2569);  // replay
+  importBatch(c, cohort(1, '00589'), 'next');               // and a later Finalize sweep
+  assert.equal(finalizeEvents(auditLogs).filter(row => row[4].startsWith('Batch ambiguous:')).length, 1);
+});
+
+test('only a Finalize that really happened and recorded its admin is ever given a cleanup_epi_data event', () => {
+  const env = setup();
+  const { context: c, sheets } = env;
+  const auditLogs = realAudit(env);
+  importBatch(c, cohort(1, '00581'), 'pre-146');
+  importBatch(c, cohort(1, '00582'), 'pre-139');
+  importBatch(c, cohort(1, '00586'), 'recent');
+  // Receipts finalized before Issue #146 (no actor) and before Issue #139 (no marker), and a recent one, whose events were all lost.
+  const batchSheet = sheets.get('epi_import_batches');
+  const legacy = batch => batchSheet.cells.find(row => row[0] === batch);
+  const { actor, ...withoutActor } = JSON.parse(legacy('pre-146')[10]);
+  legacy('pre-146')[10] = JSON.stringify(withoutActor);
+  legacy('pre-139')[10] = '';
+  auditLogs.cells.splice(1, auditLogs.cells.length - 1);
+  // A Batch still uploading has written chunks but was never finalized.
+  const chunks = [cohort(1, '00583'), cohort(1, '00583', 2)];
+  prepare(c, chunks, 'uploading', { auth: importer });
+  assert.equal(c.upsertEpiData(chunks[0], 'uploading', importer, 2569, 'Epi_1_Year', { chunkIndex: 0, totalChunks: 2 }).finalized, false);
+
+  importBatch(c, cohort(1, '00584'), 'undone');
+  assert.equal(undo(c, undoPreview(c)).success, true);
+  importBatch(c, cohort(1, '00585'), 'after');
+  // Skipping a legacy receipt never stops the rebuild of a later one; the undone Batch keeps its one event.
+  assert.deepEqual(finalizeEvents(auditLogs).map(row => row[4].split(':')[0]), ['Batch undone', 'Batch recent', 'Batch after']);
+});
+
+test('a lost event of another batch that cannot be rebuilt never fails the current Import, and a later Finalize rebuilds it', () => {
+  const env = setup();
+  const { context: c, sheets } = env;
+  const auditLogs = realAudit(env);
+  prepare(c, [cohort(1)], 'lost', { auth: importer });
+  failNextFinalizeEvent(env);
+  assert.throws(() => c.upsertEpiData(cohort(1), 'lost', importer, 2569), /audit append failed/);
+
+  c.logAction = (...args) => {
+    if (args[4]) throw new Error('audit append failed'); // only the rebuild, which carries the original Finalize time
+    return env.realLogAction(...args);
+  };
+  prepare(c, [cohort(1, '00589')], 'current', { auth: importer });
+  const current = plain(c.upsertEpiData(cohort(1, '00589'), 'current', importer, 2569));
+  assert.deepEqual([current.success, current.finalized], [true, true]);
+  assert.deepEqual(finalizeEvents(auditLogs).map(row => row[4]), ['Batch current: 0 deactivated (merge).']);
+
+  c.logAction = env.realLogAction;
+  importBatch(c, cohort(1, '00590'), 'later');
+  const rebuilt = finalizeEvents(auditLogs).filter(row => row[4].startsWith('Batch lost:'));
+  assert.deepEqual(rebuilt.map(row => row[5]), [JSON.parse(receiptOf(sheets, 'lost').finalize).at]);
 });

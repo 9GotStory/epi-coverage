@@ -540,6 +540,7 @@ Preferred examples:
 - Vaccine Rules Engine for the rule subsystem
 - Deactivate ("ปิดใช้งาน") for pausing a Vaccine Rule and delete ("ลบ") only for removing it from the fiscal year's configuration (§19); never "ลบ" for deactivating
 - Full-File Sync only for the explicit synchronization behavior
+- Finalize ("ปิดการนำเข้า") for finishing a Batch whose chunks are all written (§48), never "cleanup"
 - Summary Regeneration for recomputing Dashboard Summaries, never "Sync Summaries" or "sync"
 - View 2 Pending for the record-level not-yet-due state, never bare "pending" (which is an Approval Status)
 - Inapplicable Rule for a rule outside the child's Birth Window, never "not applicable" for a rule that is pending or not evaluable
@@ -672,3 +673,15 @@ Do not confuse it with a Birth Window (§41), whose Thai wording is "ช่ว�
 - An **Unfinished Import Undo** is an Import Undo that has started but has not completed every step (Issue #140). Thai UI wording: "การย้อนที่ยังไม่เสร็จ"; the action that completes it is "ย้อนต่อให้เสร็จ". The Batch counts as undone only once every step is complete. Until then, no Import may write to the same Age Group and Fiscal Year. Do not call finishing it a "repair": nothing is broken, the undo is not finished yet.
 
 Do not call it a "rollback" or "revert". It is not a Full-File Sync and not a Summary Regeneration (§45), although it changes Active Records and therefore the Dashboard Summaries (§44).
+
+---
+
+## 48. Finalize
+
+**Finalize** is the step that finishes a Batch (§28) of an Import (§27) once every chunk of it is written (Issue #144, Issue #146). Thai wording: "ปิดการนำเข้า".
+
+- In a Full-File Sync (§29) it deactivates the records absent from the Batch's scope. An Import in the default mode deactivates nothing.
+- A Batch counts as complete only once it is finalized, and only a finalized Batch can be undone (§47).
+- Each Finalize has exactly one Audit Log (§32) event, which names the admin who finalized the Batch. The As-of Date (§31) is the time of the latest Finalize.
+
+Do not call it "cleanup". The name survives only in code identifiers (`cleanupEpiData`, `cleanup_epi_data`).
