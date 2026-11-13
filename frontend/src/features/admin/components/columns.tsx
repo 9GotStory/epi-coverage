@@ -92,7 +92,7 @@ export const columns: ColumnDef<User>[] = [
       if (status === 'approved') return <Badge className="bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border-0">อนุญาต</Badge>;
       if (status === 'pending') return <Badge className="bg-amber-50 text-amber-600 hover:bg-amber-100 border-0">รออนุมัติ</Badge>;
       if (status === 'rejected') return <Badge className="bg-red-50 text-red-600 hover:bg-red-100 border-0">ระงับสิทธิ์</Badge>;
-      return <Badge className="bg-slate-50 text-slate-600 hover:bg-slate-100 border-0">สถานะไม่ถูกต้อง</Badge>;
+      return <Badge className="bg-slate-100 text-slate-600 hover:bg-slate-200 border-0">สถานะไม่ถูกต้อง</Badge>;
     },
   },
   {
