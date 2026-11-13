@@ -872,9 +872,19 @@ function seedVaccineRules(fiscalYear, adminEmail, force = false) {
  * (docs/research/hdc-je-indicators-and-epi-schedule-2569.md §3.1)
  */
 const POLIO_REGIMEN_CUT_OFF_ = '2023-05-01';
-function oldPolioRegimenNote_(removeFromFiscalYear) {
-  return 'สูตรโปลิโอเดิม สำหรับเด็กเกิดก่อน 1 พ.ค. 2566 (2023-05-01): opv1_date/opv2_date คือวัคซีนโปลิโอเข็มที่ 1/2 ชนิดใดก็ได้ (OPV หรือ IPV) ตามลำดับของ HDC — ' +
+function oldRegimenNote_(detail, removeFromFiscalYear) {
+  return `สูตรโปลิโอเดิม สำหรับเด็กเกิดก่อน 1 พ.ค. 2566 (${POLIO_REGIMEN_CUT_OFF_}): ${detail} — ` +
     `ลบกฎนี้เมื่อกลุ่มอายุไม่มีเด็กเกิดก่อน 1 พ.ค. 2566 แล้ว (ตั้งแต่ปีงบ ${removeFromFiscalYear})`;
+}
+function oldPolioRegimenNote_(removeFromFiscalYear) {
+  return oldRegimenNote_('opv1_date/opv2_date คือวัคซีนโปลิโอเข็มที่ 1/2 ชนิดใดก็ได้ (OPV หรือ IPV) ตามลำดับของ HDC', removeFromFiscalYear);
+}
+/**
+ * Issue #152: สูตรเดิมมี IPV 1 เข็มที่ 4 เดือน ซึ่ง HDC เก็บใน ipv2_date
+ * (docs/research/hdc-je-indicators-and-epi-schedule-2569.md §2.5)
+ */
+function oldPolioRegimenIpvNote_(removeFromFiscalYear) {
+  return oldRegimenNote_('IPV 1 เข็มที่ 4 เดือน อยู่ใน ipv2_date — HDC นับเฉพาะรหัส I12/D32/D42/D52 ไม่นับ IPV-P (401)', removeFromFiscalYear);
 }
 
 function seedVaccineRulesLocked_(fiscalYear, adminEmail, force) {
@@ -1052,6 +1062,7 @@ function seedVaccineRulesLocked_(fiscalYear, adminEmail, force) {
     // ── IPV (เช็ค 2 เข็ม) ──
     { age_group: '3yr', view_type: 2, vaccine_group: 'IPV', display_name: 'IPV เข็ม 1', hdc_code: 'I11', required_fields: ['ipv1_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 2, born_on_or_after: POLIO_REGIMEN_CUT_OFF_ },
     { age_group: '3yr', view_type: 2, vaccine_group: 'IPV', display_name: 'IPV เข็ม 2', hdc_code: 'I12', required_fields: ['ipv2_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 4, born_on_or_after: POLIO_REGIMEN_CUT_OFF_ },
+    { age_group: '3yr', view_type: 2, vaccine_group: 'IPV', display_name: 'IPV 4 เดือน (สูตรเดิม)', hdc_code: 'I12/D32/D42/D52', required_fields: ['ipv2_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 4, born_before: POLIO_REGIMEN_CUT_OFF_, note: oldPolioRegimenIpvNote_('2570') },
     
     // ── OPV (เช็ค 4 เข็ม) ──
     { age_group: '3yr', view_type: 2, vaccine_group: 'OPV', display_name: 'โปลิโอ เข็ม 1 (สูตรเดิม)', hdc_code: '', required_fields: ['opv1_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 2, born_before: POLIO_REGIMEN_CUT_OFF_, note: oldPolioRegimenNote_('2570') },
@@ -1099,6 +1110,7 @@ function seedVaccineRulesLocked_(fiscalYear, adminEmail, force) {
     // ── IPV (เช็ค 2 เข็ม) ──
     { age_group: '5yr', view_type: 2, vaccine_group: 'IPV', display_name: 'IPV เข็ม 1', hdc_code: 'I11', required_fields: ['ipv1_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 2, born_on_or_after: POLIO_REGIMEN_CUT_OFF_ },
     { age_group: '5yr', view_type: 2, vaccine_group: 'IPV', display_name: 'IPV เข็ม 2', hdc_code: 'I12', required_fields: ['ipv2_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 4, born_on_or_after: POLIO_REGIMEN_CUT_OFF_ },
+    { age_group: '5yr', view_type: 2, vaccine_group: 'IPV', display_name: 'IPV 4 เดือน (สูตรเดิม)', hdc_code: 'I12/D32/D42/D52', required_fields: ['ipv2_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 4, born_before: POLIO_REGIMEN_CUT_OFF_, note: oldPolioRegimenIpvNote_('2572') },
     
     // ── OPV (เช็ค 5 เข็ม: 2, 4, 6, 18 เดือน, 4 ปี) ──
     { age_group: '5yr', view_type: 2, vaccine_group: 'OPV', display_name: 'โปลิโอ เข็ม 1 (สูตรเดิม)', hdc_code: '', required_fields: ['opv1_date'], logic_type: 'ALL', is_required_for_v2: true, target_age_months: 2, born_before: POLIO_REGIMEN_CUT_OFF_, note: oldPolioRegimenNote_('2572') },
