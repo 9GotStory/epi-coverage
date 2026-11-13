@@ -33,7 +33,7 @@ function verifyGoogleToken(idToken) {
 /**
  * Issue #158: กฎเดียวที่ตัดสินว่า Approval Status ให้สิทธิ์เข้าถึงหรือไม่ — ใช้ร่วมกันทั้ง
  * loginWithGoogle และ validateTokenAndGetRole เพื่อไม่ให้สองที่ตัดสินไม่ตรงกันอีก
- * (sign-in ได้แต่ทุก request ถูกปฏิเสธ = วน Session End) Role ไม่เคยใช้แทนสถานะ (CONTEXT.md §34)
+ * (sign-in ได้แต่ทุก request ถูกปฏิเสธ = วน Session End) Role ไม่เคยใช้แทนสถานะ (docs/features.md §1)
  */
 function isApprovedForAccess_(status) {
   return status === 'approved';
