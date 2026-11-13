@@ -723,6 +723,6 @@ A **Session** is the period a User (§33) is signed in. It begins at sign-in and
 - **Sign-out** ("ออกจากระบบ") is the User choosing to end their own Session.
 - **Session End** ("เซสชันสิ้นสุด") is the server no longer accepting a Session the User did not sign out of: the Session expired, the User's Approval Status (§34) changed, or the Session was removed (Issue #155).
 
-A Session End is one outcome whatever its cause. A Lost Response (§50) is never a Session End. What the User sees on a Session End is defined in `docs/features.md`.
+A Session End is one outcome whatever its cause. A Sign-out in one browser tab is a Session End for the User's other open tabs. A Lost Response (§50) is never a Session End. What the User sees on a Session End is defined in `docs/features.md`.
 
 Do not call a Session End "logout" or "session expired"/"หมดอายุ" in general: expiry is only one of its causes.
