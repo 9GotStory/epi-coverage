@@ -738,3 +738,14 @@ A **Session** is the period a User (§33) is signed in. It begins at sign-in and
 A Session End is one outcome whatever its cause. A Sign-out in one browser tab is a Session End for the User's other open tabs. A Lost Response (§50) is never a Session End. What the User sees on a Session End is defined in `docs/features.md`.
 
 Do not call a Session End "logout" or "session expired"/"หมดอายุ" in general: expiry is only one of its causes.
+
+---
+
+## 52. Preflight
+
+A **Preflight** is the read-only check that every Import (§27) runs on its Batch (§28) before anything is written (Issue #111, ADR-0007). Thai UI wording: "ตรวจสอบก่อนนำเข้า". It reports how the file would change the Active Records (§30) and decides whether a typed confirmation is required.
+
+- A **Stale Preflight** is a Preflight that another Batch of the same Age Group (§9) and Fiscal Year (§10), touching the same facilities, has made out of date by progressing since it ran (Issue #177). Progress means writing a chunk, a Finalize (§48), or an Import Undo (§47). Staleness matters only before the Batch's first chunk is written. How an Import refuses a Stale Preflight is defined in ADR-0007.
+- A Preflight that has written nothing does not count as progress of its Batch, so it never makes another Preflight stale.
+
+Do not call it a "dry run" or "validation".

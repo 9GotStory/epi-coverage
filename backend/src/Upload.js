@@ -134,10 +134,15 @@ function epiChunkKeyFingerprint(records, fiscalYear, timeZone) {
   return Utilities.base64Encode(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, JSON.stringify(keys)));
 }
 
-/** Other receipts whose progress would make this preflight's counts stale (same table/FY, overlapping facilities). */
+/**
+ * Other receipts whose progress would make this preflight's counts stale (same table/FY, overlapping facilities).
+ * Issue #177: status and chunk count change with every progress, so staleness never rests on updated_at resolution;
+ * updated_at still catches a chunk that reserved the receipt and then failed before it was recorded.
+ */
 function epiOverlapSnapshot(receipts, batchId, targetTable, fiscalYear, hoscodes) {
   return receipts.slice(1).filter(row => row[0] !== batchId && row[1] === targetTable && String(row[2]) === String(fiscalYear) &&
-    JSON.parse(row[6] || '[]').some(code => hoscodes.includes(code))).map(row => `${row[0]}@${row[8]}`).sort();
+    JSON.parse(row[6] || '[]').some(code => hoscodes.includes(code)))
+    .map(row => `${row[0]}@${row[7]}@${JSON.parse(row[5] || '[]').length}@${row[8]}`).sort();
 }
 
 /**
@@ -606,7 +611,7 @@ function undoEpiImport(batchId, expected, auth) {
       // ADR-0010: the plan is recorded before any row changes, so an interrupted undo is never mistaken for a finished one.
       plan = { by: auth && (auth.email || auth.userId), actor: { userId: auth && auth.userId, email: auth && auth.email },
         at: new Date().toISOString(), deactivated: effect.wouldDeactivate, reactivated: effect.wouldReactivate };
-      receipt[7] = 'undoing'; receipt[8] = plan.at; // the new updated_at makes overlapping open preflights stale
+      receipt[7] = 'undoing'; receipt[8] = plan.at; // the new status makes overlapping open preflights stale (Issue #177)
       receipt[11] = JSON.stringify(plan);
       writeEpiRows(batches, receipts[0], receipts);
     }

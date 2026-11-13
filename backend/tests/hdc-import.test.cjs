@@ -5,7 +5,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const crypto = require('node:crypto');
 
-function setup({ autoPreflight = true } = {}) {
+function setup({ autoPreflight = true, frozenAt } = {}) {
   const sheets = new Map();
   const numberFormats = [];
   let locked = false;
@@ -47,6 +47,7 @@ function setup({ autoPreflight = true } = {}) {
   }
   const ss = { getSpreadsheetTimeZone: () => 'Asia/Bangkok', getSheetByName: name => sheets.get(name), getSheets: () => [...sheets.values()], insertSheet: name => createSheet(name) };
   const context = vm.createContext({
+    ...(frozenAt ? { Date: frozenClock(frozenAt) } : {}),
     getSpreadsheet: () => ss, console, logAction() {},
     arrayToObj: (headers, row) => Object.fromEntries(headers.map((field, index) => [field, row[index]])),
     LockService: { getScriptLock: () => ({ waitLock() { assert.equal(locked, false); locked = true; }, releaseLock() { locked = false; } }) },
@@ -73,6 +74,14 @@ function setup({ autoPreflight = true } = {}) {
     return values.slice(1).map(row => Object.fromEntries(values[0].map((field, index) => [field, row[index]])));
   };
   return { context, sheets, createSheet, read, isLocked: () => locked, numberFormats, realLogAction };
+}
+/** Issue #177: every `new Date()` and `Date.now()` returns one instant, so writes in a scenario share one `updated_at`. */
+function frozenClock(at) {
+  const instant = Date.parse(at);
+  return class extends Date {
+    constructor(...args) { if (args.length) super(...args); else super(instant); }
+    static now() { return instant; }
+  };
 }
 const RECORD_IDENTITY_FIELDS = ['hoscode', 'pid', 'cid', 'sex', 'birth', 'check_vhid'];
 const keysOf = rows => rows.map(row => Object.fromEntries(RECORD_IDENTITY_FIELDS.filter(field => row && field in row).map(field => [field, row[field]])));
@@ -1094,6 +1103,53 @@ test('an undone receipt is never finalized again, and an overlapping open prefli
   assert.deepEqual([resent.replayed, resent.finalized], [true, false]); // a retried chunk is a no-op replay (Issue #144: never finalized)
   assert.equal(receiptOf(sheets, 'wrong').status, 'undone');
   assert.deepEqual(activeCids(read), cohort(3).map(row => row.cid));
+});
+
+/* Issue #177: an overlapping receipt's progress makes an open preflight stale even when its updated_at does not change. */
+const SAME_INSTANT = '2026-11-13T03:00:00.000Z';
+const firstWriteOf = (c, rows, batch) => plain(c.upsertEpiData(rows, batch, importer, 2569, 'Epi_1_Year', { mode: 'sync' }));
+const staleRefusal = { success: false, error: 'Data changed since preflight. Start a new import.' };
+
+test('an Import Undo in the same instant as the receipt\'s last write still makes an overlapping open preflight stale', () => {
+  const { context: c, sheets } = setup({ frozenAt: SAME_INSTANT });
+  importBatch(c, cohort(3), 'existing', { mode: 'sync' });
+  importBatch(c, cohort(2, '00588', 40), 'wrong');
+  prepare(c, [cohort(3)], 'fresh', { mode: 'sync', auth: importer });
+  assert.equal(undo(c, undoPreview(c)).success, true);
+  assert.equal(receiptOf(sheets, 'wrong').updated_at, SAME_INSTANT); // the clock never moved
+  assert.deepEqual(firstWriteOf(c, cohort(3), 'fresh'), staleRefusal);
+  assert.equal(receiptOf(sheets, 'fresh').status, 'preflight');
+});
+
+test('a Finalize in the same instant as the receipt\'s last write still makes an overlapping open preflight stale', () => {
+  const { context: c, sheets } = setup({ frozenAt: SAME_INSTANT });
+  prepare(c, [cohort(2)], 'earlier', { auth: importer });
+  failNextWrite(sheets, 'epi_import_batches', values => values.some(row => row[0] === 'earlier' && row[7] === 'complete'));
+  assert.throws(() => c.upsertEpiData(cohort(2), 'earlier', importer, 2569), /Sheets service failed/); // written, not finalized
+  prepare(c, [cohort(2)], 'fresh', { mode: 'sync', auth: importer });
+  assert.equal(plain(c.cleanupEpiData('earlier', [], importer, 2569)).success, true);
+  assert.equal(receiptOf(sheets, 'earlier').updated_at, SAME_INSTANT);
+  assert.deepEqual(firstWriteOf(c, cohort(2), 'fresh'), staleRefusal);
+});
+
+test('a chunk written in the same instant as the receipt\'s last write still makes an overlapping open preflight stale', () => {
+  const { context: c, sheets } = setup({ frozenAt: SAME_INSTANT });
+  const chunks = [cohort(2), cohort(2, '00588', 3), cohort(2, '00588', 5)];
+  prepare(c, chunks, 'earlier', { auth: importer });
+  const write = index => c.upsertEpiData(chunks[index], 'earlier', importer, 2569, 'Epi_1_Year', { totalChunks: 3, chunkIndex: index });
+  assert.equal(write(0).success, true);
+  prepare(c, [cohort(2)], 'fresh', { mode: 'sync', auth: importer });
+  assert.equal(write(1).finalized, false); // a middle chunk: the status stays uploading
+  assert.equal(receiptOf(sheets, 'earlier').updated_at, SAME_INSTANT);
+  assert.deepEqual(firstWriteOf(c, cohort(2), 'fresh'), staleRefusal);
+});
+
+test('on a frozen clock an open preflight that nothing overlapping has touched since is accepted', () => {
+  const { context: c, sheets } = setup({ frozenAt: SAME_INSTANT });
+  importBatch(c, cohort(3), 'existing', { mode: 'sync' });
+  prepare(c, [cohort(3)], 'fresh', { mode: 'sync', auth: importer });
+  assert.equal(firstWriteOf(c, cohort(3), 'fresh').success, true);
+  assert.equal(receiptOf(sheets, 'fresh').status, 'complete');
 });
 
 /** Dashboard_Summaries rows for two tables and two years, plus the legacy annual id. */
