@@ -506,6 +506,8 @@ Current concepts include:
 
 Authentication and approval are separate concerns.
 
+A Role (§35) never stands in for Approval Status (Issue #158). What each Approval Status allows is defined in `docs/features.md`.
+
 ---
 
 ## 35. Role
