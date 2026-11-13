@@ -6,7 +6,7 @@ import { fetchApi } from '../../../shared/lib/api';
 
 // Issue #159: one message for every Session End, whatever its cause (CONTEXT.md §51)
 const SESSION_END_NOTICE = 'เซสชันสิ้นสุดแล้ว กรุณาเข้าสู่ระบบอีกครั้ง';
-// Issue #175: the server's refusal for a status outside the Approval Statuses (CONTEXT.md §34)
+// Issue #175: the server's refusal for a status outside the Approval Statuses (docs/features.md §1)
 const INVALID_STATUS_REFUSAL = 'ไม่สามารถเข้าสู่ระบบได้ เนื่องจากสถานะบัญชีไม่ถูกต้อง กรุณาติดต่อผู้ดูแลระบบ';
 
 export function LoginScreen() {
@@ -42,7 +42,7 @@ export function LoginScreen() {
             login(res.data.user, res.data.session_id);
             navigate('/dashboard', { replace: true });
           } else {
-            // Issue #175: an unexpected status names no Approval Status (docs/features.md §1)
+            // Issue #175: the server never answers success with another status; such an answer names no Approval Status
             setError(INVALID_STATUS_REFUSAL);
           }
         } else {

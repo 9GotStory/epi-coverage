@@ -2,6 +2,8 @@
 /**
  * Issue #172 (spec for #164) — the LoginScreen signs a User in on Approval Status `approved` alone;
  * a Role never stands in for it (CONTEXT.md §34, docs/features.md §1).
+ * Issue #175 — a refused sign-in shows the server's refusal as given; a success answer with a status the server
+ * never sends shows the refusal that names no Approval Status (docs/features.md §1).
  *
  * Seam: the rendered sign-in flow — the real AuthProvider and LoginScreen in a memory router, under StrictMode
  * as in the app. The global `fetch` is stubbed with the `loginWithGoogle` answer and Google sign-in is mocked.

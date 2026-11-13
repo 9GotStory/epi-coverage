@@ -21,13 +21,13 @@
  */
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const vm = require('node:vm');
 
 // Issue #171 / #175: the sign-in refusal names `rejected` ("ระงับสิทธิ์") and nothing else (docs/features.md §1)
 const REJECTED_REFUSAL = 'บัญชีนี้ถูกระงับสิทธิ์การเข้าใช้งาน กรุณาติดต่อผู้ดูแลระบบ';
 const INVALID_STATUS_REFUSAL = 'ไม่สามารถเข้าสู่ระบบได้ เนื่องจากสถานะบัญชีไม่ถูกต้อง กรุณาติดต่อผู้ดูแลระบบ';
-const fs = require('node:fs');
-const path = require('node:path');
-const vm = require('node:vm');
 
 const USERS_HEADER = ['id', 'google_id', 'email', 'name', 'hoscode', 'role', 'status', 'created_at', 'last_login'];
 const SESSIONS_HEADER = ['session_id', 'user_id', 'token_digest', 'ip_address', 'user_agent', 'expires_at', 'created_at'];
