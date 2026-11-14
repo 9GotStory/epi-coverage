@@ -1,5 +1,6 @@
 import { memo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../shared/contexts/AuthContext';
 import { useDashboardSummaries } from '../shared/hooks/useDashboardSummaries';
 import { useDashboardSummaryYears } from '../shared/hooks/useDashboardSummaryYears';
 import { getComparisonFiscalYears } from './comparison/model';
@@ -32,7 +33,8 @@ const AgeGroupSection = memo(function AgeGroupSection({
   fiscalYear,
   quarter,
   isLoading,
-  path
+  path,
+  signedIn
 }: {
   age: string;
   ageGroup: string;
@@ -44,6 +46,7 @@ const AgeGroupSection = memo(function AgeGroupSection({
   quarter: number | 'all';
   isLoading: boolean;
   path: string;
+  signedIn: boolean;
 }) {
   const navigate = useNavigate();
   const [isExpanded, setIsExpanded] = useState(false);
@@ -194,7 +197,7 @@ const AgeGroupSection = memo(function AgeGroupSection({
       </div>
 
       {isExpanded && (
-        <AgeGroupExpandedView summary={summary} targetView1={targetView1} targetView2={targetView2} fiscalYear={fiscalYear} quarter={quarter} ageGroup={ageGroup} updatedAt={updatedAt} />
+        <AgeGroupExpandedView summary={summary} targetView1={targetView1} targetView2={targetView2} fiscalYear={fiscalYear} quarter={quarter} ageGroup={ageGroup} updatedAt={updatedAt} signedIn={signedIn} />
       )}
     </section>
   );
@@ -215,6 +218,10 @@ export function Dashboard() {
 
   const { getTarget } = useTargetSettings();
   const [quarter, setQuarter] = useState<number | 'all'>('all');
+  // Issue #200 (ADR-0014): only a signed-in user sees the Facility Breakdown. Read here, beside the
+  // summary query, so a Sign-out re-renders it and the summaries are fetched again without a token
+  const { user } = useAuth();
+  const signedIn = user !== null;
 
   // The clock-based current FY is selectable immediately, independently of
   // the historical-year discovery query. No missing summary is fabricated as 0.
@@ -319,6 +326,7 @@ export function Dashboard() {
               quarter={quarter}
               isLoading={summariesLoading}
               path="/dashboard/epi-1yr"
+              signedIn={signedIn}
             />
 
             <AgeGroupSection
@@ -332,6 +340,7 @@ export function Dashboard() {
               quarter={quarter}
               isLoading={summariesLoading}
               path="/dashboard/epi-2yr"
+              signedIn={signedIn}
             />
 
             <AgeGroupSection
@@ -345,6 +354,7 @@ export function Dashboard() {
               quarter={quarter}
               isLoading={summariesLoading}
               path="/dashboard/epi-3yr"
+              signedIn={signedIn}
             />
 
             <AgeGroupSection
@@ -358,6 +368,7 @@ export function Dashboard() {
               quarter={quarter}
               isLoading={summariesLoading}
               path="/dashboard/epi-5yr"
+              signedIn={signedIn}
             />
           </>
         )}

@@ -792,3 +792,14 @@ It is not a Target (§16). A Target is a denominator population; a Coverage Goal
 - It is stated with the HDC processing round it comes from. When HDC OpenData has no valid figure for a dose, there is no HDC Dose Coverage for it. It is never zero, and an Imported-Data Evaluation (§54) never stands in for it.
 
 Do not call it HDC Coverage, and do not call it bare "Coverage" where an Imported-Data Evaluation is shown beside it.
+
+---
+
+## 57. Facility Breakdown
+
+A **Facility Breakdown** is the part of a Dashboard Summary (§44) that gives counts per Facility (§6): for each Facility, its total, passed and coverage (Issue #197). Thai UI wording: "ผลรายหน่วยบริการ".
+
+- A Dashboard Summary has one Facility Breakdown per view. In View 1 (§11) the counts are doses; in View 2 (§12) they are children.
+- It is an Imported-Data Evaluation (§54). HDC OpenData (§15) rows per `hospcode` are not a Facility Breakdown.
+
+Do not call it a "leaderboard": ranking is only how the page presents it.

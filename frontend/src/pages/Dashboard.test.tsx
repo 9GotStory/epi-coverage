@@ -22,6 +22,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
+import { AuthContext } from '../shared/contexts/AuthContext';
 import { Dashboard } from './Dashboard';
 import { getCurrentFiscalYear } from '../shared/utils/dateUtils';
 import type { DashboardSummaryData, DashboardSummaryRow } from '../shared/types/dashboardSummary';
@@ -33,6 +34,8 @@ vi.mock('../shared/lib/api', () => ({
 }));
 
 const currentYear = getCurrentFiscalYear();
+// /dashboard is public; these contracts run signed out (Issue #200 covers the signed-in Facility Breakdown).
+const signedOut = { user: null } as unknown as React.ContextType<typeof AuthContext>;
 
 /** Capture the rendered "ยังไม่ผ่านเกณฑ์" values, one per age-group section (JSX order: 1ปี, 2ปี, 3ปี, 5ปี). */
 const missedValuesFrom = (html: string): string[] =>
@@ -52,9 +55,11 @@ const renderDashboardWith = (summaryData: DashboardSummaryData): string => {
   client.setQueryData(['targetConfig'], {});
   return renderToStaticMarkup(
     <QueryClientProvider client={client}>
-      <MemoryRouter>
-        <Dashboard />
-      </MemoryRouter>
+      <AuthContext.Provider value={signedOut}>
+        <MemoryRouter>
+          <Dashboard />
+        </MemoryRouter>
+      </AuthContext.Provider>
     </QueryClientProvider>,
   );
 };

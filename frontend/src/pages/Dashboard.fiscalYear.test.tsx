@@ -9,6 +9,7 @@ import type { ReactNode } from 'react';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
+import { AuthContext } from '../shared/contexts/AuthContext';
 import { Dashboard } from './Dashboard';
 import { getCurrentFiscalYear } from '../shared/utils/dateUtils';
 import type { DashboardSummaryRow } from '../shared/types/dashboardSummary';
@@ -38,6 +39,8 @@ vi.mock('../shared/components/ui/select', () => ({
 }));
 
 const currentYear = getCurrentFiscalYear();
+// /dashboard is public; these contracts run signed out (Issue #200 covers the signed-in Facility Breakdown).
+const signedOut = { user: null } as unknown as React.ContextType<typeof AuthContext>;
 const previousYear = currentYear - 1;
 const earlierYear = currentYear - 2;
 
@@ -94,9 +97,11 @@ function renderDashboard(
   }
   return render(
     <QueryClientProvider client={client}>
-      <MemoryRouter>
-        <Dashboard />
-      </MemoryRouter>
+      <AuthContext.Provider value={signedOut}>
+        <MemoryRouter>
+          <Dashboard />
+        </MemoryRouter>
+      </AuthContext.Provider>
     </QueryClientProvider>,
   );
 }

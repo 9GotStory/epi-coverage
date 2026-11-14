@@ -46,7 +46,7 @@ const summary: LegacyCompatibleGroupSummary = {
 describe('age-group dashboard views have distinct responsibilities', () => {
   it.each(['1yr', '2yr', '3yr', '5yr'])(
     'keeps View 2 rule results with the HDC Fully Immunized panel, and the per-dose HDC comparison only in View 1: %s', (ageGroup) => {
-      render(<AgeGroupExpandedView summary={summary} fiscalYear={2569}
+      render(<AgeGroupExpandedView signedIn summary={summary} fiscalYear={2569}
         ageGroup={ageGroup} quarter="all" />);
       expect(screen.getByText('ผลการประเมินวัคซีนครบชุด')).toBeTruthy();
       expect(screen.getByText('ความครอบคลุมวัคซีนครบชุด แยกตามหน่วยบริการ')).toBeTruthy();
@@ -64,7 +64,7 @@ describe('age-group dashboard views have distinct responsibilities', () => {
 
   it.each([1, 2, 3, 4] as const)(
     'offers the annual HDC Fully Immunized panel only for the whole fiscal year, not quarter %s', (quarter) => {
-      render(<AgeGroupExpandedView summary={summary} fiscalYear={2569} ageGroup="1yr" quarter={quarter} />);
+      render(<AgeGroupExpandedView signedIn summary={summary} fiscalYear={2569} ageGroup="1yr" quarter={quarter} />);
       expect(screen.getByText('ผลการประเมินวัคซีนครบชุด')).toBeTruthy();
       expect(screen.queryByRole('button', { name: 'ความครอบคลุมตาม HDC (Fully Immunized)' })).toBeNull();
     },
@@ -73,13 +73,13 @@ describe('age-group dashboard views have distinct responsibilities', () => {
 
 describe('Issue #89 — View 2 breakdown shows its denominator and ประเมินไม่ได้ states', () => {
   it('renders (passed/total) next to every View 2 rule percentage', () => {
-    render(<AgeGroupExpandedView summary={summary} fiscalYear={2569} ageGroup="1yr" quarter="all" />);
+    render(<AgeGroupExpandedView signedIn summary={summary} fiscalYear={2569} ageGroup="1yr" quarter="all" />);
     expect(screen.getByText('(10/20)')).toBeTruthy();
     expect(screen.getByText('50.0%')).toBeTruthy();
   });
 
   it('announces unevaluable children separately from coverage (data-quality, not chase list)', () => {
-    render(<AgeGroupExpandedView summary={{ ...summary, view2NotEvaluableCount: 5 }} fiscalYear={2569} ageGroup="1yr" quarter="all" />);
+    render(<AgeGroupExpandedView signedIn summary={{ ...summary, view2NotEvaluableCount: 5 }} fiscalYear={2569} ageGroup="1yr" quarter="all" />);
     expect(screen.getByText('ข้อมูลไม่ครบตามเกณฑ์ 5 คน ประเมิน Fully Immunized ไม่ได้ จึงไม่รวมในการคำนวณร้อยละ')).toBeTruthy();
   });
 
@@ -88,7 +88,7 @@ describe('Issue #89 — View 2 breakdown shows its denominator and ประเ�
       ...summary,
       view2Breakdown: [{ name: 'MMR เข็ม 1', passed: 0, total: 0, coverage: 0, metric_key: 'mmr1' }],
     };
-    render(<AgeGroupExpandedView summary={blocked} fiscalYear={2569} ageGroup="1yr" quarter="all" />);
+    render(<AgeGroupExpandedView signedIn summary={blocked} fiscalYear={2569} ageGroup="1yr" quarter="all" />);
     expect(screen.getByText('ยังประเมินไม่ได้')).toBeTruthy();
     expect(screen.queryByText('0.0%')).toBeNull();
   });
@@ -96,12 +96,12 @@ describe('Issue #89 — View 2 breakdown shows its denominator and ประเ�
 
 describe('Issue #102 — ตรวจสอบประวัติ is announced apart from coverage', () => {
   it('announces children whose only problem is a date warning in View 2', () => {
-    render(<AgeGroupExpandedView summary={{ ...summary, view2ReviewCount: 4 }} fiscalYear={2569} ageGroup="1yr" quarter="all" />);
+    render(<AgeGroupExpandedView signedIn summary={{ ...summary, view2ReviewCount: 4 }} fiscalYear={2569} ageGroup="1yr" quarter="all" />);
     expect(screen.getByText('ตรวจสอบประวัติ 4 คน (วันที่ผิดปกติ ไม่ใช่วัคซีนขาด) จึงไม่รวมในการคำนวณร้อยละ')).toBeTruthy();
   });
 
   it('announces dose rules with only a date warning in View 1', () => {
-    render(<AgeGroupExpandedView summary={{ ...summary, view1ReviewDoses: 3 }} fiscalYear={2569} ageGroup="1yr" quarter="all" />);
+    render(<AgeGroupExpandedView signedIn summary={{ ...summary, view1ReviewDoses: 3 }} fiscalYear={2569} ageGroup="1yr" quarter="all" />);
     fireEvent.mouseDown(screen.getByRole('tab', { name: 'มุมมองที่ 1 (รายวัคซีน)' }), { button: 0 });
     expect(screen.getByText('ตรวจสอบประวัติ 3 รายการ (วันที่ผิดปกติ ไม่ใช่วัคซีนขาด) จึงไม่รวมในการคำนวณร้อยละ')).toBeTruthy();
   });

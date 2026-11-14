@@ -9,6 +9,7 @@
 import { StrictMode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import { AuthProvider, useAuth } from '../../../shared/contexts/AuthContext';
 import { ProtectedRoute } from '../../../shared/components/ProtectedRoute';
@@ -71,7 +72,8 @@ function renderApp(initialPath: string) {
       },
     ],
   }], { initialEntries: [initialPath] });
-  render(<StrictMode><AuthProvider><RouterProvider router={router} /></AuthProvider></StrictMode>);
+  // main.tsx places AuthProvider inside QueryClientProvider (Issue #200: it clears the cache on sign-in, Sign-out and Session End)
+  render(<StrictMode><QueryClientProvider client={new QueryClient()}><AuthProvider><RouterProvider router={router} /></AuthProvider></QueryClientProvider></StrictMode>);
   return router;
 }
 
