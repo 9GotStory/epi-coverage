@@ -1,10 +1,22 @@
 # ADR-0005: Route OpenData Acquisition Through an External Fetch Relay
 
-* Status: Accepted
+* Status: Deprecated
 * Date: 2026-09-28
 * Recorded retrospectively: no
 * Supersedes: none (references ADR-0004; does not supersede it)
 * Superseded by: none
+
+## Deprecation (2026-11-14)
+
+This decision never took effect and is no longer recommended (Issue #185).
+
+* On 2026-09-28 the single authenticated egress canary (Issue #39) returned HTTP 403, which under the pre-frozen gate rejected Cloudflare Workers as the relay runtime.
+* No GAS transport adapter or Script Property cutover was ever made; the backend has no relay handling.
+* The GAS → MOPH HTTP 403 that began on 2026-09-12 cleared without any EPI Coverage transport change, and direct GAS acquisition was verified again under Issue #34 (closed 2026-09-28).
+
+OpenData acquisition is direct GAS → MOPH under [ADR-0004](0004-rate-limit-safe-moph-opendata-sync.md). If MOPH blocks GAS egress again, ADR-0004's fail-closed retention of the last-known-good cache applies; an external relay would require fresh evidence and a new ADR, as ADR-0004 already states. The relay code was merged in PR #40; retiring the deployed Worker and removing that code are tracked in Issue #39.
+
+The decision text below is kept unchanged as history.
 
 ## Context
 
