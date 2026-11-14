@@ -117,6 +117,23 @@ function toSummaryEntry_(row) {
   }
 }
 
+/**
+ * Issue #200 (ADR-0014): the Facility Breakdown (CONTEXT.md §57) is not public. Returns the
+ * summary-read result with the Facility-level fields removed from every summary; a failed read
+ * passes through unchanged.
+ */
+function withoutFacilityBreakdown_(result) {
+  if (!result || !Array.isArray(result.summaries)) return result;
+  return Object.assign({}, result, {
+    summaries: result.summaries.map(function (entry) {
+      const summaryData = Object.assign({}, entry.summaryData);
+      delete summaryData.facilityBreakdownV1;
+      delete summaryData.facilityBreakdownV2;
+      return Object.assign({}, entry, { summaryData: summaryData });
+    })
+  });
+}
+
 /** Required base Comparison fields must be present as real numbers — 0 is a valid value. */
 function isUsableAnnualSummaryData_(summaryData) {
   if (!summaryData || typeof summaryData !== 'object' || Array.isArray(summaryData)) return false;

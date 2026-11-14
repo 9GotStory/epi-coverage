@@ -52,7 +52,7 @@ function respond(rows: unknown[]) {
 function renderView(age: Age = '1yr', quarter: 'all' | 1 | 2 | 3 | 4 = 'all') {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(<QueryClientProvider client={queryClient}>
-    <AgeGroupExpandedView summary={summary} fiscalYear={2569} ageGroup={age} quarter={quarter} />
+    <AgeGroupExpandedView signedIn summary={summary} fiscalYear={2569} ageGroup={age} quarter={quarter} />
   </QueryClientProvider>);
 }
 

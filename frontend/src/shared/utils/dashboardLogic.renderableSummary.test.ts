@@ -53,9 +53,13 @@ describe('isRenderableGroupSummary', () => {
   });
 
   it('rejects rows without the breakdown arrays the expanded view filters over', () => {
-    const { facilityBreakdownV2, ...withoutFacility } = completeSummary;
-    expect(isRenderableGroupSummary(withoutFacility)).toBe(false);
     expect(isRenderableGroupSummary({ ...completeSummary, view1Breakdown: undefined })).toBe(false);
+    expect(isRenderableGroupSummary({ ...completeSummary, facilityBreakdownV2: 'not an array' })).toBe(false);
+  });
+
+  it('Issue #200: renders the anonymous shape, which has no Facility Breakdown', () => {
+    const { facilityBreakdownV1: _v1, facilityBreakdownV2: _v2, ...anonymous } = completeSummary;
+    expect(isRenderableGroupSummary(anonymous)).toBe(true);
   });
 
   it('rejects non-object summaries outright', () => {

@@ -36,8 +36,10 @@ export interface GroupSummary {
  * denominator contract above, but historical snapshots may predate it — the denominator fields
  * are OPTIONAL here so legacy rows stay consumable without fabricating values.
  */
-export type LegacyCompatibleGroupSummary = Omit<GroupSummary, 'view2ApplicableTotal' | 'view2PendingCount' | 'view2NotEvaluableCount' | 'view2ReviewCount'> &
-  Partial<Pick<GroupSummary, 'view2ApplicableTotal' | 'view2PendingCount' | 'view2NotEvaluableCount' | 'view2ReviewCount'>>;
+export type LegacyCompatibleGroupSummary = Omit<GroupSummary, 'view2ApplicableTotal' | 'view2PendingCount' | 'view2NotEvaluableCount' | 'view2ReviewCount' | 'facilityBreakdownV1' | 'facilityBreakdownV2'> &
+  Partial<Pick<GroupSummary, 'view2ApplicableTotal' | 'view2PendingCount' | 'view2NotEvaluableCount' | 'view2ReviewCount'>> &
+  /** Issue #200 (ADR-0014): the server sends the Facility Breakdown only to a signed-in caller. */
+  Partial<Pick<GroupSummary, 'facilityBreakdownV1' | 'facilityBreakdownV2'>>;
 
 /**
  * Issue #80: renderability gate for a stored snapshot before the Dashboard cards
@@ -53,8 +55,10 @@ export function isRenderableGroupSummary(value: unknown): value is LegacyCompati
   const summary = value as Record<string, unknown>;
   const numericFields = ['total', 'view1PassedDoses', 'view1TotalDoses', 'view1Coverage', 'view2Passed', 'view2Coverage'];
   if (!numericFields.every(field => typeof summary[field] === 'number' && Number.isFinite(summary[field]))) return false;
-  const arrayFields = ['view1Breakdown', 'view2Breakdown', 'facilityBreakdownV1', 'facilityBreakdownV2'];
-  return arrayFields.every(field => Array.isArray(summary[field]));
+  const arrayFields = ['view1Breakdown', 'view2Breakdown'];
+  if (!arrayFields.every(field => Array.isArray(summary[field]))) return false;
+  // Issue #200: an anonymous caller receives no Facility Breakdown; when present it must be an array.
+  return ['facilityBreakdownV1', 'facilityBreakdownV2'].every(field => summary[field] === undefined || Array.isArray(summary[field]));
 }
 
 /**

@@ -1,5 +1,6 @@
 import { memo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../shared/contexts/AuthContext';
 import { useDashboardSummaries } from '../shared/hooks/useDashboardSummaries';
 import { useDashboardSummaryYears } from '../shared/hooks/useDashboardSummaryYears';
 import { getComparisonFiscalYears } from './comparison/model';
@@ -46,6 +47,8 @@ const AgeGroupSection = memo(function AgeGroupSection({
   path: string;
 }) {
   const navigate = useNavigate();
+  // Issue #200 (ADR-0014): only a signed-in user sees the Facility Breakdown
+  const { user } = useAuth();
   const [isExpanded, setIsExpanded] = useState(false);
   if (isLoading) {
     return (
@@ -194,7 +197,7 @@ const AgeGroupSection = memo(function AgeGroupSection({
       </div>
 
       {isExpanded && (
-        <AgeGroupExpandedView summary={summary} targetView1={targetView1} targetView2={targetView2} fiscalYear={fiscalYear} quarter={quarter} ageGroup={ageGroup} updatedAt={updatedAt} />
+        <AgeGroupExpandedView summary={summary} targetView1={targetView1} targetView2={targetView2} fiscalYear={fiscalYear} quarter={quarter} ageGroup={ageGroup} updatedAt={updatedAt} signedIn={user !== null} />
       )}
     </section>
   );

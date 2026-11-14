@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import type { LegacyCompatibleGroupSummary } from '../utils/dashboardLogic';
 import { useTargetSettings } from '../hooks/useTargetSettings';
@@ -27,6 +28,8 @@ interface AgeGroupExpandedViewProps {
   quarter: number | 'all';
   ageGroup: string;
   updatedAt?: string | null;
+  /** Issue #200 (ADR-0014): the Facility Breakdown is shown only to a signed-in user. */
+  signedIn: boolean;
 }
 
 interface FacilityGroupProps {
@@ -97,7 +100,14 @@ const FacilityGroup = ({ title, facilities, target, isPassedGroup }: FacilityGro
   );
 };
 
-export function AgeGroupExpandedView({ summary, targetView1, targetView2, fiscalYear, quarter, ageGroup, updatedAt }: AgeGroupExpandedViewProps) {
+/** Issue #200: shown signed out in place of the Facility Breakdown (CONTEXT.md §57), never for missing data. */
+const FacilitySignInNote = () => (
+  <p className="text-xs text-zinc-500 py-2">
+    <Link to="/login" className="text-primary font-medium hover:underline">เข้าสู่ระบบเพื่อดูผลรายหน่วยบริการ</Link>
+  </p>
+);
+
+export function AgeGroupExpandedView({ summary, targetView1, targetView2, fiscalYear, quarter, ageGroup, updatedAt, signedIn }: AgeGroupExpandedViewProps) {
   const { getTarget } = useTargetSettings();
   const { rules } = useVaccineRules(fiscalYear, ageGroup);
   // จับคู่ชื่อเกณฑ์ (display_name จาก summary) → vaccine_group จาก vaccine_rules — ไม่เดาจากชื่อ
@@ -113,11 +123,11 @@ export function AgeGroupExpandedView({ summary, targetView1, targetView2, fiscal
   };
 
   // Use useMemo to avoid recalculating array filters on every re-render
-  const passedFacilitiesV1 = useMemo(() => summary.facilityBreakdownV1.filter(f => f.coverage >= (targetView1 ?? 0)), [summary.facilityBreakdownV1, targetView1]);
-  const failedFacilitiesV1 = useMemo(() => summary.facilityBreakdownV1.filter(f => f.coverage < (targetView1 ?? 0)).sort((a, b) => a.coverage - b.coverage), [summary.facilityBreakdownV1, targetView1]);
+  const passedFacilitiesV1 = useMemo(() => (summary.facilityBreakdownV1 ?? []).filter(f => f.coverage >= (targetView1 ?? 0)), [summary.facilityBreakdownV1, targetView1]);
+  const failedFacilitiesV1 = useMemo(() => (summary.facilityBreakdownV1 ?? []).filter(f => f.coverage < (targetView1 ?? 0)).sort((a, b) => a.coverage - b.coverage), [summary.facilityBreakdownV1, targetView1]);
   
-  const passedFacilitiesV2 = useMemo(() => summary.facilityBreakdownV2.filter(f => f.coverage >= (targetView2 ?? 0)), [summary.facilityBreakdownV2, targetView2]);
-  const failedFacilitiesV2 = useMemo(() => summary.facilityBreakdownV2.filter(f => f.coverage < (targetView2 ?? 0)).sort((a, b) => a.coverage - b.coverage), [summary.facilityBreakdownV2, targetView2]);
+  const passedFacilitiesV2 = useMemo(() => (summary.facilityBreakdownV2 ?? []).filter(f => f.coverage >= (targetView2 ?? 0)), [summary.facilityBreakdownV2, targetView2]);
+  const failedFacilitiesV2 = useMemo(() => (summary.facilityBreakdownV2 ?? []).filter(f => f.coverage < (targetView2 ?? 0)).sort((a, b) => a.coverage - b.coverage), [summary.facilityBreakdownV2, targetView2]);
   
   return (
     <div className="mt-4 pt-5 border-t border-zinc-100 animate-in fade-in slide-in-from-top-2 duration-300">
@@ -186,10 +196,12 @@ export function AgeGroupExpandedView({ summary, targetView1, targetView2, fiscal
                 ตัวเลขในวงเล็บคือ <strong>รายการวัคซีนที่ผ่านเกณฑ์ / รายการที่ประเมินได้</strong> ผลอาจต่างจากรายงาน HDC
               </p>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <FacilityGroup title={targetView1 === undefined ? 'ผลรายหน่วยบริการ' : 'หน่วยบริการที่ถึงเป้าหมาย'} facilities={passedFacilitiesV1} target={targetView1} isPassedGroup={true} />
-              {targetView1 !== undefined && <FacilityGroup title="หน่วยบริการที่ยังไม่ถึงเป้าหมาย" facilities={failedFacilitiesV1} target={targetView1} isPassedGroup={false} />}
-            </div>
+            {signedIn ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <FacilityGroup title={targetView1 === undefined ? 'ผลรายหน่วยบริการ' : 'หน่วยบริการที่ถึงเป้าหมาย'} facilities={passedFacilitiesV1} target={targetView1} isPassedGroup={true} />
+                {targetView1 !== undefined && <FacilityGroup title="หน่วยบริการที่ยังไม่ถึงเป้าหมาย" facilities={failedFacilitiesV1} target={targetView1} isPassedGroup={false} />}
+              </div>
+            ) : <FacilitySignInNote />}
           </div>
         </TabsContent>
 
@@ -257,10 +269,12 @@ export function AgeGroupExpandedView({ summary, targetView1, targetView2, fiscal
                 ตัวเลขในวงเล็บคือ <strong>เด็กที่ผ่านเกณฑ์ / เด็กที่ประเมินได้</strong> ผลอาจต่างจากรายงาน HDC
               </p>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <FacilityGroup title={targetView2 === undefined ? 'ผลรายหน่วยบริการ' : 'หน่วยบริการที่ถึงเป้าหมาย'} facilities={passedFacilitiesV2} target={targetView2} isPassedGroup={true} />
-              {targetView2 !== undefined && <FacilityGroup title="หน่วยบริการที่ยังไม่ถึงเป้าหมาย" facilities={failedFacilitiesV2} target={targetView2} isPassedGroup={false} />}
-            </div>
+            {signedIn ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <FacilityGroup title={targetView2 === undefined ? 'ผลรายหน่วยบริการ' : 'หน่วยบริการที่ถึงเป้าหมาย'} facilities={passedFacilitiesV2} target={targetView2} isPassedGroup={true} />
+                {targetView2 !== undefined && <FacilityGroup title="หน่วยบริการที่ยังไม่ถึงเป้าหมาย" facilities={failedFacilitiesV2} target={targetView2} isPassedGroup={false} />}
+              </div>
+            ) : <FacilitySignInNote />}
           </div>
         </TabsContent>
       </Tabs>

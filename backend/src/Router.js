@@ -40,8 +40,22 @@ function handleRequest(method, e) {
         case 'loginWithGoogle': return responseJson(loginWithGoogle(body.accessToken, body.ipAddress || '', body.userAgent || ''));
         case 'createUser': return responseJson(createUser(body.userData));
         case 'getTargetConfig': return responseJson(getTargetConfig());
-        case 'getDashboardSummaries': return responseJson(getDashboardSummaries(body.fiscalYear || e.parameter.fiscalYear, body.quarter || e.parameter.quarter));
-        case 'getDashboardSummariesMultiYear': return responseJson(getDashboardSummariesMultiYear(body.fiscalYears));
+        // Issue #200 (ADR-0014): the summary reads stay public, but only a valid token receives the
+        // Facility Breakdown. A token the server no longer accepts is a Session End (401), never a
+        // silent fallback to the public shape.
+        case 'getDashboardSummaries':
+        case 'getDashboardSummariesMultiYear': {
+          let facilityAccess = false;
+          if (authToken) {
+            const summaryAuth = validateTokenAndGetRole(authToken);
+            if (!summaryAuth.valid) return responseJson({ error: 'Unauthorized: ' + summaryAuth.error }, 401);
+            facilityAccess = true;
+          }
+          const result = action === 'getDashboardSummaries'
+            ? getDashboardSummaries(body.fiscalYear || e.parameter.fiscalYear, body.quarter || e.parameter.quarter)
+            : getDashboardSummariesMultiYear(body.fiscalYears);
+          return responseJson(facilityAccess ? result : withoutFacilityBreakdown_(result));
+        }
         // Issue #22: aggregate-only comparison-usable years (public summary-read class)
         case 'getDashboardSummaryYears': return responseJson(getDashboardSummaryYears());
         case 'getVaccineRules': return responseJson(getVaccineRules(body.fiscalYear || e.parameter.fiscalYear, body.ageGroup || e.parameter.ageGroup));

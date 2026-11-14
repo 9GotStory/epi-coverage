@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import type { ReactNode } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import type { User } from '../types';
 import { fetchApi } from '../lib/api';
 
@@ -24,6 +25,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Issue #159: whether this tab holds a Session, updated synchronously so a 401 that answers the
   // Sign-out's own deleteSession (or arrives after it) is not taken for a Session End
   const hasSession = useRef(false);
+  // Issue #200 (ADR-0014): every cached API read is dropped when the signed-in state changes, so a
+  // Facility Breakdown fetched while signed in never stays on the public dashboard after it ends
+  const queryClient = useQueryClient();
 
   // Load session from localStorage on mount
   useEffect(() => {
@@ -41,6 +45,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const handleUnauthorized = () => {
       if (hasSession.current) setSessionEnded(true);
       hasSession.current = false;
+      queryClient.clear();
       setUser(null);
       setToken(null);
       localStorage.removeItem('user');
@@ -51,15 +56,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     window.addEventListener('auth:unauthorized', handleUnauthorized);
     return () => window.removeEventListener('auth:unauthorized', handleUnauthorized);
-  }, []);
+  }, [queryClient]);
 
   const login = useCallback((userData: User, authToken: string) => {
     hasSession.current = true;
+    queryClient.clear();
     setUser(userData);
     setToken(authToken);
     localStorage.setItem('user', JSON.stringify(userData));
     localStorage.setItem('token', authToken);
-  }, []);
+  }, [queryClient]);
 
   const logout = useCallback(async () => {
     if (token) {
@@ -67,11 +73,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       fetchApi('deleteSession', { token }).catch(console.error);
     }
     hasSession.current = false;
+    queryClient.clear();
     setUser(null);
     setToken(null);
     localStorage.removeItem('user');
     localStorage.removeItem('token');
-  }, [token]);
+  }, [token, queryClient]);
 
   const clearSessionEnded = useCallback(() => setSessionEnded(false), []);
 

@@ -94,10 +94,11 @@ test('#156 doPost: a public and a protected action behave as before', () => {
     postData: { contents: JSON.stringify({ action, auth_token: TOKEN, ...body }) },
   });
 
+  // getDashboardSummaries checks a token it is given since Issue #200 (facility-breakdown-access.test.cjs)
   const pub = routerHarness();
-  const summaries = post(pub, 'getDashboardSummaries', { fiscalYear: 2569, quarter: 'all' });
-  assert.equal(summaries.status, 200);
-  assert.deepEqual(pub.calls.map(c => c.name), ['getDashboardSummaries'], 'a public action needs no token check');
+  const years = post(pub, 'getDashboardSummaryYears');
+  assert.equal(years.status, 200);
+  assert.deepEqual(pub.calls.map(c => c.name), ['getDashboardSummaryYears'], 'a public action needs no token check');
 
   const admin = routerHarness();
   const preview = post(admin, 'previewEpiImportUndo', { targetTable: 'Epi_1_Year', fiscalYear: '2569' });
