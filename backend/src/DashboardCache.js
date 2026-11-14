@@ -126,6 +126,7 @@ function withoutFacilityBreakdown_(result) {
   if (!result || !Array.isArray(result.summaries)) return result;
   return Object.assign({}, result, {
     summaries: result.summaries.map(function (entry) {
+      if (!entry.summaryData || typeof entry.summaryData !== 'object') return entry;
       const summaryData = Object.assign({}, entry.summaryData);
       delete summaryData.facilityBreakdownV1;
       delete summaryData.facilityBreakdownV2;

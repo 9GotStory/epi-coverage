@@ -13,11 +13,12 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ReactNode } from 'react';
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { Dashboard } from './Dashboard';
-import { AuthContext } from '../shared/contexts/AuthContext';
+import { AuthContext, AuthProvider, useAuth } from '../shared/contexts/AuthContext';
+import { fetchApi } from '../shared/lib/api';
 import { getCurrentFiscalYear } from '../shared/utils/dateUtils';
 import type { DashboardSummaryData, DashboardSummaryRow } from '../shared/types/dashboardSummary';
 
@@ -38,7 +39,7 @@ vi.mock('../shared/components/ui/select', () => ({
   SelectItem: ({ value, children }: { value: string; children?: ReactNode }) => <option value={value}>{children}</option>,
 }));
 
-afterEach(cleanup);
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 const currentYear = getCurrentFiscalYear();
 const SIGN_IN_MESSAGE = 'เข้าสู่ระบบเพื่อดูผลรายหน่วยบริการ';
@@ -98,8 +99,7 @@ function openView1(card: HTMLElement) {
 }
 
 function expectSignInMessageOnly(card: HTMLElement) {
-  const message = within(card).getByText(SIGN_IN_MESSAGE);
-  expect(message.closest('a')?.getAttribute('href') ?? within(card).getByRole('link', { name: /เข้าสู่ระบบ/ }).getAttribute('href')).toBe('/login');
+  expect(within(card).getByRole('link', { name: SIGN_IN_MESSAGE }).getAttribute('href')).toBe('/login');
   expect(within(card).queryByText(/รพ\.สต\.ทดสอบ|ทดสอบหนึ่ง|ทดสอบสอง/)).toBeNull();
   expect(within(card).queryByText('(2/3)')).toBeNull();
   expect(within(card).queryByText('(9/12)')).toBeNull();
@@ -146,11 +146,68 @@ describe('Issue #200 — signed in, the Facility Breakdown shows as before', () 
     expect(within(card).queryByText(SIGN_IN_MESSAGE)).toBeNull();
   });
 
-  it('keeps the no-Facility state, not the sign-in message, for a summary without a Facility Breakdown', () => {
+  it('shows the district figures and an empty Facility list, not the sign-in message, for a summary without a Facility Breakdown', () => {
     renderDashboard(true, anonymous);
     const card = expandAge1();
     expect(within(card).queryByText(/ยังไม่มีข้อมูลสรุป/)).toBeNull();
     expect(within(card).queryByText(SIGN_IN_MESSAGE)).toBeNull();
     expect(within(card).getAllByText('ยังไม่มีหน่วยบริการในกลุ่มนี้').length).toBeGreaterThan(0);
+  });
+});
+
+// The same in-memory stand-in as LoginScreen.sessionEnd.test.tsx.
+function memoryStorage() {
+  const items = new Map<string, string>();
+  return {
+    getItem: (key: string) => items.get(key) ?? null,
+    setItem: (key: string, value: string) => { items.set(key, String(value)); },
+    removeItem: (key: string) => { items.delete(key); },
+  };
+}
+
+function SignOutButton() {
+  const { logout } = useAuth();
+  return <button type="button" onClick={() => logout()}>sign out</button>;
+}
+
+describe('Issue #200 — Sign-out on an open dashboard', () => {
+  it('fetches the summaries again without a token and shows no Facility rows', async () => {
+    vi.stubGlobal('localStorage', memoryStorage());
+    localStorage.setItem('user', JSON.stringify({ id: 'u1', role: 'user', status: 'approved', hoscode: '00001' }));
+    localStorage.setItem('token', 'synthetic-token-0200');
+    const calls: { action: string; token: string | null }[] = [];
+    vi.mocked(fetchApi).mockImplementation(async (action: string) => {
+      calls.push({ action, token: localStorage.getItem('token') });
+      if (action === 'getDashboardSummaries') return { data: { success: true, summaries: [row('all', anonymous)] } };
+      if (action === 'getDashboardSummaryYears') return { data: { success: true, tables: { Epi_1_Year: [currentYear] } } };
+      return { data: { success: true } };
+    });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    client.setQueryData(['dashboardSummaryYears'], { Epi_1_Year: [currentYear] });
+    client.setQueryData(['targetConfig'], {});
+    client.setQueryData(['dashboardSummaries', currentYear, 'all'], [row('all', signedInShape)]);
+    render(
+      <QueryClientProvider client={client}>
+        <AuthProvider>
+          <MemoryRouter>
+            <SignOutButton />
+            <Dashboard />
+          </MemoryRouter>
+        </AuthProvider>
+      </QueryClientProvider>,
+    );
+    expect(within(expandAge1()).getByText('(2/3)')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'sign out' }));
+
+    await waitFor(() => expect(calls).toContainEqual({ action: 'getDashboardSummaries', token: null }));
+    expect(calls.filter(call => call.action === 'getDashboardSummaries' && call.token !== null)).toEqual([]);
+    const card = await waitFor(() => {
+      const section = screen.getByText('ภาพรวมเด็กอายุครบ 1 ปี').closest('section')!;
+      expect(within(section).getByText('85.70')).toBeTruthy();
+      return section;
+    });
+    expect(client.getQueryData(['dashboardSummaries', currentYear, 'all'])).toEqual([row('all', anonymous)]);
+    expect(within(card).queryByText('(2/3)')).toBeNull();
   });
 });

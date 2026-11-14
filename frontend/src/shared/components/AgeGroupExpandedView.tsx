@@ -100,12 +100,27 @@ const FacilityGroup = ({ title, facilities, target, isPassedGroup }: FacilityGro
   );
 };
 
-/** Issue #200: shown signed out in place of the Facility Breakdown (CONTEXT.md §57), never for missing data. */
-const FacilitySignInNote = () => (
-  <p className="text-xs text-zinc-500 py-2">
-    <Link to="/login" className="text-primary font-medium hover:underline">เข้าสู่ระบบเพื่อดูผลรายหน่วยบริการ</Link>
-  </p>
-);
+/**
+ * The Facility Breakdown (CONTEXT.md §57) of one view, split by the Coverage Goal. Issue #200
+ * (ADR-0014): signed out, a sign-in link stands in its place; it never stands for missing data.
+ */
+const FacilityBreakdownGroups = ({ facilities = [], target, signedIn }: { facilities?: FacilityData[]; target?: number; signedIn: boolean }) => {
+  const passed = useMemo(() => facilities.filter(f => f.coverage >= (target ?? 0)), [facilities, target]);
+  const failed = useMemo(() => facilities.filter(f => f.coverage < (target ?? 0)).sort((a, b) => a.coverage - b.coverage), [facilities, target]);
+  if (!signedIn) {
+    return (
+      <p className="text-xs text-zinc-500 py-2">
+        <Link to="/login" className="text-primary hover:underline">เข้าสู่ระบบเพื่อดูผลรายหน่วยบริการ</Link>
+      </p>
+    );
+  }
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <FacilityGroup title={target === undefined ? 'ผลรายหน่วยบริการ' : 'หน่วยบริการที่ถึงเป้าหมาย'} facilities={passed} target={target} isPassedGroup={true} />
+      {target !== undefined && <FacilityGroup title="หน่วยบริการที่ยังไม่ถึงเป้าหมาย" facilities={failed} target={target} isPassedGroup={false} />}
+    </div>
+  );
+};
 
 export function AgeGroupExpandedView({ summary, targetView1, targetView2, fiscalYear, quarter, ageGroup, updatedAt, signedIn }: AgeGroupExpandedViewProps) {
   const { getTarget } = useTargetSettings();
@@ -122,13 +137,6 @@ export function AgeGroupExpandedView({ summary, targetView1, targetView2, fiscal
     return defaultTarget;
   };
 
-  // Use useMemo to avoid recalculating array filters on every re-render
-  const passedFacilitiesV1 = useMemo(() => (summary.facilityBreakdownV1 ?? []).filter(f => f.coverage >= (targetView1 ?? 0)), [summary.facilityBreakdownV1, targetView1]);
-  const failedFacilitiesV1 = useMemo(() => (summary.facilityBreakdownV1 ?? []).filter(f => f.coverage < (targetView1 ?? 0)).sort((a, b) => a.coverage - b.coverage), [summary.facilityBreakdownV1, targetView1]);
-  
-  const passedFacilitiesV2 = useMemo(() => (summary.facilityBreakdownV2 ?? []).filter(f => f.coverage >= (targetView2 ?? 0)), [summary.facilityBreakdownV2, targetView2]);
-  const failedFacilitiesV2 = useMemo(() => (summary.facilityBreakdownV2 ?? []).filter(f => f.coverage < (targetView2 ?? 0)).sort((a, b) => a.coverage - b.coverage), [summary.facilityBreakdownV2, targetView2]);
-  
   return (
     <div className="mt-4 pt-5 border-t border-zinc-100 animate-in fade-in slide-in-from-top-2 duration-300">
       <Tabs defaultValue="view2" className="w-full">
@@ -196,12 +204,7 @@ export function AgeGroupExpandedView({ summary, targetView1, targetView2, fiscal
                 ตัวเลขในวงเล็บคือ <strong>รายการวัคซีนที่ผ่านเกณฑ์ / รายการที่ประเมินได้</strong> ผลอาจต่างจากรายงาน HDC
               </p>
             </div>
-            {signedIn ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <FacilityGroup title={targetView1 === undefined ? 'ผลรายหน่วยบริการ' : 'หน่วยบริการที่ถึงเป้าหมาย'} facilities={passedFacilitiesV1} target={targetView1} isPassedGroup={true} />
-                {targetView1 !== undefined && <FacilityGroup title="หน่วยบริการที่ยังไม่ถึงเป้าหมาย" facilities={failedFacilitiesV1} target={targetView1} isPassedGroup={false} />}
-              </div>
-            ) : <FacilitySignInNote />}
+            <FacilityBreakdownGroups facilities={summary.facilityBreakdownV1} target={targetView1} signedIn={signedIn} />
           </div>
         </TabsContent>
 
@@ -269,12 +272,7 @@ export function AgeGroupExpandedView({ summary, targetView1, targetView2, fiscal
                 ตัวเลขในวงเล็บคือ <strong>เด็กที่ผ่านเกณฑ์ / เด็กที่ประเมินได้</strong> ผลอาจต่างจากรายงาน HDC
               </p>
             </div>
-            {signedIn ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <FacilityGroup title={targetView2 === undefined ? 'ผลรายหน่วยบริการ' : 'หน่วยบริการที่ถึงเป้าหมาย'} facilities={passedFacilitiesV2} target={targetView2} isPassedGroup={true} />
-                {targetView2 !== undefined && <FacilityGroup title="หน่วยบริการที่ยังไม่ถึงเป้าหมาย" facilities={failedFacilitiesV2} target={targetView2} isPassedGroup={false} />}
-              </div>
-            ) : <FacilitySignInNote />}
+            <FacilityBreakdownGroups facilities={summary.facilityBreakdownV2} target={targetView2} signedIn={signedIn} />
           </div>
         </TabsContent>
       </Tabs>

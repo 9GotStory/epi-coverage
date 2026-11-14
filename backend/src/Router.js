@@ -45,16 +45,16 @@ function handleRequest(method, e) {
         // silent fallback to the public shape.
         case 'getDashboardSummaries':
         case 'getDashboardSummariesMultiYear': {
-          let facilityAccess = false;
+          let signedIn = false;
           if (authToken) {
             const summaryAuth = validateTokenAndGetRole(authToken);
             if (!summaryAuth.valid) return responseJson({ error: 'Unauthorized: ' + summaryAuth.error }, 401);
-            facilityAccess = true;
+            signedIn = true;
           }
           const result = action === 'getDashboardSummaries'
             ? getDashboardSummaries(body.fiscalYear || e.parameter.fiscalYear, body.quarter || e.parameter.quarter)
             : getDashboardSummariesMultiYear(body.fiscalYears);
-          return responseJson(facilityAccess ? result : withoutFacilityBreakdown_(result));
+          return responseJson(signedIn ? result : withoutFacilityBreakdown_(result));
         }
         // Issue #22: aggregate-only comparison-usable years (public summary-read class)
         case 'getDashboardSummaryYears': return responseJson(getDashboardSummaryYears());
