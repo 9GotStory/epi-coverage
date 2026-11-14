@@ -103,5 +103,5 @@ This decision is not a claim that Cloudflare egress is accepted by MOPH; that is
 * GitHub Issue #34 — production GAS alignment / OpenData freshness (parent incident)
 * GitHub Issue #39 — relay implementation and egress canary
 * `0004-rate-limit-safe-moph-opendata-sync.md` — remains authoritative for sequential pair processing, inter-pair pacing, bounded retry policy, fail-closed behavior, cache retention, and invocation-source audit
-* `../../relay/` — the isolated relay deployable (source, tests, wrangler configuration)
+* PR #40 — the isolated relay deployable (source, tests, wrangler configuration); removed from the repository in Issue #39
 * `../spec.md` — current technical architecture
