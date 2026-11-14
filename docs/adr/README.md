@@ -196,7 +196,7 @@ Creating an ADR documents an architectural decision. It does not authorize expan
 - [ADR-0002](0002-separate-individual-and-aggregate-epi-data.md) — Separate individual EPI data from aggregate HDC OpenData. **Accepted**
 - [ADR-0003](0003-centralize-config-driven-vaccine-rules.md) — Centralize configurable vaccine-rule ownership in the backend. **Accepted**
 - [ADR-0004](0004-rate-limit-safe-moph-opendata-sync.md) — Use paced, bounded retries for MOPH OpenData synchronization. **Accepted**
-- [ADR-0005](0005-route-opendata-through-external-relay.md) — Route OpenData acquisition through an external fetch relay. **Accepted**
+- [ADR-0005](0005-route-opendata-through-external-relay.md) — Route OpenData acquisition through an external fetch relay. **Deprecated** (Workers runtime rejected at the Issue #39 canary; acquisition is direct GAS → MOPH under ADR-0004)
 - [ADR-0006](0006-vaccine-rules-sheet-is-staff-owned-primary-source.md) — The staff-configured `vaccine_rules` sheet is the primary source for follow-up; rule evaluation is authoritative for View 2. **Accepted** (supersedes ADR-0003 "Relationship to View 2" and ADR-0002 "View 2 Boundary")
 - [ADR-0007](0007-mandatory-import-preflight.md) — Every EPI import runs a read-only, server-enforced preflight; risky imports need a typed confirmation. **Accepted**
 - [ADR-0008](0008-vaccine-rule-birth-window-keyed-on-birth-date.md) — A schedule change between cohorts is a per-rule Birth Window keyed on birth date. **Accepted**
