@@ -49,7 +49,7 @@ Read `getOpenData` with `{ payload: { tableName: ageReport.table, year: String(s
 
 - Synthetic tests for all 4 reports, 12-month accumulation, cross-year/cross-area exclusions, duplicate/mixed cycles, malformed columns, strict rule identity and branch matching, and missing-data behavior.
 - Lazy UI tests confirm that all 4 ages fetch their own `s_epi*` table, never fetch before expansion, do not replace EPI scorecards, and never show an HDC − EPI difference or a Target-mismatch warning, even when the denominators are equal.
-- CI tests/lint/build, backend/relay checks, code review, draft PR before any merge/deployment.
+- CI tests/lint/build, backend checks, code review, draft PR before any merge/deployment.
 - **Never automatically update `vaccine_rules`, Google Sheets, or historical `Dashboard_Summaries`.**
 
 
